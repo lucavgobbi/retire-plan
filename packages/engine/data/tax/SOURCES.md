@@ -80,7 +80,13 @@ employment-income exclusion tier) is the Government of Canada / CRA page cited.
 8. **Age-credit elimination point**: the table stores amount / reduction threshold / 15%
    reduction rate; the derived net-income point where the credit reaches zero in 2026 is
    ≈ $107,819 (threshold + amount ÷ rate), following the Worksheet 5000-D1 formula.
-9. **Indexation is applied geometrically**: `applyIndexation(tables, n)` raises each
+9. **Credit amounts scale under projection** (engine-level decision, 2026-11-08 review): the
+   $2,000 pension income amount is statutory for the base tax year and the age amount is
+   annually indexed; for multi-year projections `applyIndexation` scales BOTH the age and
+   pension credit amounts and their thresholds by the federal indexation factor, so projected
+   years treat them in the same indexed terms as brackets/BPA. The stored base-year values
+   are exact; only future-year extrapolation is approximated.
+10. **Indexation is applied geometrically**: `applyIndexation(tables, n)` raises each
    jurisdiction's own factor to the n-th power; the factors themselves do not compound on
    themselves, per the plan. Real future-year factors drift from this approximation (published
    each November); re-verify when a new tax year is modelled directly.

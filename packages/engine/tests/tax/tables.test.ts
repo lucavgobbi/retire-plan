@@ -160,12 +160,40 @@ describe("applyIndexation", () => {
     expect(out.ontario.indexationFactor).toBe(fixture.ontario.indexationFactor);
   });
 
-  it("indexes federal age-credit and pension-credit thresholds, and the OAS recovery threshold (federal factor)", () => {
+  it("indexes federal age-credit and pension-credit amounts+thresholds, and the OAS recovery threshold (federal factor)", () => {
     const fixture = fixtureTables(1.02, 1.01);
     const out = applyIndexation(fixture, 2);
+    expect(out.federal.ageCredit.amount).toBeCloseTo(8_000 * 1.02 ** 2, 4);
     expect(out.federal.ageCredit.reductionThreshold).toBeCloseTo(45_000 * 1.02 ** 2, 4);
+    expect(out.federal.pensionIncomeCredit.amount).toBeCloseTo(2_000 * 1.02 ** 2, 4);
     expect(out.federal.pensionIncomeCredit.incomeThreshold).toBeCloseTo(90_000 * 1.02 ** 2, 4);
     expect(out.oas.clawbackThreshold).toBeCloseTo(90_000 * 1.02 ** 2, 4);
+  });
+
+  it("a +30-year shift is NOT identically behaved vs no shift (credit scaling compounds)", () => {
+    const fixture = fixtureTables(1.02, 1.01);
+    const shifted = applyIndexation(fixture, 30);
+    const unshifted = applyIndexation(fixture, 0);
+    // Age credit amount and threshold both drift over 30 years (1.02^30 ≈ 1.806).
+    expect(shifted.federal.ageCredit.amount).toBeCloseTo(unshifted.federal.ageCredit.amount * 1.02 ** 30, 4);
+    expect(shifted.federal.ageCredit.reductionThreshold).toBeCloseTo(
+      unshifted.federal.ageCredit.reductionThreshold * 1.02 ** 30,
+      4,
+    );
+    // Pension credit amount/threshold drift equally by the same federal factor.
+    expect(shifted.federal.pensionIncomeCredit.amount).toBeCloseTo(
+      unshifted.federal.pensionIncomeCredit.amount * 1.02 ** 30,
+      4,
+    );
+    expect(shifted.federal.pensionIncomeCredit.incomeThreshold).toBeCloseTo(
+      unshifted.federal.pensionIncomeCredit.incomeThreshold * 1.02 ** 30,
+      4,
+    );
+    // And the two are genuinely different for the high-bracket case: +30y threshold pair
+    // (age amount vs pension threshold) does not collapse onto the +0y values.
+    expect(shifted.federal.ageCredit.reductionThreshold).not.toEqual(
+      unshifted.federal.ageCredit.reductionThreshold,
+    );
   });
 
   it("indexes Ontario surtax taxable-income thresholds by the Ontario factor", () => {
@@ -174,7 +202,7 @@ describe("applyIndexation", () => {
     expect(out.ontario.surtax[0]!.onTaxOverPctOfTaxable).toBeCloseTo(80_000 * 1.01 ** 2, 4);
   });
 
-  it("does not index fixed limits/amounts that legislate annually by announcement", () => {
+  it("does not index limits/amounts fixed by annual announcement or statute", () => {
     const fixture = fixtureTables(1.02, 1.01);
     const out = applyIndexation(fixture, 2);
     expect(out.tfsa.annualLimit).toBe(fixture.tfsa.annualLimit);
@@ -184,8 +212,6 @@ describe("applyIndexation", () => {
     expect(out.gis.annualMaxSingle).toBe(fixture.gis.annualMaxSingle);
     expect(out.gis.exclusionEmployment).toBe(fixture.gis.exclusionEmployment);
     expect(out.rrif.minimumFactors).toEqual(fixture.rrif.minimumFactors);
-    expect(out.federal.ageCredit.amount).toBe(fixture.federal.ageCredit.amount);
-    expect(out.federal.pensionIncomeCredit.amount).toBe(fixture.federal.pensionIncomeCredit.amount);
   });
 
   it("is deterministic: offset 0 returns thresholds unchanged", () => {

@@ -203,7 +203,7 @@ function indexBrackets(brackets: Bracket[], factor: number): Bracket[] {
  *
  * What scales:
  *  - federal: bracket thresholds, BPA, age-credit amount + reduction threshold, employment
- *    amount, pension-credit income threshold, OAS recovery threshold.
+ *    amount, pension-credit amount + income threshold, OAS recovery threshold.
  *  - ontario: bracket thresholds, surtax tax thresholds, BPA.
  *
  * What does not scale (fixed by annual announcement or legislation): TFSA/RRSP limits, GIS
@@ -224,13 +224,13 @@ export function applyIndexation(tables: TaxYearTables, yearOffset: number): TaxY
       brackets: indexBrackets(fed.brackets, federalFactor),
       basicPersonalAmount: fed.basicPersonalAmount * federalFactor,
       ageCredit: {
-        amount: fed.ageCredit.amount,
+        amount: fed.ageCredit.amount * federalFactor,
         reductionThreshold: fed.ageCredit.reductionThreshold * federalFactor,
         reductionRate: fed.ageCredit.reductionRate,
       },
       employmentCreditAmount: fed.employmentCreditAmount * federalFactor,
       pensionIncomeCredit: {
-        amount: fed.pensionIncomeCredit.amount,
+        amount: fed.pensionIncomeCredit.amount * federalFactor,
         incomeThreshold: fed.pensionIncomeCredit.incomeThreshold * federalFactor,
         reductionRate: fed.pensionIncomeCredit.reductionRate,
       },
