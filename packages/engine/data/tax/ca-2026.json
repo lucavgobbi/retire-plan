@@ -1,0 +1,90 @@
+{
+  "year": 2026,
+  "province": "ON",
+  "_notes": "2026 tax year, Ontario resident. Every value is sourced in data/tax/SOURCES.md. Rates are stored as decimal fractions. Bracket/credit thresholds are dollar amounts of taxable income except the Ontario surtax thresholds, which are dollar amounts of basic Ontario tax (see SOURCES.md).",
+  "federal": {
+    "brackets": [
+      { "threshold": 0, "rate": 0.14 },
+      { "threshold": 58523, "rate": 0.205 },
+      { "threshold": 117045, "rate": 0.26 },
+      { "threshold": 181440, "rate": 0.29 },
+      { "threshold": 258482, "rate": 0.33 }
+    ],
+    "basicPersonalAmount": 16452,
+    "indexationFactor": 1.02,
+    "ageCredit": {
+      "amount": 9208,
+      "reductionThreshold": 46432,
+      "reductionRate": 0.15
+    },
+    "employmentCreditAmount": 1501,
+    "pensionIncomeCredit": {
+      "amount": 2000,
+      "incomeThreshold": 0,
+      "reductionRate": 0
+    }
+  },
+  "ontario": {
+    "brackets": [
+      { "threshold": 0, "rate": 0.0505 },
+      { "threshold": 53891, "rate": 0.0915 },
+      { "threshold": 107785, "rate": 0.1116 },
+      { "threshold": 150000, "rate": 0.1216 },
+      { "threshold": 220000, "rate": 0.1316 }
+    ],
+    "surtax": [
+      { "rate": 0.2, "onTaxOverPctOfTaxable": 5818 },
+      { "rate": 0.36, "onTaxOverPctOfTaxable": 7446 }
+    ],
+    "basicPersonalAmount": 12989,
+    "indexationFactor": 1.019
+  },
+  "oas": {
+    "annualMax": 8907.72,
+    "clawbackThreshold": 95323,
+    "recoveryRate": 0.15
+  },
+  "gis": {
+    "annualMaxSingle": 13304.88,
+    "taperRate": 0.5,
+    "exclusionEmployment": 5000
+  },
+  "rrif": {
+    "minimumFactors": [
+      { "age": 71, "factor": 0.0528 },
+      { "age": 72, "factor": 0.054 },
+      { "age": 73, "factor": 0.0553 },
+      { "age": 74, "factor": 0.0567 },
+      { "age": 75, "factor": 0.0582 },
+      { "age": 76, "factor": 0.0599 },
+      { "age": 77, "factor": 0.0617 },
+      { "age": 78, "factor": 0.0636 },
+      { "age": 79, "factor": 0.0657 },
+      { "age": 80, "factor": 0.0679 },
+      { "age": 81, "factor": 0.0704 },
+      { "age": 82, "factor": 0.0728 },
+      { "age": 83, "factor": 0.0755 },
+      { "age": 84, "factor": 0.0783 },
+      { "age": 85, "factor": 0.0811 },
+      { "age": 86, "factor": 0.0842 },
+      { "age": 87, "factor": 0.0875 },
+      { "age": 88, "factor": 0.0909 },
+      { "age": 89, "factor": 0.0955 },
+      { "age": 90, "factor": 0.1001 },
+      { "age": 91, "factor": 0.1054 },
+      { "age": 92, "factor": 0.1111 },
+      { "age": 93, "factor": 0.117 },
+      { "age": 94, "factor": 0.1234 },
+      { "age": 95, "factor": 0.2 }
+    ]
+  },
+  "tfsa": {
+    "annualLimit": 7000,
+    "cumulativeRoomAsOf2026": 109000,
+    "roomStartAge": 18
+  },
+  "rrsp": {
+    "incomeRate": 0.18,
+    "annualLimit": 33810
+  }
+}

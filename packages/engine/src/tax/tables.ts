@@ -1,0 +1,252 @@
+/**
+ * TaxYearTables — the versioned CRA parameter set for one tax year (Ontario resident).
+ * All rates/thresholds/limits live in JSON tables (data/tax/ca-*.json); none are hardcoded
+ * in .ts. Sources for each value are recorded in data/tax/SOURCES.md.
+ */
+export interface TaxYearTables {
+  year: number;
+  province: "ON";
+  federal: {
+    brackets: { threshold: number; rate: number }[];
+    basicPersonalAmount: number;
+    indexationFactor: number;
+    ageCredit: { amount: number; reductionThreshold: number; reductionRate: number };
+    employmentCreditAmount: number;
+    pensionIncomeCredit: { amount: number; incomeThreshold: number; reductionRate: number };
+  };
+  ontario: {
+    brackets: { threshold: number; rate: number }[];
+    surtax: { rate: number; onTaxOverPctOfTaxable: number }[];
+    basicPersonalAmount: number;
+    indexationFactor: number;
+  };
+  oas: { annualMax: number; clawbackThreshold: number; recoveryRate: number };
+  gis: { annualMaxSingle: number; taperRate: number; exclusionEmployment: number };
+  rrif: { minimumFactors: { age: number; factor: number }[] };
+  tfsa: { annualLimit: number; cumulativeRoomAsOf2026: number; roomStartAge: number };
+  rrsp: { incomeRate: number; annualLimit: number };
+}
+
+interface Bracket {
+  threshold: number;
+  rate: number;
+}
+
+function assertObject(value: unknown, what: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`Tax tables: ${what} must be an object.`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function assertNumber(value: unknown, what: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`Tax tables: ${what} must be a finite number.`);
+  }
+  return value;
+}
+
+function assertPositiveNumber(value: unknown, what: string): number {
+  const n = assertNumber(value, what);
+  if (n <= 0) {
+    throw new Error(`Tax tables: ${what} must be positive (got ${n}).`);
+  }
+  return n;
+}
+
+function assertArray(value: unknown, what: string): unknown[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`Tax tables: ${what} must be a non-empty array.`);
+  }
+  return value;
+}
+
+function assertBrackets(value: unknown, what: string): Bracket[] {
+  return assertArray(value, what).map((entry, i) => {
+    const b = assertObject(entry, `${what}[${i}]`);
+    return {
+      threshold: assertNumber(b.threshold, `${what}[${i}].threshold`),
+      rate: assertNumber(b.rate, `${what}[${i}].rate`),
+    };
+  });
+}
+
+/**
+ * Parses and shape-validates a loaded JSON table. Throws a descriptive error on malformed
+ * data — fail fast; a bad table must never silently produce garbage tax numbers.
+ */
+export function loadTables(json: unknown): TaxYearTables {
+  const root = assertObject(json, "tax tables");
+
+  const year = assertPositiveNumber(root.year, "year");
+  if (root.province !== "ON") {
+    throw new Error(`Tax tables: province must be "ON" (got ${String(root.province)}).`);
+  }
+
+  const federal = assertObject(root.federal, "federal");
+  const ontario = assertObject(root.ontario, "ontario");
+
+  const federalBrackets = assertBrackets(federal.brackets, "federal.brackets");
+  if (federalBrackets[0]!.threshold !== 0) {
+    throw new Error("Tax tables: federal.brackets must start at threshold 0.");
+  }
+  const ontarioBrackets = assertBrackets(ontario.brackets, "ontario.brackets");
+  if (ontarioBrackets[0]!.threshold !== 0) {
+    throw new Error("Tax tables: ontario.brackets must start at threshold 0.");
+  }
+
+  const surtax = assertArray(ontario.surtax, "ontario.surtax").map((entry, i) => {
+    const s = assertObject(entry, `ontario.surtax[${i}]`);
+    return {
+      rate: assertNumber(s.rate, `ontario.surtax[${i}].rate`),
+      onTaxOverPctOfTaxable: assertNumber(
+        s.onTaxOverPctOfTaxable,
+        `ontario.surtax[${i}].onTaxOverPctOfTaxable`,
+      ),
+    };
+  });
+
+  const ageCredit = assertObject(federal.ageCredit, "federal.ageCredit");
+  const pensionIncomeCredit = assertObject(
+    federal.pensionIncomeCredit,
+    "federal.pensionIncomeCredit",
+  );
+
+  const oas = assertObject(root.oas, "oas");
+  const gis = assertObject(root.gis, "gis");
+  const rrif = assertObject(root.rrif, "rrif");
+  const tfsa = assertObject(root.tfsa, "tfsa");
+  const rrsp = assertObject(root.rrsp, "rrsp");
+
+  const minimumFactors = assertArray(rrif.minimumFactors, "rrif.minimumFactors");
+
+  return {
+    year,
+    province: "ON",
+    federal: {
+      brackets: federalBrackets,
+      basicPersonalAmount: assertNumber(federal.basicPersonalAmount, "federal.basicPersonalAmount"),
+      indexationFactor: assertPositiveNumber(federal.indexationFactor, "federal.indexationFactor"),
+      ageCredit: {
+        amount: assertNumber(ageCredit.amount, "federal.ageCredit.amount"),
+        reductionThreshold: assertNumber(
+          ageCredit.reductionThreshold,
+          "federal.ageCredit.reductionThreshold",
+        ),
+        reductionRate: assertNumber(ageCredit.reductionRate, "federal.ageCredit.reductionRate"),
+      },
+      employmentCreditAmount: assertNumber(
+        federal.employmentCreditAmount,
+        "federal.employmentCreditAmount",
+      ),
+      pensionIncomeCredit: {
+        amount: assertNumber(pensionIncomeCredit.amount, "federal.pensionIncomeCredit.amount"),
+        incomeThreshold: assertNumber(
+          pensionIncomeCredit.incomeThreshold,
+          "federal.pensionIncomeCredit.incomeThreshold",
+        ),
+        reductionRate: assertNumber(
+          pensionIncomeCredit.reductionRate,
+          "federal.pensionIncomeCredit.reductionRate",
+        ),
+      },
+    },
+    ontario: {
+      brackets: ontarioBrackets,
+      surtax,
+      basicPersonalAmount: assertNumber(ontario.basicPersonalAmount, "ontario.basicPersonalAmount"),
+      indexationFactor: assertPositiveNumber(ontario.indexationFactor, "ontario.indexationFactor"),
+    },
+    oas: {
+      annualMax: assertNumber(oas.annualMax, "oas.annualMax"),
+      clawbackThreshold: assertNumber(oas.clawbackThreshold, "oas.clawbackThreshold"),
+      recoveryRate: assertNumber(oas.recoveryRate, "oas.recoveryRate"),
+    },
+    gis: {
+      annualMaxSingle: assertNumber(gis.annualMaxSingle, "gis.annualMaxSingle"),
+      taperRate: assertNumber(gis.taperRate, "gis.taperRate"),
+      exclusionEmployment: assertNumber(gis.exclusionEmployment, "gis.exclusionEmployment"),
+    },
+    rrif: {
+      minimumFactors: minimumFactors.map((entry, i) => {
+        const f = assertObject(entry, `rrif.minimumFactors[${i}]`);
+        return {
+          age: assertPositiveNumber(f.age, `rrif.minimumFactors[${i}].age`),
+          factor: assertNumber(f.factor, `rrif.minimumFactors[${i}].factor`),
+        };
+      }),
+    },
+    tfsa: {
+      annualLimit: assertNumber(tfsa.annualLimit, "tfsa.annualLimit"),
+      cumulativeRoomAsOf2026: assertNumber(
+        tfsa.cumulativeRoomAsOf2026,
+        "tfsa.cumulativeRoomAsOf2026",
+      ),
+      roomStartAge: assertPositiveNumber(tfsa.roomStartAge, "tfsa.roomStartAge"),
+    },
+    rrsp: {
+      incomeRate: assertNumber(rrsp.incomeRate, "rrsp.incomeRate"),
+      annualLimit: assertNumber(rrsp.annualLimit, "rrsp.annualLimit"),
+    },
+  };
+}
+
+function indexBrackets(brackets: Bracket[], factor: number): Bracket[] {
+  return brackets.map((b) => ({ threshold: b.threshold * factor, rate: b.rate }));
+}
+
+/**
+ * Projects the tables forward `yearOffset` years: thresholds/limits are multiplied by each
+ * jurisdiction's own indexationFactor^yearOffset (never a shared number), so federal and
+ * Ontario tables drift apart independently over decades. The factors themselves do NOT
+ * compound on each other and rates are untouched.
+ *
+ * What scales:
+ *  - federal: bracket thresholds, BPA, age-credit amount + reduction threshold, employment
+ *    amount, pension-credit income threshold, OAS recovery threshold.
+ *  - ontario: bracket thresholds, surtax tax thresholds, BPA.
+ *
+ * What does not scale (fixed by annual announcement or legislation): TFSA/RRSP limits, GIS
+ * maximum, OAS annual maximum, RRIF factors, all rates, and the factors themselves.
+ *
+ * Ontario's $150,000 and $220,000 brackets are legislatively unindexed in reality (see
+ * SOURCES.md); uniform ON indexing is a documented simplification.
+ */
+export function applyIndexation(tables: TaxYearTables, yearOffset: number): TaxYearTables {
+  const federalFactor = tables.federal.indexationFactor ** yearOffset;
+  const ontarioFactor = tables.ontario.indexationFactor ** yearOffset;
+
+  const fed = tables.federal;
+  return {
+    ...tables,
+    federal: {
+      ...fed,
+      brackets: indexBrackets(fed.brackets, federalFactor),
+      basicPersonalAmount: fed.basicPersonalAmount * federalFactor,
+      ageCredit: {
+        amount: fed.ageCredit.amount,
+        reductionThreshold: fed.ageCredit.reductionThreshold * federalFactor,
+        reductionRate: fed.ageCredit.reductionRate,
+      },
+      employmentCreditAmount: fed.employmentCreditAmount * federalFactor,
+      pensionIncomeCredit: {
+        amount: fed.pensionIncomeCredit.amount,
+        incomeThreshold: fed.pensionIncomeCredit.incomeThreshold * federalFactor,
+        reductionRate: fed.pensionIncomeCredit.reductionRate,
+      },
+    },
+    ontario: {
+      ...tables.ontario,
+      brackets: indexBrackets(tables.ontario.brackets, ontarioFactor),
+      surtax: tables.ontario.surtax.map((s) => ({
+        rate: s.rate,
+        onTaxOverPctOfTaxable: s.onTaxOverPctOfTaxable * ontarioFactor,
+      })),
+      basicPersonalAmount: tables.ontario.basicPersonalAmount * ontarioFactor,
+    },
+    oas: {
+      ...tables.oas,
+      clawbackThreshold: tables.oas.clawbackThreshold * federalFactor,
+    },
+  };
+}
