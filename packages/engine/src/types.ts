@@ -100,6 +100,7 @@ export interface YearResult {
   };
   withdrawals: { tfsa: number; rrsp: number; nonreg: number };
   contributions: { tfsa: number; rrsp: number; nonreg: number };
+  savings: { tfsa: number; rrsp: number; nonreg: number; mortgage: number };
   expenses: number;
   shortfall: number;
   balances: { tfsa: number; rrsp: number; nonreg: number; home: number; debt: number };
