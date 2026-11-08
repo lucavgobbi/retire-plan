@@ -72,6 +72,65 @@ function assertBrackets(value: unknown, what: string): Bracket[] {
 }
 
 /**
+ * Tier-order invariants: thresholds strictly ascending and rates strictly increasing —
+ * protects against a transposed/law-changed table producing silently wrong tax math.
+ */
+function assertLadderSorted(brackets: Bracket[], what: string): Bracket[] {
+  for (let i = 1; i < brackets.length; i++) {
+    const prev = brackets[i - 1]!;
+    const cur = brackets[i]!;
+    if (cur.threshold <= prev.threshold) {
+      throw new Error(
+        `Tax tables: ${what}.bracket[${i}] threshold ${cur.threshold} must be above bracket[${i - 1}] threshold ${prev.threshold} (strictly ascending).`,
+      );
+    }
+    if (cur.rate <= prev.rate) {
+      throw new Error(
+        `Tax tables: ${what}.bracket[${i}] rate ${cur.rate} must be strictly greater than bracket[${i - 1}] rate ${prev.rate}.`,
+      );
+    }
+  }
+  return brackets;
+}
+
+interface RrifFactor {
+  age: number;
+  factor: number;
+}
+
+/**
+ * RRIF schedule invariants: ages strictly ascending, and factors non-decreasing with age
+ * when comparing below the age-95 cap leg (where the factor jumps to and holds 20%).
+ */
+function assertRrifFactors(value: unknown, what: string): RrifFactor[] {
+  return assertArray(value, what).map((entry, i) => {
+    const f = assertObject(entry, `${what}[${i}]`);
+    return {
+      age: assertPositiveNumber(f.age, `${what}[${i}].age`),
+      factor: assertNumber(f.factor, `${what}[${i}].factor`),
+    };
+  });
+}
+
+function assertRrifMonotonic(factors: RrifFactor[], what: string): RrifFactor[] {
+  for (let i = 1; i < factors.length; i++) {
+    const prev = factors[i - 1]!;
+    const cur = factors[i]!;
+    if (cur.age <= prev.age) {
+      throw new Error(
+        `Tax tables: ${what}[${i}] age ${cur.age} must be strictly greater than ${what}[${i - 1}] age ${prev.age} (ascending schedule).`,
+      );
+    }
+    if (prev.age < 95 && cur.age < 95 && cur.factor < prev.factor) {
+      throw new Error(
+        `Tax tables: ${what} factors must be non-decreasing with age below the 95 cap: factor at age ${cur.age} (${cur.factor}) is below factor at age ${prev.age} (${prev.factor}).`,
+      );
+    }
+  }
+  return factors;
+}
+
+/**
  * Parses and shape-validates a loaded JSON table. Throws a descriptive error on malformed
  * data — fail fast; a bad table must never silently produce garbage tax numbers.
  */
@@ -86,11 +145,17 @@ export function loadTables(json: unknown): TaxYearTables {
   const federal = assertObject(root.federal, "federal");
   const ontario = assertObject(root.ontario, "ontario");
 
-  const federalBrackets = assertBrackets(federal.brackets, "federal.brackets");
+  const federalBrackets = assertLadderSorted(
+    assertBrackets(federal.brackets, "federal.brackets"),
+    "federal.brackets",
+  );
   if (federalBrackets[0]!.threshold !== 0) {
     throw new Error("Tax tables: federal.brackets must start at threshold 0.");
   }
-  const ontarioBrackets = assertBrackets(ontario.brackets, "ontario.brackets");
+  const ontarioBrackets = assertLadderSorted(
+    assertBrackets(ontario.brackets, "ontario.brackets"),
+    "ontario.brackets",
+  );
   if (ontarioBrackets[0]!.threshold !== 0) {
     throw new Error("Tax tables: ontario.brackets must start at threshold 0.");
   }
@@ -117,8 +182,6 @@ export function loadTables(json: unknown): TaxYearTables {
   const rrif = assertObject(root.rrif, "rrif");
   const tfsa = assertObject(root.tfsa, "tfsa");
   const rrsp = assertObject(root.rrsp, "rrsp");
-
-  const minimumFactors = assertArray(rrif.minimumFactors, "rrif.minimumFactors");
 
   return {
     year,
@@ -168,13 +231,7 @@ export function loadTables(json: unknown): TaxYearTables {
       exclusionEmployment: assertNumber(gis.exclusionEmployment, "gis.exclusionEmployment"),
     },
     rrif: {
-      minimumFactors: minimumFactors.map((entry, i) => {
-        const f = assertObject(entry, `rrif.minimumFactors[${i}]`);
-        return {
-          age: assertPositiveNumber(f.age, `rrif.minimumFactors[${i}].age`),
-          factor: assertNumber(f.factor, `rrif.minimumFactors[${i}].factor`),
-        };
-      }),
+      minimumFactors: assertRrifMonotonic(assertRrifFactors(rrif.minimumFactors, "rrif.minimumFactors"), "rrif.minimumFactors"),
     },
     tfsa: {
       annualLimit: assertNumber(tfsa.annualLimit, "tfsa.annualLimit"),
