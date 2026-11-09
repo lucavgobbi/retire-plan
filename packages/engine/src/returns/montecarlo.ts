@@ -1,6 +1,7 @@
 import type { Plan, ReturnSeries, Scenario, SimulationResult } from "../types";
 import type { TaxYearTables } from "../tax/tables";
 import { seededRandom, type Rand } from "./seededRandom";
+import { simulate as realSimulate } from "../simulate";
 
 /** Box–Muller: two uniform draws -> one standard-normal draw. */
 function gaussian(rand: Rand): number {
@@ -34,7 +35,12 @@ export function generateMonteCarloRun(
   return { years };
 }
 
-export type SimulateFn = (plan: Plan, scenario: Scenario, returns: ReturnSeries) => SimulationResult;
+export type SimulateFn = (
+  plan: Plan,
+  scenario: Scenario,
+  returns: ReturnSeries,
+  tables?: TaxYearTables,
+) => SimulationResult;
 
 /** Nearest-rank quantile of a SORTED array. */
 function percentile(sorted: number[], p: number): number {
@@ -57,17 +63,16 @@ export type MonteCarloSummary = {
  * after retirement — exactly `SimulationResult.summary.success`, which the
  * stepper owns (Review Focus #3 semantics); this function only aggregates.
  *
- * `simulate` is a required parameter in this task: the real stepper arrives with
- * Task 12, and until then tests inject a stub. `tables` is carried now because the
- * real stepper needs it; it is otherwise unused here.
+ * `simulate` defaults to the real year stepper (wired in Task 12); tests may still
+ * inject a stub via the optional fourth parameter. `tables` is forwarded so the
+ * default stepper runs on the caller's table set.
  */
 export function runMonteCarlo(
   plan: Plan,
   scenario: Scenario,
   tables: TaxYearTables,
-  simulate: SimulateFn,
+  simulate: SimulateFn = realSimulate,
 ): MonteCarloSummary {
-  void tables; // forwarded contract with the (Task 12) default stepper wiring
   const cfg = scenario.mcConfig;
   if (!cfg) {
     throw new Error("runMonteCarlo: scenario.mcConfig (runs, stdDev, seed) must be set.");
@@ -82,7 +87,7 @@ export function runMonteCarlo(
       plan.profile.currentAge,
       plan.profile.endAge,
     );
-    results.push(simulate(plan, scenario, series));
+    results.push(simulate(plan, scenario, series, tables));
   }
 
   const finals = results.map((r) => r.summary.finalNetWorth).sort((a, b) => a - b);

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { TaxYearTables } from "../../src/tax/tables";
 import { generateMonteCarloRun, runMonteCarlo, type SimulateFn } from "../../src/returns/montecarlo";
 import { seededRandom } from "../../src/returns/seededRandom";
 import type { ReturnSeries, Scenario } from "../../src/types";
@@ -11,8 +12,7 @@ const stdDev = { equity: 0.05, bond: 0.03, cash: 0.01 };
 // runMonteCarlo accepts any SimulateFn, so a canned stub verifies aggregation without
 // the real stepper. (The default simulate wiring lands with Task 12.)
 
-const stubTables = (): Parameters<SimulateFn>[2] =>
-  ({}) as unknown as Parameters<SimulateFn>[2];
+const stubTables = (): TaxYearTables => ({}) as unknown as TaxYearTables;
 
 describe("generateMonteCarloRun", () => {
   it("the same seed reproduces an identical run", () => {
