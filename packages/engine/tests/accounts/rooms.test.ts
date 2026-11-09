@@ -8,11 +8,12 @@ const tables: TaxYearTables = loadTables(tablesJson);
 // Reference constants (2026, verified in data/tax/SOURCES.md):
 //   tfsa.annualLimit = 7,000; tfsa.cumulativeRoomAsOf2026 = 109,000; tfsa.roomStartAge = 18
 //   rrsp.incomeRate = 0.18; rrsp.annualLimit = 33,810
-//   TFSA next-year room = room - usedThisYear + (eligible ? annualLimit : 0)
-//                         + withdrawalsThisYear, floored at 0 (withdrawal recharge next year).
+//   TFSA CONTRACT: state.room is ALREADY NET of this year's contributions; the function
+//   adds the next year's annual limit (when eligible) plus withdrawalsThisYear, floor 0.
+//   SEEDING: an eligible resident starts a 2026-based projection with room ==
+//   cumulativeRoomAsOf2026, which ALREADY includes the 2026 limit.
 //   RRSP new room = carryforward
-//                   + min(0.18 x max(0, earnedIncome - employerContributions), annualLimit),
-//   capped at annualLimit + carryforward.
+//                   + min(0.18 x max(0, earnedIncome - employerContributions), annualLimit).
 
 const noHistory: TfsaRoomState = { room: 0, currentAge: 18 };
 
@@ -58,6 +59,58 @@ describe("tfsaRoomNextYear", () => {
     // 2009 produces; the table is the source of truth for that build-up.
     expect(tables.tfsa.cumulativeRoomAsOf2026).toBe(109_000);
     expect(tables.tfsa.cumulativeRoomAsOf2026).toBeGreaterThan(tables.tfsa.annualLimit);
+  });
+
+  it("passing room NET of contributions is the only correct usage (negative path)", () => {
+    // Start-of-year room 20,000; contributed 8,000 during the year; withdrew 3,000.
+    // CORRECT: pass 12,000 (net) -> next-year room 12,000 + 7,000 + 3,000 = 22,000.
+    const net: TfsaRoomState = { room: 12_000, currentAge: 40 };
+    expect(tfsaRoomNextYear(net, 3_000, tables, true)).toBe(22_000);
+    // WRONG: passing the start-of-year room 20,000 un-netted yields 30,000 — the 8,000
+    // contributed this year would be double-counted next year. The contract makes this
+    // the caller's responsibility; this test pins the canonical arithmetic.
+    const unNetted: TfsaRoomState = { room: 20_000, currentAge: 40 };
+    expect(tfsaRoomNextYear(unNetted, 3_000, tables, true)).not.toBe(22_000);
+  });
+
+  describe("seeding convention (2026-based projection)", () => {
+    it("seeds room == cumulativeRoomAsOf2026, which already includes the 2026 limit", () => {
+      const seeded: TfsaRoomState = {
+        room: tables.tfsa.cumulativeRoomAsOf2026,
+        currentAge: 50,
+      };
+      // A 7,000 contribution in 2026 nets the seed to 102,000; the next call adds ONE
+      // annual limit (2027) -> back to exactly the 109,000 initial seed. 116,000 would
+      // be double-count (2026 limit applied twice); 102,000 would be under-count
+      // (2027 limit skipped).
+      const net = seeded.room - tables.tfsa.annualLimit;
+      expect(tfsaRoomNextYear({ room: net, currentAge: 50 }, 0, tables, true)).toBe(
+        tables.tfsa.cumulativeRoomAsOf2026,
+      );
+    });
+
+    it("with no 2026 contributions the first call adds exactly one more limit", () => {
+      const seeded: TfsaRoomState = {
+        room: tables.tfsa.cumulativeRoomAsOf2026,
+        currentAge: 50,
+      };
+      expect(tfsaRoomNextYear(seeded, 0, tables, true)).toBe(
+        tables.tfsa.cumulativeRoomAsOf2026 + tables.tfsa.annualLimit,
+      );
+    });
+
+    it("eligibility defaults from currentAge + 1 (the year the new room applies to)", () => {
+      // 17 now -> 18 next year: the first annual limit applies -> 7,000
+      expect(tfsaRoomNextYear({ room: 0, currentAge: 17 }, 0, tables)).toBe(7_000);
+      // 30 now -> 31 next year: always eligible since 18
+      const adult: TfsaRoomState = { room: 2_000, currentAge: 30 };
+      expect(tfsaRoomNextYear(adult, 0, tables)).toBe(9_000);
+      // 16 now -> 17 next year: still under roomStartAge -> no limit added
+      const child: TfsaRoomState = { room: 0, currentAge: 16 };
+      expect(tfsaRoomNextYear(child, 0, tables)).toBe(0);
+      // explicit flag still overrides the default
+      expect(tfsaRoomNextYear({ room: 0, currentAge: 16 }, 0, tables, true)).toBe(7_000);
+    });
   });
 });
 
