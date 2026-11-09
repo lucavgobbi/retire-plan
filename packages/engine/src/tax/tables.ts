@@ -81,12 +81,12 @@ function assertLadderSorted(brackets: Bracket[], what: string): Bracket[] {
     const cur = brackets[i]!;
     if (cur.threshold <= prev.threshold) {
       throw new Error(
-        `Tax tables: ${what}.bracket[${i}] threshold ${cur.threshold} must be above bracket[${i - 1}] threshold ${prev.threshold} (strictly ascending).`,
+        `Tax tables: ${what}[${i}] threshold ${cur.threshold} must be above ${what}[${i - 1}] threshold ${prev.threshold} (strictly ascending).`,
       );
     }
     if (cur.rate <= prev.rate) {
       throw new Error(
-        `Tax tables: ${what}.bracket[${i}] rate ${cur.rate} must be strictly greater than bracket[${i - 1}] rate ${prev.rate}.`,
+        `Tax tables: ${what}[${i}] rate ${cur.rate} must be strictly greater than ${what}[${i - 1}] rate ${prev.rate}.`,
       );
     }
   }

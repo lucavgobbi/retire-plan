@@ -140,7 +140,7 @@ describe("loadTables invariant rejections (fail fast on transposed or law-change
     // Swap the two top federal thresholds (181,440 / 258,482 -> out of order).
     bad.federal.brackets[3].threshold = 300_000;
     bad.federal.brackets[4].threshold = 200_000;
-    expect(() => loadTables(bad)).toThrow(/federal\.brackets\[4\] threshold .* strictly ascending/i);
+    expect(() => loadTables(bad)).toThrow(/federal\.brackets\[4\] threshold .*strictly ascending/i);
   });
 
   it("rejects a ladder with a non-increasing (equal) rate", () => {
