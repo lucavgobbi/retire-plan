@@ -12,6 +12,14 @@ const tables: TaxYearTables = loadTables(tablesJson);
 //   rrifMinimum returns null for age < 71 — pulling a minimum earlier is a caller error.
 
 describe("rrifMinimum — hand-computed schedule cases", () => {
+  it("rejects a fractional age as invalid input — never a silent null", () => {
+    // null means "no RRIF exists yet"; a fractional age is a caller bug and must throw
+    // rather than masquerade as the not-yet-a-holder null.
+    expect(() => rrifMinimum(71.5, 100_000, tables)).toThrow(/integer/i);
+    expect(() => rrifMinimum(94.999, 100_000, tables)).toThrow(/integer/i);
+    expect(() => rrifMinimum(85.5, 0, tables)).toThrow(/integer/i);
+  });
+
   it("returns null below age 71 (no RRIF exists yet)", () => {
     expect(rrifMinimum(65, 100_000, tables)).toBeNull();
     expect(rrifMinimum(70, 100_000, tables)).toBeNull();
