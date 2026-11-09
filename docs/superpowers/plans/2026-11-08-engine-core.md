@@ -204,7 +204,13 @@ export function gisAnnual(age: number, income: GisIncomeSources, tables: TaxYear
 ```ts
 export interface TfsaRoomState { room: number; currentAge: number; }
 export function tfsaRoomNextYear(state: TfsaRoomState, withdrawalsThisYear: number, tables: TaxYearTables, eligibleAge: boolean): number;
-// next-year room = room − usedThisYear + (eligibleAge ? annualLimit : 0) + withdrawalsThisYear, floor 0
+// CONTRACT: state.room = room ALREADY NET of this year's contributions (caller supplies start-of-year
+// room minus what was contributed this year). The function adds only the next year's annual limit
+// (when eligibleAge) plus withdrawalsThisYear, floor 0.
+// SEEDING: a resident eligible since roomStartAge starts a 2026-based projection with room ==
+// cumulativeRoomAsOf2026 (the 2009–2026 sum, which ALREADY includes the 2026 limit); from 2027 on,
+// each subsequent call adds one more annualLimit. Eligibility is caller-supplied: eligibleAge must
+// be (age >= roomStartAge) evaluated for the year the new room applies to.
 export function rrspRoomEarn(currentAge: number, earnedIncome: number, carryforward: number, tables: TaxYearTables, employerContributions: number): number;
 // new room = carryforward + min(incomeRate × max(0, earnedIncome − employerContributions), annualLimit) ; cap room at annualLimit+carryforward
 ```
@@ -225,7 +231,8 @@ export interface MortgageYearResult { endBalance: number; interest: number; prin
 export function mortgageYear(m: { balance: number; annualRate: number; monthlyPayment: number }): MortgageYearResult;
 ```
 - Monthly loop: `interest_m = balance_m × rate/12; principal_m = payment − interest_m; endBalance = max(0, balance + interest − payment)`.
-- Tests: standard 25-yr, 5% annually-compounded-equivalent → amortization reaches 0 at term end (within tolerance); slow-payment case (payment < interest) → balance grows and Task integrates warning upstream (`mortgageYear` itself returns larger positive endBalance). Review Focus #5 pinned by the slow-payment case.
+- Mortgage rate convention (v1 simplification, documented in `docs/assumptions.md`): `annualRate` is a **nominal rate compounded monthly** (`rate/12` per month). Canadian mortgages normally compound semi-annually — nominal-monthly is a deliberate conservative-free approximation; real Canadian rates fed in directly are fine, the convention note prevents future callers from wrongly annualizing. The 0-at-term test pins the math with the same convention (e.g. 25yr @ 4.99%).
+- Tests: standard ~25-yr amortization reaching 0 at term end (within tolerance, same convention); slow-payment case (payment < interest) → balance grows; the stepper integrates the warning (Review Focus #5).
 
 - [ ] Steps: failing tests → run → implement → run → commit (`feat: mortgage amortization`)
 
@@ -263,9 +270,9 @@ export function runMonteCarlo(plan: Plan, scenario: Scenario, tables: TaxYearTab
 **Per-year algorithm (in order):**
 1. events: retirement at `scenario.retirementAge`; CPP/OAS per their `startAge`; home sale per `sellEvent.age` (proceeds net of `costsPct` to nonreg with 50% gain inclusion under ACB=100% at sale for v1)…
 2. income: employment (raiseRate on balance growth), cpp/oas/expenses inflation perExpense; GIS via Task 7; age ≥ 65 gates.
-3. mortgage via Task 10.
+3. mortgage via Task 10 (reviewer note: `mortgageYear` returns fields only — the stepper detects `endBalance > startBalance` while payment > 0 and emits a negative-amortization warning itself).
 4. net cash flow = after-tax income − expenses − mortgage voluntary payment.
-5. allocate/withdraw (Task 13 supplies `allocateSurplus`/`fundDeficit`; this task orchestrates).
+5. allocate/withdraw (Task 13 supplies `allocateSurplus`/`fundDeficit`; this task orchestrates). TFSA room seeding per the Task 9 contract: start room == `cumulativeRoomAsOf2026` for eligible ages; call `tfsaRoomNextYear` with room NET of this year's contributions.
 6. account growth: balance × (equity×ret.eq + bond×ret.bond + cash×ret.cash).
 7. taxes via Tasks 4–6; `marginalRate` recorded.
 8. `shortfall` when cash flow negative and accounts too thin — successive years remain runnable.
