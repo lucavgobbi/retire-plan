@@ -16,6 +16,7 @@ import { gisAnnual } from "./benefits/gis";
 import { rrifMinimum } from "./benefits/rrif";
 import { tfsaRoomNextYear, rrspRoomEarn } from "./accounts/rooms";
 import { mortgageYear } from "./mortgage";
+import { nonregGrow } from "./accounts/nonreg";
 
 /** Storage-boundary rounding: money leaves the engine as whole cents. */
 function roundCent(x: number): number {
@@ -148,6 +149,12 @@ export function simulate(
 
   let prevWithdrawals: YearResult["withdrawals"] = { tfsa: 0, rrsp: 0, nonreg: 0 }; // GIS uses the prior year's draws
 
+  // Aggregate non-reg basis (ACB), plan Task 14 — tracked in aggregate because
+  // applyFlows distributes proportional to balance, which makes the aggregate
+  // ratio math exact (Sum(basis_i)/Sum(market) arithmetic collapses cleanly).
+  let nonregBook = sumType(accounts, "nonreg");
+  let prevNonregGains = 0; // prior year's realized gains count as GIS income (with the taper)
+
   let failureAge: number | undefined;
   let worstShortfallAge: number | undefined;
   let worstShortfall = 0;
@@ -193,7 +200,7 @@ export function simulate(
               cpp,
               rrspRrifWithdrawals: prevWithdrawals.rrsp,
               employmentIncome: employment,
-              otherTaxableIncome: otherPlan,
+              otherTaxableIncome: otherPlan + prevNonregGains, // realized gains count in GIS income of the prior year
               tfsaWithdrawals: prevWithdrawals.tfsa,
             },
             tables,
@@ -225,6 +232,7 @@ export function simulate(
     // so the freed-up cash can pay the same year's obligations.
     if (soldHomeThisYear && saleProceeds > 0) {
       injectCash(accounts, "nonreg", saleProceeds);
+      nonregBook += saleProceeds; // fresh cash: basis = its value (the home gain was already taxed above)
     }
 
     // ---- 3. Mortgage (Task 10); negative-amortization detection is the stepper's job
@@ -283,6 +291,12 @@ export function simulate(
     let mortgagePrepay = 0;
     let shortfall = 0;
     let finalTax = taxWithDue;
+
+    // Non-reg realized-gain accounting ( plan Task 14): gains are taxed as each
+    // non-reg draw happens, and the charged tax folds into the reported tax
+    // exactly as cash is charged, keeping the year ledger conserved.
+    let nonregGains = 0;
+    const nonregGainsTax = { federal: 0, provincial: 0, surtax: 0, oasClawback: 0, total: 0 };
 
     let roomTf = tfsaRoom; // this year's room available to the allocator
     // RRSP room available IN-YEAR: carry-forward plus the room earned this year
@@ -379,19 +393,70 @@ export function simulate(
           withdrawals.rrsp = rrifDue + draw;
           finalTax = taxOf(shape(draw), tables);
           need -= Math.max(0, draw - extra); // net cash actually delivered after its tax
+        } else if (type === "nonreg") {
+          // Plan Task 14: non-reg draws now carry their realized-gain tax. The chunk is
+          // taxed marginally on the year's income-so-far shape; the household receives
+          // `take - chunkTax` net, and the charged tax folds into the reported tax.
+          const take = Math.min(Math.max(0, available), Math.max(0, need));
+          if (take > 0) {
+            const marketNow = sumType(accounts, "nonreg");
+            const ratio = marketNow > 0 ? Math.min(1, Math.max(0, nonregBook / marketNow)) : 0;
+            const chunkGain = take * (1 - ratio);
+            const beforeShape = { ...incomeBase, capitalGains: capitalGains + nonregGains };
+            const t0 = taxOf(beforeShape, tables);
+            const t1 = taxOf({ ...beforeShape, capitalGains: capitalGains + nonregGains + chunkGain }, tables);
+            nonregGainsTax.federal += Math.max(0, t1.federal - t0.federal);
+            nonregGainsTax.provincial += Math.max(0, t1.provincial - t0.provincial);
+            nonregGainsTax.surtax += Math.max(0, t1.surtax - t0.surtax);
+            nonregGainsTax.oasClawback += Math.max(0, t1.oasClawback - t0.oasClawback);
+            nonregGainsTax.total += Math.max(0, t1.total - t0.total);
+            nonregGains += chunkGain;
+            nonregBook = Math.max(0, nonregBook - take * ratio); // basis consumed now
+            withdrawals[type] += take;
+            need -= Math.max(0, take - (t1.total - t0.total)); // delivered net of its own tax
+          } else {
+            withdrawals[type] += take;
+          }
         } else {
           const take = Math.min(Math.max(0, available), Math.max(0, need));
           withdrawals[type] += take;
-          need -= take; // withdrawal accounts (tfsa/nonreg) carry no extra tax in v1
+          need -= take; // withdrawal accounts (tfsa) carry no extra tax in v1
         }
       }
       shortfall = Math.max(0, roundCent(need));
       // Expenses absorb the shortfall: the household simply cannot fund the rest.
     }
+    // ---- 5c. Fold the charged gains tax into the reported tax and book contributions
+    // at par (ACB grows with every fresh dollar that lands in non-reg).
+    finalTax = {
+      federal: finalTax.federal + nonregGainsTax.federal,
+      provincial: finalTax.provincial + nonregGainsTax.provincial,
+      surtax: finalTax.surtax + nonregGainsTax.surtax,
+      oasClawback: finalTax.oasClawback + nonregGainsTax.oasClawback,
+      total: finalTax.total + nonregGainsTax.total,
+      taxable: finalTax.taxable + nonregGains,
+    };
+    nonregBook += contributions.nonreg;
+
     // ---- 5b. Flows into the accounts (proportional among same-type accounts)
     applyFlows(accounts, withdrawals, contributions);
 
-    // ---- 6. Growth on post-flow balances, each account at its own mix
+    // ---- 6. Growth on post-flow balances, each account at its own mix.
+    // Non-reg basis grows with the market (Task 14 convention: ACB absorbs the
+    // year's growth — book += market x weightedBlended, computed on the
+    // value-weighted mix across non-reg accounts).
+    const nonregMarketPre = sumType(accounts, "nonreg");
+    if (nonregMarketPre > 0) {
+      const mixW = { equity: 0, bond: 0, cash: 0 };
+      for (const a of accounts) {
+        if (a.type !== "nonreg" || a.balance <= 0) continue;
+        mixW.equity += (a.balance / nonregMarketPre) * a.mix.equity;
+        mixW.bond += (a.balance / nonregMarketPre) * a.mix.bond;
+        mixW.cash += (a.balance / nonregMarketPre) * a.mix.cash;
+      }
+      const grown = nonregGrow({ market: nonregMarketPre, book: nonregBook }, r, mixW);
+      nonregBook = Math.max(0, grown.book);
+    }
     for (const a of accounts) {
       a.balance = roundCent(
         a.balance * (1 + a.mix.equity * r.equity + a.mix.bond * r.bond + a.mix.cash * r.cash),
@@ -440,7 +505,7 @@ export function simulate(
         otherTaxableIncome: cpp + oas + otherPlan,
         rrspWithdrawals: withdrawals.rrsp,
         pensionEligibleIncome: age >= 65 ? withdrawals.rrsp : 0,
-        capitalGains,
+        capitalGains: capitalGains + nonregGains,
         dividendsEligible: 0,
         age,
       },
@@ -452,7 +517,7 @@ export function simulate(
         otherTaxableIncome: cpp + oas + otherPlan,
         rrspWithdrawals: withdrawals.rrsp + 100,
         pensionEligibleIncome: age >= 65 ? withdrawals.rrsp + 100 : 0,
-        capitalGains,
+        capitalGains: capitalGains + nonregGains,
         dividendsEligible: 0,
         age,
       },
@@ -524,6 +589,7 @@ export function simulate(
     }
     years.push(year);
     prevWithdrawals = { tfsa: year.withdrawals.tfsa, rrsp: year.withdrawals.rrsp, nonreg: year.withdrawals.nonreg };
+    prevNonregGains = nonregGains;
   }
 
   const finalNW = years[years.length - 1]?.netWorth ?? 0;
