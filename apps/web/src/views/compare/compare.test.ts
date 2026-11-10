@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RunRecord } from "../../domain/types";
-import type { Scenario, SimulationResult } from "@budgettool/engine";
+import type { Scenario, SimulationResult } from "@retire-plan/engine";
 import { computeComparison } from "./compare";
 
 const result = (finalNetWorth: number, success = true, failureAge?: number, worstShortfallAge?: number): SimulationResult => ({

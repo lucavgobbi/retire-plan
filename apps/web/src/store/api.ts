@@ -1,5 +1,5 @@
 /** Shared UI contract. Lanes import hooks, actions, domain and engine types here. */
-export * from "@budgettool/engine";
+export * from "@retire-plan/engine";
 export type * from "../domain/types";
 export type { Action } from "../domain/actions";
 export { DEFAULT_SCENARIO_BASE, createDefaultPlan, createEmptyWorkspace } from "../domain/defaults";

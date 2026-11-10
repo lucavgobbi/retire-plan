@@ -1,4 +1,4 @@
-import type { YearResult } from "@budgettool/engine";
+import type { YearResult } from "@retire-plan/engine";
 
 /** Chart adapters: charts never touch YearResult internals directly (plan Task 7). */
 

@@ -1,4 +1,4 @@
-import type { SimulationResult } from "@budgettool/engine";
+import type { SimulationResult } from "@retire-plan/engine";
 import { useProjectionRun } from "../../store/api";
 import {
   drawdownSeries,

@@ -15,7 +15,7 @@ import {
   type StorageProvider,
 } from "./core";
 
-export const DB_NAME = "budgettool";
+export const DB_NAME = "retire-plan";
 /** Layout version of the object stores below; bump ONLY for store-shape changes. */
 export const DB_VERSION = 1;
 const WORKSPACE_STORE = "workspace";
@@ -121,7 +121,7 @@ function openDatabase(idbFactory: IDBFactory | undefined): Promise<IDBDatabase> 
     request.onerror = () =>
       reject(new Error(`IndexedDB open failed: ${request.error?.message ?? "unknown error"}`));
     request.onblocked = () =>
-      reject(new Error("IndexedDB upgrade is blocked by another open BudgetTool tab."));
+      reject(new Error("IndexedDB upgrade is blocked by another open RetirePlan tab."));
   });
 }
 

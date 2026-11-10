@@ -1,4 +1,4 @@
-# BudgetTool
+# RetirePlan
 
 A local Canadian retirement planning app for Ontario, with a deterministic TypeScript engine and a React web interface. The app includes plan editing, year-by-year projections, charts, scenario comparisons, and the modeling assumptions.
 

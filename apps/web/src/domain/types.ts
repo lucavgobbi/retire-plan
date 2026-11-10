@@ -1,5 +1,5 @@
-import type { AccountType, Plan, Scenario, SimulationResult } from "@budgettool/engine";
-export type * from "@budgettool/engine";
+import type { AccountType, Plan, Scenario, SimulationResult } from "@retire-plan/engine";
+export type * from "@retire-plan/engine";
 
 export interface PlanMeta { id: string; name: string; updatedAt: string }
 export interface ScenarioBase {

@@ -7,7 +7,7 @@ import type {
   IncomePlan,
   SavingsPolicyStep,
   SavingsTarget,
-} from "@budgettool/engine";
+} from "@retire-plan/engine";
 import { calculateCurrentAge, useWorkspace } from "../../store/api";
 import "./planView.css";
 

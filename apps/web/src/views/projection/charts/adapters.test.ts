@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { YearResult } from "@budgettool/engine";
+import type { YearResult } from "@retire-plan/engine";
 import {
   netWorthSeries,
   incomeSpendSeries,

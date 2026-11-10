@@ -18,7 +18,7 @@ describe("IndexedDB-backed provider", () => {
     if (reloaded.kind !== "recoverable") expect(reloaded.workspace.meta?.name).toBe("Saved 4");
     expect((await provider.restore())?.meta?.name).toBe("Saved 4");
     const db = await new Promise<IDBDatabase>((resolve) => {
-      const request = factory.open("budgettool");
+      const request = factory.open("retire-plan");
       request.onsuccess = () => resolve(request.result);
     });
     const count = await new Promise<number>((resolve) => {

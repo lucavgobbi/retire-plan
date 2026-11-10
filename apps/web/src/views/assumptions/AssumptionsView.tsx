@@ -60,7 +60,7 @@ export function AssumptionsView() {
         );
       })}
 
-      <p className="hint version-footer">Tax tables: ca-2026 (@budgettool/engine data)</p>
+      <p className="hint version-footer">Tax tables: ca-2026 (@retire-plan/engine data)</p>
     </section>
   );
 }

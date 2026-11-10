@@ -44,16 +44,16 @@ describe("export helpers (injected DOM)", () => {
       makeSampleWorkspace({ name: "Retire June 2046" }),
       new Date("2026-03-04T00:00:00.000Z"),
     );
-    expect(named).toBe("budgettool-retire-june-2046-2026-03-04.json");
+    expect(named).toBe("retire-plan-retire-june-2046-2026-03-04.json");
     expect(suggestedExportFilename({ ...makeSampleWorkspace(), meta: null }, new Date("2026-03-04T00:00:00.000Z"))).toBe(
-      "budgettool-2026-03-04.json",
+      "retire-plan-2026-03-04.json",
     );
   });
 
   it("downloads via injected createObjectURL and revokes after click", () => {
     const { dom, clicks, revocations } = shimDom({ objectUrl: true });
     const { fileName } = downloadWorkspaceJson(makeSampleWorkspace(), dom);
-    expect(fileName).toMatch(/^budgettool-.*\.json$/);
+    expect(fileName).toMatch(/^retire-plan-.*\.json$/);
     expect(clicks).toHaveLength(1);
     expect(clicks[0]).toMatch(/^blob:fake:/);
     expect(revocations[0]).toBe(clicks[0]);

@@ -5,7 +5,7 @@
 // golden pin stays faithful to what tests actually run.
 // NOTE: makeSampleScenario / sampleTables stay in the golden test module — they
 // are engine-test plumbing, not part of the UI sample contract.
-import type { Plan } from "@budgettool/engine";
+import type { Plan } from "@retire-plan/engine";
 import type { PlanMeta, Workspace } from "../domain/types";
 
 /**

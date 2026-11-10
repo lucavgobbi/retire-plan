@@ -1,5 +1,5 @@
 {
-  "name": "@budgettool/web",
+  "name": "@retire-plan/web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@budgettool/engine": "*",
+    "@retire-plan/engine": "*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "recharts": "^3.0.0"

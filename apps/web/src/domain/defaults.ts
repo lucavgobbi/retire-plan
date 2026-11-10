@@ -1,4 +1,4 @@
-import type { Plan } from "@budgettool/engine";
+import type { Plan } from "@retire-plan/engine";
 import type { ScenarioBase, Workspace } from "./types";
 
 export const DEFAULT_SCENARIO_BASE: ScenarioBase = {

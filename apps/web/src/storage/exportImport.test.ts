@@ -67,7 +67,7 @@ describe("parsePlanFile", () => {
     const parsed = parsePlanFile(raw);
     expect(parsed.ok).toBe(false);
     if (!parsed.ok) {
-      expect(parsed.errors.join(" ")).toMatch(/newer version of BudgetTool/);
+      expect(parsed.errors.join(" ")).toMatch(/newer version of RetirePlan/);
     }
   });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validatePlan } from "@budgettool/engine";
+import { validatePlan } from "@retire-plan/engine";
 import { makeSamplePlan, makeSampleWorkspace } from "./samplePlan";
 import { validateWorkspace } from "../storage/schema";
 

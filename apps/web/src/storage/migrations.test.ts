@@ -41,7 +41,7 @@ describe("PlanFile migrations", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.newerVersion).toBe(SCHEMA_VERSION + 3);
-      expect(result.errors[0]).toMatch(/newer version of BudgetTool/);
+      expect(result.errors[0]).toMatch(/newer version of RetirePlan/);
     }
   });
 

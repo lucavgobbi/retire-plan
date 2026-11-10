@@ -54,7 +54,7 @@ export function AppShell({ provider, sample = false }: { provider?: StorageProvi
   return <div className="app-shell">
     <a className="skip-link" href="#main">Skip to content</a>
     <header className="app-header">
-      <div><span className="eyebrow">PRIVATE · ONTARIO · CAD</span><div className="brand">BudgetTool</div></div>
+      <div><span className="eyebrow">PRIVATE · ONTARIO · CAD</span><div className="brand">RetirePlan</div></div>
       <p>Plan today. See the years ahead.</p>
       <span className="local-badge">Local data only</span>
     </header>

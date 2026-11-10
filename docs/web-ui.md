@@ -1,10 +1,10 @@
-# BudgetTool web UI
+# RetirePlan web UI
 
 From the repository root, install dependencies and start the local app:
 
 ```sh
 npm install --cache .npm-cache
-npm run dev -w @budgettool/web
+npm run dev -w @retire-plan/web
 ```
 
 Open the loopback URL printed by Vite, normally `http://127.0.0.1:5173/`.
@@ -50,7 +50,7 @@ of the engine's documented conventions and known simplifications.
 
 ## Saving, backup, and recovery
 
-Applied changes autosave after 800 ms to IndexedDB database `budgettool` (layout
+Applied changes autosave after 800 ms to IndexedDB database `retire-plan` (layout
 version 1). The live workspace and up to three recovery backups use separate
 object stores. The save indicator reports success or errors. There is no cloud
 sync; export a JSON backup to move or retain a workspace outside this browser.

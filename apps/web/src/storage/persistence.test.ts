@@ -76,7 +76,7 @@ describe("fresh + loaded + safe save", () => {
       },
     });
     expect((await provider.load()).kind).toBe("recoverable"); // never guessed at
-    await expect(provider.save(ws("Attempt"))).rejects.toThrow(/newer BudgetTool/);
+    await expect(provider.save(ws("Attempt"))).rejects.toThrow(/newer RetirePlan/);
   });
 });
 

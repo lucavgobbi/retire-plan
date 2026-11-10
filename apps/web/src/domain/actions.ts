@@ -1,4 +1,4 @@
-import type { Plan } from "@budgettool/engine";
+import type { Plan } from "@retire-plan/engine";
 import type { RunRecord, ScenarioBase, ScenarioDelta, SectionKey, Workspace } from "./types";
 
 type ItemAction = {

@@ -1,5 +1,5 @@
 import { Fragment, useState } from "react";
-import type { SimulationResult, YearResult } from "@budgettool/engine";
+import type { SimulationResult, YearResult } from "@retire-plan/engine";
 import { fmtMoney, fmtPercent, yearForAge } from "./fmt";
 import { EventsCell, YearDetailRow } from "./YearDetailRow";
 

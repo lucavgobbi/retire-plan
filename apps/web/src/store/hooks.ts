@@ -6,7 +6,7 @@ import { resolveScenario } from "../domain/scenario";
 
 export function useStore() {
   const store = useContext(StoreContext);
-  if (!store) throw new Error("BudgetTool views require StoreProvider.");
+  if (!store) throw new Error("RetirePlan views require StoreProvider.");
   return store;
 }
 export function useWorkspace(): WorkspaceApi { return useStore(); }

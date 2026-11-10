@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Plan } from "@budgettool/engine";
+import type { Plan } from "@retire-plan/engine";
 import type { Action } from "../domain/actions";
 import { createEmptyWorkspace, DEFAULT_SCENARIO_BASE } from "../domain/defaults";
 import { resolveScenario } from "../domain/scenario";

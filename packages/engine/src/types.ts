@@ -1,4 +1,4 @@
-// Core domain types for the BudgetTool simulation engine.
+// Core domain types for the RetirePlan simulation engine.
 // These names/fields are the contract every later module depends on — change with care.
 
 export type AccountType = "tfsa" | "rrsp" | "nonreg";

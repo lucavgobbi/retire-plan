@@ -1,4 +1,4 @@
-import type { Scenario } from "@budgettool/engine";
+import type { Scenario } from "@retire-plan/engine";
 import { DEFAULT_SCENARIO_BASE } from "./defaults";
 import type { ScenarioBase, ScenarioDelta } from "./types";
 

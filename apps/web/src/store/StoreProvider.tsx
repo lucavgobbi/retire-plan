@@ -1,5 +1,5 @@
 import { createContext, useCallback, useMemo, useReducer, useState, type Dispatch, type ReactNode } from "react";
-import { validatePlan } from "@budgettool/engine";
+import { validatePlan } from "@retire-plan/engine";
 import type { Action } from "../domain/actions";
 import { createEmptyWorkspace, DEFAULT_SCENARIO_BASE } from "../domain/defaults";
 import { runDeterministic, runFingerprint } from "../domain/run";

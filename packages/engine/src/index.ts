@@ -1,4 +1,4 @@
-// BudgetTool simulation engine — pure TypeScript, zero runtime dependencies.
+// RetirePlan simulation engine — pure TypeScript, zero runtime dependencies.
 // The engine never touches DOM, network, or storage.
 export * from "./types";
 export { simulate } from "./simulate";

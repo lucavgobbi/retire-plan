@@ -148,7 +148,7 @@ export function createRowBackedStorageProvider(
       (existing as { schemaVersion: number }).schemaVersion > SCHEMA_VERSION
     ) {
       throw new Error(
-        `Refused to overwrite a workspace row saved by a newer BudgetTool ` +
+        `Refused to overwrite a workspace row saved by a newer RetirePlan ` +
           `(${String((existing as { schemaVersion: number }).schemaVersion)} > ${SCHEMA_VERSION}). ` +
           "Snapshot it and update the app first.",
       );

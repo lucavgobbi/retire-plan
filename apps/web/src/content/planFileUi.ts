@@ -42,14 +42,14 @@ export function ambientDom(): DomHelpers | null {
   };
 }
 
-/** `budgettool-[plan-slug]-YYYY-MM-DD.json` derived from the plan name (if named). */
+/** `retire-plan-[plan-slug]-YYYY-MM-DD.json` derived from the plan name (if named). */
 export function suggestedExportFilename(w: Workspace, now: Date = new Date()): string {
   const slug = (w.meta?.name ?? "")
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "") ?? "";
-  return `budgettool${slug ? `-${slug}` : ""}-${now.toISOString().slice(0, 10)}.json`;
+  return `retire-plan${slug ? `-${slug}` : ""}-${now.toISOString().slice(0, 10)}.json`;
 }
 
 /**
@@ -68,7 +68,7 @@ export function downloadWorkspaceJson(w: Workspace, dom: DomHelpers): { fileName
  * Recovery-ladder step 2 ("Download current data as JSON"): raw persisted row,
  * verbatim, NO interpretation — safe even when the row failed validation.
  */
-export function downloadRawRowJson(row: unknown, dom: DomHelpers, fileName = "budgettool-snapshot.json"): void {
+export function downloadRawRowJson(row: unknown, dom: DomHelpers, fileName = "retire-plan-snapshot.json"): void {
   const text = row === undefined ? "{}" : JSON.stringify(row, null, 2);
   triggerDownload(text, fileName, dom);
 }
@@ -156,7 +156,7 @@ export function previewPlanFile(
   if (!entry) issues.push("The file contains no plans.");
   const importedVersion = extras.importedFrom ?? planFile.schemaVersion;
   if (importedVersion > SCHEMA_VERSION) {
-    issues.push("This file is from a newer version of BudgetTool and was not applied.");
+    issues.push("This file is from a newer version of RetirePlan and was not applied.");
   }
   return {
     fileName: extras.fileName ?? null,

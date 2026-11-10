@@ -1,4 +1,4 @@
-import { buildDeterministicReturns, simulate, type Plan, type Scenario, type SimulationResult } from "@budgettool/engine";
+import { buildDeterministicReturns, simulate, type Plan, type Scenario, type SimulationResult } from "@retire-plan/engine";
 export { resolveScenario } from "./scenario";
 
 export function runFingerprint(plan: Plan, scenario: Scenario): string {

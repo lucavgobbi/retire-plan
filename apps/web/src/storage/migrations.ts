@@ -45,13 +45,13 @@ function versionOf(raw: Record<string, unknown>): number | null {
 
 export function migratePlanFile(raw: unknown): MigrationOk | MigrationFailure {
   if (!isRecord(raw)) {
-    return { ok: false, errors: ["The file is not a JSON object — this is not a BudgetTool plan file."], newerVersion: null };
+    return { ok: false, errors: ["The file is not a JSON object — this is not a RetirePlan plan file."], newerVersion: null };
   }
   const version = versionOf(raw);
   if (version === null) {
     return {
       ok: false,
-      errors: ['The file\'s "schemaVersion" is not a number — this is not a BudgetTool plan file.'],
+      errors: ['The file\'s "schemaVersion" is not a number — this is not a RetirePlan plan file.'],
       newerVersion: null,
     };
   }
@@ -61,8 +61,8 @@ export function migratePlanFile(raw: unknown): MigrationOk | MigrationFailure {
     return {
       ok: false,
       errors: [
-        `This file was saved with a newer version of BudgetTool (file schema v${version}; ` +
-          `this app understands v${SCHEMA_VERSION}). Update BudgetTool first, or copy the file's ` +
+        `This file was saved with a newer version of RetirePlan (file schema v${version}; ` +
+          `this app understands v${SCHEMA_VERSION}). Update RetirePlan first, or copy the file's ` +
           "JSON text for inspection — it was not modified or loaded.",
       ],
       newerVersion: version,
@@ -134,7 +134,7 @@ export function migrateWorkspaceRow(raw: unknown): RowMigrationOk | RowMigration
     return {
       ok: false,
       errors: [
-        `This workspace was saved by a newer version of BudgetTool (schema v${version} vs ` +
+        `This workspace was saved by a newer version of RetirePlan (schema v${version} vs ` +
           `v${SCHEMA_VERSION} here). Nothing was deleted or modified.`,
       ],
       newerVersion: version,

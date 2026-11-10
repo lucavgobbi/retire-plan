@@ -1,4 +1,4 @@
-import type { YearResult } from "@budgettool/engine";
+import type { YearResult } from "@retire-plan/engine";
 import { fmtMoneyDetail } from "./fmt";
 
 /** Bullet summary of a year's audit counts — cell inside the dense table. */

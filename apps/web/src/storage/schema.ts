@@ -17,7 +17,7 @@ import type {
   ScenarioDelta,
   Workspace,
 } from "../domain/types";
-import { validatePlan } from "@budgettool/engine";
+import { validatePlan } from "@retire-plan/engine";
 
 /** Current PlanFile JSON payload version (NOT the IndexedDB layout version; see db.ts). */
 export const SCHEMA_VERSION = 1;
@@ -320,7 +320,7 @@ export function validateScenarioDelta(value: unknown): string[] {
   if (value.simMode !== "deterministic") {
     const supported = "deterministic";
     errors.push(
-      `Scenario simMode "${String(value.simMode)}" is not supported by this version (only "${supported}"); the file may be from a newer BudgetTool or edited by hand.`,
+      `Scenario simMode "${String(value.simMode)}" is not supported by this version (only "${supported}"); the file may be from a newer RetirePlan or edited by hand.`,
     );
   }
   if (value.mcConfig !== undefined) {

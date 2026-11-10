@@ -1,4 +1,4 @@
-import type { Plan, YearResult } from "@budgettool/engine";
+import type { Plan, YearResult } from "@retire-plan/engine";
 import { createDefaultPlan } from "../../domain/defaults";
 import type { Workspace } from "../../domain/types";
 

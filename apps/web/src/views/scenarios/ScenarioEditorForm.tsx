@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AccountType } from "@budgettool/engine";
+import type { AccountType } from "@retire-plan/engine";
 import { useWorkspace } from "../../store/api";
 import type { ScenarioBase, ScenarioDelta } from "../../domain/types";
 
