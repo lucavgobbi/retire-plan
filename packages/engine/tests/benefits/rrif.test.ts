@@ -6,7 +6,8 @@ import { rrifMinimum } from "../../src/benefits/rrif";
 const tables: TaxYearTables = loadTables(tablesJson);
 
 // Reference constants (2026, verified in data/tax/SOURCES.md):
-//   rrif.minimumFactors: age 71 -> 5.28%, 80 -> 6.79%, 94 -> 12.34%, 95+ -> 20% (cap).
+//   Official CRA “All other RRIFs” factors: age 71 -> 5.28%, 80 -> 6.82%,
+//   90 -> 11.92%, 94 -> 18.79%, 95+ -> 20% (cap).
 //   RRIF minimum withdrawal = minimumFactor(age) x opening balance.
 //   A person has no RRIF before age 71 (the year after the RRSP matures):
 //   rrifMinimum returns null for age < 71 — pulling a minimum earlier is a caller error.
@@ -31,14 +32,14 @@ describe("rrifMinimum — hand-computed schedule cases", () => {
     expect(rrifMinimum(71, 400_000, tables)).toEqual({ minimum: 21_120, factor: 0.0528 });
   });
 
-  it("pins the age-80 factor at 6.79%", () => {
-    // 6.79% x 250,000 = 16,975
-    expect(rrifMinimum(80, 250_000, tables)).toEqual({ minimum: 16_975, factor: 0.0679 });
+  it("pins the official age-80 factor at 6.82%", () => {
+    // 6.82% x 250,000 = 17,050
+    expect(rrifMinimum(80, 250_000, tables)).toEqual({ minimum: 17_050, factor: 0.0682 });
   });
 
-  it("pins the age-94 factor at 12.34%", () => {
-    // 12.34% x 300,000 = 37,020
-    expect(rrifMinimum(94, 300_000, tables)).toEqual({ minimum: 37_020, factor: 0.1234 });
+  it("pins official high-age factors", () => {
+    expect(rrifMinimum(90, 100_000, tables)).toEqual({ minimum: 11_920, factor: 0.1192 });
+    expect(rrifMinimum(94, 300_000, tables)).toEqual({ minimum: 56_370, factor: 0.1879 });
   });
 
   it("pins the age-95 cap at 20%", () => {
@@ -52,11 +53,11 @@ describe("rrifMinimum — hand-computed schedule cases", () => {
   });
 
   it("minimum is exactly factor times balance, on unexpected ages between pins too", () => {
-    // age 85 -> 8.11% x 123,456.78
+    // age 85 -> 8.51% x 123,456.78
     const r = rrifMinimum(85, 123_456.78, tables);
     expect(r).not.toBeNull();
-    expect(r!.factor).toBe(0.0811);
-    expect(r!.minimum).toBeCloseTo(0.0811 * 123_456.78, 8);
+    expect(r!.factor).toBe(0.0851);
+    expect(r!.minimum).toBeCloseTo(0.0851 * 123_456.78, 8);
   });
 
   it("zero balance yields a zero minimum but still the table factor", () => {
@@ -70,6 +71,17 @@ describe("rrifMinimum — hand-computed schedule cases", () => {
       expect(r).not.toBeNull();
       if (age < 95) expect(r!.minimum).toBeGreaterThanOrEqual(prev);
       prev = r!.minimum;
+    }
+  });
+
+  it("matches CRA's complete All other RRIFs schedule", () => {
+    const factors = [
+      0.0528, 0.054, 0.0553, 0.0567, 0.0582, 0.0598, 0.0617, 0.0636,
+      0.0658, 0.0682, 0.0708, 0.0738, 0.0771, 0.0808, 0.0851, 0.0899,
+      0.0955, 0.1021, 0.1099, 0.1192, 0.1306, 0.1449, 0.1634, 0.1879,
+    ];
+    for (let i = 0; i < factors.length; i++) {
+      expect(rrifMinimum(71 + i, 100_000, tables)?.factor).toBe(factors[i]);
     }
   });
 });

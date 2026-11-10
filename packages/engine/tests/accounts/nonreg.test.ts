@@ -51,6 +51,27 @@ describe("nonregWithdrawal", () => {
     expect(out.newMarket).toBe(0);
   });
 
+  it("recognizes a capital loss when book exceeds market and consumes basis on liquidation", () => {
+    const partial = nonregWithdrawal({ market: 100, book: 150 }, 100, 50);
+    expect(partial.realizedGain).toBe(-25);
+    expect(partial.newMarket).toBe(50);
+    expect(partial.newBook).toBe(75);
+
+    const full = nonregWithdrawal({ market: 100, book: 150 }, 100, 100);
+    expect(full.realizedGain).toBe(-50);
+    expect(full.newMarket).toBe(0);
+    expect(full.newBook).toBe(0);
+  });
+
+  it("clips a return below -100% at a total wipeout", () => {
+    const out = nonregGrow(
+      { market: 100, book: 80 },
+      { equity: -1.5, bond: 0, cash: 0 },
+      { equity: 1, bond: 0, cash: 0 },
+    );
+    expect(out).toEqual({ market: 0, book: 0 });
+  });
+
   it("consumption across multiple years keeps the ratio consistent", () => {
     let state = { market: 100, book: 60 };
     state = nonregGrow(state, { equity: 0.1, bond: 0, cash: 0 }, { equity: 1, bond: 0, cash: 0 });

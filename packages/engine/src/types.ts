@@ -7,6 +7,8 @@ export interface AccountPlan {
   id: string;
   type: AccountType;
   balance: number;
+  /** Current adjusted cost base for non-registered holdings; omitted defaults to market value. */
+  bookValue?: number;
   assetMix: { equity: number; bond: number; cash: number };
 }
 
@@ -103,7 +105,7 @@ export interface YearResult {
   savings: { tfsa: number; rrsp: number; nonreg: number; mortgage: number };
   expenses: number;
   shortfall: number;
-  balances: { tfsa: number; rrsp: number; nonreg: number; home: number; debt: number };
+  balances: { tfsa: number; rrsp: number; nonreg: number; cash: number; home: number; debt: number; otherAssets?: number };
   netWorth: number;
   tfsaRoom: number;
   rrspRoom: number;
@@ -145,6 +147,14 @@ export function validatePlan(plan: Plan): string[] {
     if (account.balance < 0) {
       errors.push(
         `Account "${account.id}" has a negative balance (${account.balance}); balances cannot be negative.`,
+      );
+    }
+    if (
+      account.bookValue !== undefined &&
+      (account.type !== "nonreg" || !Number.isFinite(account.bookValue) || account.bookValue < 0)
+    ) {
+      errors.push(
+        `Account "${account.id}" bookValue is only valid as a non-negative non-registered ACB (got ${account.bookValue}).`,
       );
     }
     const { equity, bond, cash } = account.assetMix;

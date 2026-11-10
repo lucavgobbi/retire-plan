@@ -50,6 +50,18 @@ describe("allocateSurplus", () => {
     expect(out.newRooms.tfsa).toBe(20_000 - 7_000);
   });
 
+  it("does not return cash a second time after sweeping surplus to non-reg", () => {
+    const out = allocateSurplus(
+      5_000,
+      [],
+      { tfsa: 0, rrsp: 0 },
+      { tfsa: 0, rrsp: 0, nonreg: 0, debt: 0 },
+    );
+    expect(out.contributions.nonreg).toBe(5_000);
+    expect(out.sweptToNonreg).toBe(5_000);
+    expect(out.cash).toBe(0);
+  });
+
   it("never exceeds available TFSA room (room-stop)", () => {
     const policy: SavingsPolicyStep[] = [
       { id: "s", priority: 1, target: "tfsa", perYearCap: 7_000 },
@@ -139,6 +151,7 @@ describe("allocateSurplus", () => {
       debt,
     );
     expect(big.amounts.mortgage).toBe(2_500); // capped at the balance
+    expect(big.cash).toBe(7_500); // excess remains conserved as cash after terminal prepay
 
     const small = allocateSurplus(
       10_000,
@@ -148,8 +161,40 @@ describe("allocateSurplus", () => {
       debt,
     );
     expect(small.amounts.mortgage).toBe(10_000); // plain surplus, no cap binding
+    expect(small.cash).toBe(0);
 
     expect(big.contributions).toEqual({ tfsa: 0, rrsp: 0, nonreg: 0 });
+  });
+
+  it("keeps an untilAge step active through the boundary age", () => {
+    const out = allocateSurplus(
+      5_000,
+      [{ id: "tfsa-through-45", priority: 1, target: "tfsa", untilAge: 45 }],
+      { tfsa: 10_000, rrsp: 0 },
+      { tfsa: 0, rrsp: 0, nonreg: 0, debt: 0 },
+      undefined,
+      45,
+    );
+    expect(out.contributions.tfsa).toBe(5_000);
+  });
+
+  it("skips policy targets whose account types are absent and preserves the surplus", () => {
+    const out = allocateSurplus(
+      5_000,
+      [
+        { id: "tfsa", priority: 1, target: "tfsa" },
+        { id: "match", priority: 2, target: "rrsp-match", matchRate: 0.05 },
+        { id: "nonreg", priority: 3, target: "nonreg" },
+      ],
+      { tfsa: 10_000, rrsp: 20_000 },
+      { tfsa: 0, rrsp: 0, nonreg: 0, debt: 0 },
+      undefined,
+      45,
+      { tfsa: false, rrsp: false, nonreg: false },
+    );
+    expect(out.contributions).toEqual({ tfsa: 0, rrsp: 0, nonreg: 0 });
+    expect(out.employerMatch).toBe(0);
+    expect(out.cash).toBe(5_000);
   });
 });
 

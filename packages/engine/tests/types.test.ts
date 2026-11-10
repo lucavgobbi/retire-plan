@@ -31,6 +31,22 @@ describe("validatePlan", () => {
     expect(errors.some((e) => e.includes("balance") && e.includes("rrsp-1"))).toBe(true);
   });
 
+  it("accepts explicit non-reg ACB above market for an unrealized-loss position", () => {
+    const plan = makePlan();
+    const nonreg = plan.accounts.find((a) => a.type === "nonreg")!;
+    nonreg.bookValue = nonreg.balance + 5_000;
+    expect(validatePlan(plan)).toEqual([]);
+  });
+
+  it("rejects invalid ACB on a non-reg account and bookValue on registered accounts", () => {
+    const plan = makePlan();
+    plan.accounts.find((a) => a.type === "nonreg")!.bookValue = -1;
+    plan.accounts.find((a) => a.type === "rrsp")!.bookValue = 10;
+    const errors = validatePlan(plan);
+    expect(errors).toHaveLength(2);
+    expect(errors.every((e) => e.includes("bookValue"))).toBe(true);
+  });
+
   it("rejects an assetMix whose components do not each stay >= 0 and sum to 1 within 0.001", () => {
     const plan = makePlan();
     plan.accounts[0]!.assetMix = { equity: 0.9, bond: 0.3, cash: -0.2 };

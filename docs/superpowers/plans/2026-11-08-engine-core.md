@@ -10,9 +10,11 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-08-budget-tool-design.md` (read both; the spec is authoritative for intent, this plan for decisions).
 
-## Progress Status (as of 2026-11-09)
+## Progress Status (as of 2026-11-10)
 
-Suite health at time of writing: **156 tests / 17 files, all green**; `npx tsc --noEmit` clean (run `npm test -w packages/engine` from the repo root).
+Phase 1 implementation, independent engine review, and Task 16 cross-check are complete. Latest verification: **187 tests / 18 files, all green under Vitest 4.1.12**; `npx tsc --noEmit -p packages/engine` clean. Run commands from the repository root. The cross-check uses official published constants and an independent formula reference; it does not claim an interactive government-calculator run. Known modeling gaps remain documented in `docs/validation/cross-check.md` and `docs/assumptions.md`.
+
+Review fixes and Task 16 artifacts remain **uncommitted**. The git metadata approval was canceled; no closeout commit was created. Historical commit references below identify earlier implementation only. Phase 2 implementation has proceeded in the working tree; Phase 3 remains queued.
 
 | Task | Status | Commit(s) |
 |------|--------|-----------|
@@ -28,25 +30,29 @@ Suite health at time of writing: **156 tests / 17 files, all green**; `npx tsc -
 | 10. Mortgage amortization | ✅ done | 1403a9d, e64f20c (convention doc) |
 | 11. Deterministic + MC return series | ✅ done | 8dc6ed8 |
 | 12. Year stepper | ✅ done | a39bf37 |
-| 13. Savings allocation + withdrawals (`flows.ts`) | ✅ done (captain native) | dd2aa6c |
-| 14. Non-reg ACB + realized gains | ✅ done (captain native) | 7fc1ba9, faf41ef (assumptions doc) |
-| 15. Golden projection snapshot | ✅ done (captain native) | 87fc0ed + `tests/golden/reference.ts` independent calculator |
-| 16. External cross-check | ⏳ **PENDING** | dispatched twice; both runs lost (free-model quota + pane loss). No files landed yet. |
+| 13. Savings allocation + withdrawals (`flows.ts`) | ✅ done; independently reviewed and fixes applied | dd2aa6c; review fix commit pending |
+| 14. Non-reg ACB + realized gains | ✅ done; independently reviewed and fixes applied | 7fc1ba9, faf41ef; review fix commit pending |
+| 15. Golden projection snapshot | ✅ done; independently reviewed and re-reconciled after year indexing | 87fc0ed + `tests/golden/reference.ts`; review fix commit pending |
+| 16. External cross-check | ✅ cross-check and review resolutions complete; uncommitted | `docs/validation/cross-check.md`, `tests/validation/crosscheck.test.ts` |
 
 ### Completed-work ledger (for reviewers)
 
-- **Independent review coverage:** builder-reviewer rounds 1–2 audited Tasks 1–4 and 8–11 (found+fixed: TFSA room doc BLOCKER, room seeding MAJOR). Tasks 5–7, 12 audited (clean on second pass). **Tasks 13–15 (commits dd2aa6c / 7fc1ba9 / 87fc0ed) have NOT yet received an independent review** — the dispatched run was lost; re-dispatch before closing Phase 1.
-- **Golden pins (hand-derived, match engine exactly):** year-1 federal tax 13,157.59; ON basic 5,827.02 + surtax 1.80; total tax 18,986.41 on 95k employment; mortgage end balance 342,435.13; TFSA draw 2,146.41; TFSA end 60,167.73; RRSP end 187,200.00; non-reg end 41,600.00; home 714,000.00; net worth 660,532.60.
+- **Independent review coverage:** builder-reviewer rounds 1–2 audited Tasks 1–4 and 8–11 (found+fixed: TFSA room doc BLOCKER, room seeding MAJOR). Tasks 5–7, 12 audited (clean on second pass). Tasks 13–15 (`dd2aa6c` / `7fc1ba9` / `87fc0ed`) received an independent audit; confirmed findings were fixed and the engine reviewer approved the gate. See `docs/validation/engine-review.md` for findings and resolutions. Review fixes remain uncommitted after the git metadata approval was canceled.
+- **Golden reference (hand-derived, with source-test tolerances):** year-1 federal tax 13,157.59; ON basic 5,827.02 + surtax 1.80; total tax 18,986.41 on 95k employment; mortgage end balance 342,435.13; TFSA draw 2,146.41; TFSA end 60,167.73; RRSP end 187,200.00; non-reg end 41,600.00; home 714,000.00; net worth 660,532.60. The actual engine year-1 net worth is **660,532.49** and mortgage balance is **342,435.24**; the hand-derived 660,532.60 / 342,435.13 reference is checked with the existing ±0.50 tolerance. These are not cent-exact pins; preserve the source test's reference and tolerance.
 - **Conventions locked during execution** (all documented in `docs/assumptions.md`):
   - `tfsaRoomNextYear` takes room **POST-contribution**; seeding = `cumulativeRoomAsOf2026` for eligible-start plans.
   - Mortgage `annualRate` = nominal compounded monthly; negative-amortization warning is emitted by the **stepper**, not `mortgageYear`.
-  - `mortgage-prepay` savings step is **terminal**: leftover surplus after it rests as cash (no sweep to non-reg); all other unallocated surplus sweeps to non-reg.
-  - Non-reg ACB: aggregate book across accounts (exact under proportional flow distribution); growth adds the blended dollar gain to **both** market and book; withdrawals realize gains at the current book/market ratio; oversized withdrawals cap at market.
-  - Non-reg draws in the deficit branch deliver net of their own chunk tax; the chunk tax folds component-wise into reported annual tax.
-  - Prior-year realized gains count as GIS income (with the employment exemption).
-- **Fleet ops note:** agents run opencode TUI pinned to `opencode/glm-5.3-flash-free` via repo `opencode.json`. Daily free-message quota (reset ~7:19 PM) can hard-block agents mid-task; when blocked, the captain implements natively and review is re-dispatched after reset. The 2026-11-09 reviewer run (PART A review of 13–15 + PART B Task 16) was lost before any output landed.
+  - `mortgage-prepay` savings step is **terminal**: prepayment is capped at post-payment debt and leftover surplus rests in a no-return cash reserve reported in `YearResult.balances.cash`; `untilAge` includes the boundary age.
+  - Non-reg ACB: aggregate book across accounts (exact under proportional flow distribution); optional `AccountPlan.bookValue` seeds basis and defaults to market value; gains/losses are realized by pro-rata basis removal; full liquidation consumes basis.
+  - Non-reg deficit draws gross up for their own gains tax. Capital losses offset current-year capital gains only, with no carry-forward or ordinary-income deduction.
+  - Prior-year positive realized gains count as GIS income (with the employment exemption); losses are not GIS deductions, and OAS is excluded.
+  - Projected calendar year is `birthYear + age`; annual tax brackets, indexed credits, Ontario surtax thresholds, and OAS recovery thresholds use separate federal/Ontario index factors. The $2,000 federal pension income amount is fixed.
+  - RRIF factors use CRA's “All other RRIFs” schedule, 71–94, with 20% from age 95; account market balances floor at zero after losses.
+- **Fleet ops note:** agents run opencode TUI pinned to `opencode/glm-5.3-flash-free` via repo `opencode.json`. Daily free-message quota (reset ~7:19 PM) can hard-block agents mid-task; when blocked, the captain implements natively and review is re-dispatched after reset. The 2026-11-09 reviewer run (PART A review of 13–15 + PART B Task 16) was lost; the Task 13–15 audit was later completed independently, and Task 16 artifacts and review resolutions are now complete.
 
-**Task 16 remains the only open item in this plan.** After it lands (and Tasks 13–15 get their independent review), Phase 1 is complete → write the Phase 2 plan (UI: plan entry, projection view, scenarios/compare, IndexedDB persistence, JSON export, assumptions view) per spec sections 6–8.
+**Phase 1 validation gate is cleared.** Engine and cross-check findings are resolved; the pending work is repository commit closeout, not implementation or validator signoff. See the Phase 2 plan (`docs/superpowers/plans/2026-11-10-web-ui.md`) for the implemented web app and its final integration/browser verification status.
+
+The task checklists below preserve the original execution recipe; the progress table above is the current completion ledger. Commit steps are not marked complete because the closeout changes remain uncommitted.
 
 ## Global Constraints
 

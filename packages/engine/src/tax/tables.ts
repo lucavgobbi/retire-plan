@@ -260,7 +260,7 @@ function indexBrackets(brackets: Bracket[], factor: number): Bracket[] {
  *
  * What scales:
  *  - federal: bracket thresholds, BPA, age-credit amount + reduction threshold, employment
- *    amount, pension-credit amount + income threshold, OAS recovery threshold.
+ *    amount, OAS recovery threshold.
  *  - ontario: bracket thresholds, surtax tax thresholds, BPA.
  *
  * What does not scale (fixed by annual announcement or legislation): TFSA/RRSP limits, GIS
@@ -286,11 +286,8 @@ export function applyIndexation(tables: TaxYearTables, yearOffset: number): TaxY
         reductionRate: fed.ageCredit.reductionRate,
       },
       employmentCreditAmount: fed.employmentCreditAmount * federalFactor,
-      pensionIncomeCredit: {
-        amount: fed.pensionIncomeCredit.amount * federalFactor,
-        incomeThreshold: fed.pensionIncomeCredit.incomeThreshold * federalFactor,
-        reductionRate: fed.pensionIncomeCredit.reductionRate,
-      },
+      // The $2,000 federal pension income amount is fixed by statute, not indexed.
+      pensionIncomeCredit: fed.pensionIncomeCredit,
     },
     ontario: {
       ...tables.ontario,

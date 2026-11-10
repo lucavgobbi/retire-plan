@@ -48,7 +48,7 @@ export function taxableIncome(income: IncomeForTax): number {
     income.employmentIncome +
     income.otherTaxableIncome +
     income.rrspWithdrawals +
-    income.capitalGains * CAPITAL_GAINS_INCLUSION
+    Math.max(0, income.capitalGains) * CAPITAL_GAINS_INCLUSION
   );
 }
 

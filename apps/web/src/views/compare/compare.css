@@ -1,0 +1,53 @@
+.compare-run-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.compare-table {
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  margin-top: 8px;
+}
+
+.compare-table th,
+.compare-table td {
+  border: 1px solid #d3d9de;
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.compare-table thead th {
+  background: #dde5ea;
+}
+
+.compare-table tbody th[scope="row"] {
+  background: #eef2f5;
+  white-space: nowrap;
+}
+
+.compare-view { min-width: 0; width: 100%; }
+.compare-run-list li,
+.compare-run-list label { min-width: 0; overflow-wrap: anywhere; }
+.compare-run-list label { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
+.compare-run-list input[type="checkbox"] { flex: 0 0 auto; margin: 0; align-self: center; }
+.compare-baseline { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 16px 0; }
+.compare-baseline select { min-width: 0; max-width: 100%; }
+.compare-table-wrap { width: 100%; max-width: 100%; min-width: 0; overflow: auto; border: 1px solid #d3d9de; border-radius: 6px; }
+.compare-table { width: max-content; min-width: 100%; margin: 0; }
+.compare-table td { min-width: 150px; max-width: 260px; overflow-wrap: anywhere; }
+.compare-chart-card { width: 100%; min-width: 0; max-width: 100%; margin: 16px 0 0; padding: 16px; background: #fff; border: 1px solid #d3d9de; border-radius: 8px; }
+.compare-chart-card h3 { margin: 0 0 8px; }
+.compare-chart-card .financial-chart { max-width: 900px; margin: 0 auto; }
+.compare-chart-card .chart-legend { justify-content: center; }
+@media (max-width: 480px) {
+  .compare-chart-card { padding: 12px; }
+  .compare-baseline { align-items: stretch; flex-direction: column; }
+  .compare-baseline select { width: 100%; }
+  .compare-run-list label .hint { flex-basis: 100%; padding-left: 22px; }
+}
+@media print { .compare-table-wrap { overflow: visible; border: 0; } }

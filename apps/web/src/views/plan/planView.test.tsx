@@ -1,0 +1,137 @@
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import { createEmptyWorkspace, DEFAULT_SCENARIO_BASE } from "../../domain/defaults";
+import { useWorkspace, StoreProvider } from "../../store/api";
+import { PlanView } from "./PlanView";
+
+function WorkspaceProbe() {
+  const { workspace } = useWorkspace();
+  return <output data-testid="workspace-json">{JSON.stringify(workspace.plan)}</output>;
+}
+
+function renderPlan() {
+  return render(<StoreProvider now={() => "2026-11-10T12:00:00Z"} initialWorkspace={createEmptyWorkspace()} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+    <PlanView /><WorkspaceProbe />
+  </StoreProvider>);
+}
+
+function planState() {
+  return JSON.parse(screen.getByTestId("workspace-json").textContent ?? "{}") as ReturnType<typeof createEmptyWorkspace>["plan"];
+}
+
+describe("PlanView", () => {
+  it("derives a read-only current age and applies valid profile edits without a save button", () => {
+    renderPlan();
+    expect((screen.getByLabelText("Current age") as HTMLInputElement).readOnly).toBe(true);
+    expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Birth year"), { target: { value: "" } });
+    expect(screen.getByRole("alert").textContent).toMatch(/birth year is required/i);
+    expect(planState().profile.currentAge).toBe(45);
+
+    fireEvent.change(screen.getByLabelText("Birth year"), { target: { value: "1980" } });
+    expect((screen.getByLabelText("Current age") as HTMLInputElement).value).toBe("46");
+    expect(planState().profile).toMatchObject({ birthYear: 1980, currentAge: 46 });
+    expect(screen.getByText(/Age reached in 2026/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Projection end age"), { target: { value: "90" } });
+    expect(planState().profile).toMatchObject({ currentAge: 46, endAge: 90 });
+    expect(screen.getByLabelText("Province")).toBeTruthy();
+  });
+
+  it("rejects fractional years and ages without dispatching them", () => {
+    renderPlan();
+    fireEvent.change(screen.getByLabelText("Birth year"), { target: { value: "1981.5" } });
+    expect(screen.getByRole("alert").textContent).toMatch(/birth year must be a whole number/i);
+    expect(planState().profile.birthYear).toBe(1981);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Income" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add employment" }));
+    expect(planState().incomes).toHaveLength(1);
+    fireEvent.change(screen.getByLabelText("Start age"), { target: { value: "45.5" } });
+    expect(screen.getByRole("alert").textContent).toMatch(/start age must be a whole number/i);
+    expect(planState().incomes[0]?.startAge).toBe(45);
+  });
+
+  it("applies valid account edits immediately, keeps invalid mixes local, and clears optional ACB", () => {
+    renderPlan();
+    fireEvent.click(screen.getByRole("tab", { name: "Accounts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+    fireEvent.change(screen.getByLabelText("Account type"), { target: { value: "nonreg" } });
+    fireEvent.change(screen.getByLabelText("Current balance ($)"), { target: { value: "10000" } });
+    fireEvent.change(screen.getByLabelText(/ACB \/ book value/), { target: { value: "6000" } });
+    fireEvent.change(screen.getByLabelText("Equity (%)"), { target: { value: "80" } });
+    expect(screen.getByRole("alert").textContent).toMatch(/asset mix must total 100%/i);
+    expect(planState().accounts[0]?.assetMix).toEqual({ equity: 0.6, bond: 0.3, cash: 0.1 });
+    fireEvent.change(screen.getByLabelText("Bonds (%)"), { target: { value: "10" } });
+    expect(planState().accounts[0]).toMatchObject({ type: "nonreg", balance: 10_000, bookValue: 6_000, assetMix: { equity: 0.8, bond: 0.1, cash: 0.1 } });
+
+    fireEvent.change(screen.getByLabelText(/ACB \/ book value/), { target: { value: "" } });
+    expect(planState().accounts[0]!.bookValue).toBeUndefined();
+    expect(screen.queryByRole("button", { name: /save|add item/i })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    expect(planState().accounts).toHaveLength(0);
+  });
+
+  it("uses readable account type labels while retaining the engine's stored enum values", () => {
+    renderPlan();
+    fireEvent.click(screen.getByRole("tab", { name: "Accounts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+    const select = screen.getByLabelText("Account type");
+    expect(within(select).getAllByRole("option").map(option => [option.textContent, (option as HTMLOptionElement).value])).toEqual([
+      ["TFSA", "tfsa"], ["RRSP", "rrsp"], ["Non-registered", "nonreg"],
+    ]);
+    fireEvent.change(select, { target: { value: "rrsp" } });
+    expect(planState().accounts[0]?.type).toBe("rrsp");
+    fireEvent.change(select, { target: { value: "nonreg" } });
+    expect(planState().accounts[0]?.type).toBe("nonreg");
+  });
+
+  it("creates plan items immediately on add and applies edits while typing", () => {
+    renderPlan();
+    fireEvent.click(screen.getByRole("tab", { name: "Assets & debts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add asset" }));
+    expect(planState().assets).toHaveLength(1);
+    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "Home" } });
+    fireEvent.change(screen.getByLabelText("Current value ($)"), { target: { value: "700000" } });
+    fireEvent.click(screen.getByLabelText("Plan a sale event"));
+    fireEvent.change(screen.getByLabelText("Sale age"), { target: { value: "65" } });
+    fireEvent.change(screen.getByLabelText("Sale costs (%)"), { target: { value: "5" } });
+    expect(planState().assets[0]).toMatchObject({ kind: "primary-home", name: "Home", value: 700_000, sellEvent: { age: 65, costsPct: 0.05 } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add mortgage" }));
+    expect(planState().debts).toHaveLength(1);
+    fireEvent.change(screen.getByLabelText("Mortgage balance ($)"), { target: { value: "250000" } });
+    fireEvent.change(screen.getByLabelText("Monthly payment ($)"), { target: { value: "1600" } });
+    expect(planState().debts[0]).toMatchObject({ kind: "mortgage", balance: 250_000, monthlyPayment: 1_600 });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Income" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add employment" }));
+    expect(planState().incomes[0]).toMatchObject({ kind: "employment", annualAmount: 0, startAge: 45, endAge: 64 });
+    fireEvent.change(screen.getByLabelText("Annual amount ($)"), { target: { value: "95000" } });
+    expect(planState().incomes[0]).toMatchObject({ kind: "employment", annualAmount: 95_000, startAge: 45, endAge: 64, raiseRate: 0.02 });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Expenses" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add expense" }));
+    expect(planState().expenses).toHaveLength(1);
+    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "Living" } });
+    fireEvent.change(screen.getByLabelText("Annual amount ($)"), { target: { value: "50000" } });
+    expect(planState().expenses[0]).toMatchObject({ name: "Living", annualAmount: 50_000, inflationRate: 0.02 });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Savings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add savings step" }));
+    expect(planState().savingsPolicy).toHaveLength(1);
+    fireEvent.change(screen.getByLabelText("Savings target"), { target: { value: "rrsp-match" } });
+    expect(planState().savingsPolicy[0]).toMatchObject({ target: "rrsp-match", priority: 1, matchRate: 0.05 });
+    expect(screen.queryByRole("button", { name: /save|add item/i })).toBeNull();
+  });
+
+  it("shows engine plan validation errors inline", () => {
+    renderPlan();
+    fireEvent.click(screen.getByRole("tab", { name: "Accounts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+    fireEvent.change(screen.getByLabelText("Current balance ($)"), { target: { value: "-1" } });
+    // The editor catches the invalid value before dispatching, so no invalid plan leaks into the workspace.
+    expect(within(screen.getByRole("alert")).getByText(/balance must be at least 0/i)).toBeTruthy();
+    expect(screen.getByText(/These edits are not applied/)).toBeTruthy();
+    expect(planState().accounts[0]?.balance).toBe(0);
+  });
+});

@@ -2,11 +2,11 @@
  * Non-registered account basis (ACB) tracking — plan Task 14.
  *
  * Simplified ACB model, documented as a v1 approximation in docs/assumptions.md:
- * - Growth: market and book both increase by `market x blendedReturn`, so each
- *   year's growth lands into basis as well (the unrealized-gain FRACTION shrinks
- *   over time; a withdrawal realizes gains only on the pre-existing fraction).
- * - Withdrawal: gains are realized at the current book/market ratio; an oversized
- *   withdrawal caps at market, consuming the whole basis.
+ * - Growth: market and book both change by the market's dollar return, bounded at
+ *   zero. A total wipeout also wipes out basis.
+ * - Withdrawal: basis is removed pro rata to market value, including when book is
+ *   above market. A full liquidation consumes all remaining basis and may realize
+ *   a capital loss.
  */
 import type { AccountPlan } from "../types";
 
@@ -34,7 +34,9 @@ export function blendedReturn(yearReturn: YearReturn, assetMix: AssetMix): numbe
 export function nonregGrow(state: NonregState, yearReturn: YearReturn, assetMix: AssetMix): NonregState {
   const r = blendedReturn(yearReturn, assetMix);
   const gainAmount = state.market * r;
-  return { market: roundCent(state.market + gainAmount), book: roundCent(state.book + gainAmount) };
+  const market = roundCent(Math.max(0, state.market + gainAmount));
+  const book = market === 0 ? 0 : roundCent(Math.max(0, state.book + gainAmount));
+  return { market, book };
 }
 
 export interface NonregWithdrawalResult {
@@ -45,8 +47,8 @@ export interface NonregWithdrawalResult {
 
 /**
  * Withdraws from a non-reg state whose market has already grown this year
- * (`marketAfterGrowth`). The withdrawal caps at market; gains are realized at
- * the current book/market ratio; the basis consumed is `withdrawal x ratio`.
+ * (`marketAfterGrowth`). The withdrawal caps at market; gains or losses are
+ * realized at the current book/market ratio. Full liquidation consumes all basis.
  */
 export function nonregWithdrawal(
   state: NonregState,
@@ -55,8 +57,8 @@ export function nonregWithdrawal(
 ): NonregWithdrawalResult {
   const market = Math.max(0, marketAfterGrowth);
   const effective = Math.min(Math.max(0, withdrawal), market);
-  const ratio = market > 0 ? Math.min(1, Math.max(0, state.book / market)) : 0;
-  const basisConsumed = effective * ratio;
+  const ratio = market > 0 ? Math.max(0, state.book / market) : 0;
+  const basisConsumed = effective >= market ? Math.max(0, state.book) : effective * ratio;
   const realizedGain = effective - basisConsumed;
   const newBook = roundCent(Math.max(0, state.book - basisConsumed));
   const newMarket = roundCent(Math.max(0, market - effective));

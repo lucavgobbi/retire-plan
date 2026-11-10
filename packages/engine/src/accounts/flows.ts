@@ -16,6 +16,10 @@ export interface AllocateSurplusResult {
   newRooms: { tfsa: number; rrsp: number };
   /** Surplus swept to non-reg because no policy step consumed it. */
   sweptToNonreg: number;
+  /** Uninvested surplus retained as cash after a terminal prepayment or without non-reg. */
+  cash: number;
+  /** Employer money added by rrsp-match steps. */
+  employerMatch: number;
 }
 
 export interface FundDeficitInput {
@@ -23,6 +27,12 @@ export interface FundDeficitInput {
   order: AccountType[];
   balances: Record<AccountType, number>;
   rrifMinimumDue: number;
+}
+
+export interface AvailableSavingsAccounts {
+  tfsa: boolean;
+  rrsp: boolean;
+  nonreg: boolean;
 }
 
 export interface FundDeficitResult {
@@ -63,11 +73,13 @@ export function allocateSurplus(
   balances: { tfsa: number; rrsp: number; nonreg: number; debt: number },
   mortgage?: DebtPlan,
   age?: number,
+  availableAccounts: AvailableSavingsAccounts = { tfsa: true, rrsp: true, nonreg: true },
 ): AllocateSurplusResult {
   const contributions = zeroContributions();
   const amountsOut = zeroAmounts();
   const newRooms = { tfsa: rooms.tfsa, rrsp: rooms.rrsp };
   let remaining = amount;
+  let employerMatch = 0;
 
   const steps = [...policy].sort((a, b) => a.priority - b.priority);
   let reachedPrepay = false;
@@ -75,6 +87,13 @@ export function allocateSurplus(
   for (const step of steps) {
     if (remaining <= 0) break;
     if (!isActive(step, age)) continue;
+    if (
+      (step.target === "tfsa" && !availableAccounts.tfsa) ||
+      ((step.target === "rrsp" || step.target === "rrsp-match") && !availableAccounts.rrsp) ||
+      (step.target === "nonreg" && !availableAccounts.nonreg)
+    ) {
+      continue;
+    }
 
     switch (step.target) {
       case "tfsa": {
@@ -102,6 +121,7 @@ export function allocateSurplus(
         amountsOut.rrsp += landed;
         newRooms.rrsp -= landed;
         remaining -= employee; // the employer match is additive, not surplus
+        employerMatch += employer;
         break;
       }
       case "nonreg": {
@@ -127,7 +147,7 @@ export function allocateSurplus(
   // unless a mortgage-prepay step ran, in which case the leftover rests as
   // cash by design (prepay is terminal; the stepper books it as cash).
   let swept = 0;
-  if (remaining > 0 && !reachedPrepay) {
+  if (remaining > 0 && !reachedPrepay && availableAccounts.nonreg) {
     contributions.nonreg += remaining;
     amountsOut.nonreg += remaining;
     swept = remaining;
@@ -139,6 +159,8 @@ export function allocateSurplus(
     amounts: amountsOut,
     newRooms,
     sweptToNonreg: swept,
+    cash: remaining,
+    employerMatch,
   };
 }
 

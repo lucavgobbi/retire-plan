@@ -1,0 +1,135 @@
+.scenarios-view,
+.scenarios-view * {
+  box-sizing: border-box;
+}
+
+.scenarios-view header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.scenarios-view h2 {
+  margin: 0;
+}
+
+.scenario-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scenario-item {
+  border: 1px solid #d3d9de;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.scenario-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.scenario-actions {
+  flex-wrap: wrap;
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+
+.badge {
+  border: 1px solid #9aa7b0;
+  border-radius: 999px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.scenario-editor {
+  border: 1px solid #d3d9de;
+  border-radius: 6px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.scenario-editor label,
+.scenario-editor fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.scenario-editor fieldset {
+  border: 1px solid #d3d9de;
+  border-radius: 6px;
+}
+
+.scenario-editor fieldset label {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.scenario-editor input,
+.scenario-editor select {
+  max-width: 160px;
+}
+
+.form-errors {
+  border: 1px solid #dc2626;
+  border-radius: 6px;
+  background: #fef2f2;
+  color: #7f1d1d;
+  padding: 4px 10px;
+}
+
+.form-errors p {
+  margin: 4px 0;
+}
+
+.summary-strip {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
+@media print {
+  .scenario-actions,
+  .scenario-editor,
+  .scenarios-view header .no-print {
+    display: none;
+  }
+}
+
+.scenarios-view,
+.scenario-list,
+.scenario-item,
+.scenario-editor { min-width: 0; max-width: 100%; }
+.scenario-head strong,
+.scenario-overrides,
+.scenario-run-stamp,
+.summary-strip { min-width: 0; overflow-wrap: anywhere; }
+.scenario-editor > label { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; }
+.scenario-editor input,
+.scenario-editor select { width: 100%; min-width: 0; max-width: 320px; }
+.scenario-editor fieldset { min-width: 0; margin: 0; padding: 12px; gap: 10px; }
+.scenario-editor legend { max-width: 100%; padding: 0 4px; overflow-wrap: anywhere; }
+.scenario-editor fieldset label { display: grid; grid-template-columns: minmax(80px, 120px) minmax(0, 160px); align-items: center; }
+.scenario-editor .editor-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 480px) {
+  .scenario-actions { flex-basis: 100%; margin-left: 0; }
+  .scenario-actions button { flex: 1 1 auto; }
+  .scenario-editor { padding: 12px; }
+  .scenario-editor fieldset label { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .scenario-editor input,
+  .scenario-editor select { max-width: none; }
+  .scenario-editor .editor-actions button { flex: 1 1 auto; }
+}

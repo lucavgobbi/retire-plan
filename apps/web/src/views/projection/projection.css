@@ -1,0 +1,258 @@
+/* Projection view styles: dense table, sticky grouped header, zebra rows, print rules. */
+
+.projection-view {
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.projection-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.projection-controls h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.fail-banner {
+  border: 2px solid #dc2626;
+  background: #fef2f2;
+  color: #7f1d1d;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin: 0;
+}
+
+.run-error {
+  border: 1px solid #b45309;
+  background: #fffbeb;
+  color: #92400e;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+
+.projection-table-wrap {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  scroll-margin-top: 16px;
+  max-height: 70vh;
+  overflow: auto;
+  border: 1px solid #d3d9de;
+}
+
+table.projection-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+table.projection-table th {
+  position: sticky;
+  background: #eef2f5;
+  border-bottom: 1px solid #9aa7b0;
+  padding: 4px 6px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+table.projection-table th.group-th {
+  background: #dde5ea;
+  text-align: center;
+  border-left: 1px solid #c6d1d8;
+}
+
+table.projection-table th.empty-group-th,
+table.projection-table th.col-age-year {
+  background: #dde5ea;
+  text-align: left;
+}
+
+table.projection-table thead tr:last-child th {
+  top: 22px;
+  z-index: 2;
+}
+
+table.projection-table tbody tr:nth-child(4n + 3) {
+  background: #f7fafc;
+}
+
+table.projection-table td {
+  padding: 2px 6px;
+  border-bottom: 1px solid #e6eaee;
+  text-align: right;
+}
+
+table.projection-table td.col-age-year {
+  text-align: left;
+  min-width: 48px;
+}
+
+table.projection-table td.col-age-year button {
+  font: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #2563eb;
+  text-decoration: underline;
+  padding: 0;
+}
+
+table.projection-table td.col-percent {
+  white-space: nowrap;
+}
+
+tr.failed-row {
+  outline: 2px solid #dc2626;
+  outline-offset: -2px;
+  background: #fef2f2 !important;
+}
+
+.detail-row td {
+  text-align: left !important;
+  background: #fbfdfd;
+}
+
+.detail-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 10px;
+  margin: 6px 8px;
+}
+
+.detail-list dt {
+  font-weight: 600;
+}
+
+.events-cell {
+  text-align: left;
+}
+
+.projection-view .dashboard,
+.projection-view .chart-grid,
+.projection-view .chart-card,
+.projection-view .chart-plot {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.projection-view .chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.projection-view .chart-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #d3d9de;
+  border-radius: 8px;
+  background: #fff;
+  padding: 16px;
+  margin: 0;
+}
+
+.projection-view .chart-card figcaption {
+  min-height: 64px;
+  overflow-wrap: anywhere;
+}
+
+.chart-card figcaption h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.chart-card figcaption .hint { margin: 0 0 8px; }
+
+.projection-view .financial-chart,
+.compare-view .financial-chart {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 560 / 240;
+}
+
+.chart-tick { font-size: 13px; fill: #52606d; }
+.chart-gridline { stroke: #e6eaee; }
+
+.chart-axis-label {
+  margin: 2px 0 8px;
+  text-align: center;
+  font-size: .75rem;
+  color: #52606d;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px 14px;
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0;
+  font-size: .75rem;
+}
+
+.chart-legend li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.legend-swatch {
+  display: inline-block;
+  flex: 0 0 10px;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+@media (max-width: 900px) {
+  .projection-view .chart-grid { grid-template-columns: minmax(0, 1fr); }
+  .projection-view .chart-card figcaption { min-height: 0; }
+}
+
+@media (max-width: 480px) {
+  .projection-view .chart-card { padding: 12px; }
+  .projection-view .chart-tick,
+  .compare-view .chart-tick { font-size: 20px; }
+  .projection-controls { align-items: flex-start; }
+  .projection-controls .hint,
+  .projection-controls .run-error { flex-basis: 100%; margin: 0; }
+}
+
+@media print {
+  .no-print {
+    display: none;
+  }
+
+  .projection-table-wrap {
+    max-height: none;
+    overflow: visible;
+  }
+
+  table.projection-table th {
+    position: static;
+  }
+
+  /* All audit-trail rows expand on print regardless of on-screen expansion state. */
+  .projection-table > tbody > tr:not(.detail-row) + tr.detail-row {
+    display: table-row !important;
+  }
+
+  .projection-view .chart-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}

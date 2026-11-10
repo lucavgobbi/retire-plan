@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import tablesJson from "../data/tax/ca-2026.json";
-import { loadTables, type TaxYearTables } from "../src/tax/tables";
+import { applyIndexation, loadTables, type TaxYearTables } from "../src/tax/tables";
 import {
   federalTax,
   taxableIncome,
@@ -44,26 +44,29 @@ function plan(edit: (p: Plan) => void): Plan {
 }
 
 /** Combined 2026 tax on an income shape (the already-tested unit engines). */
-function combinedTax(income: IncomeForTax): {
+function combinedTax(income: IncomeForTax, taxTables: TaxYearTables = tables): {
   federal: number;
   provincial: number;
   surtax: number;
   oasClawback: number;
   total: number;
 } {
-  const fed = federalTax(income, tables);
-  const ont = ontarioTax(income, tables);
+  const fed = federalTax(income, taxTables);
+  const ont = ontarioTax(income, taxTables);
   const taxable = taxableIncome(income);
   // Matches the stepper contract: the OAS recovery tax applies only at 65+.
-  const claw = income.age >= 65 ? oasClawback(taxable, tables) : 0;
+  const claw = income.age >= 65 ? oasClawback(taxable, taxTables) : 0;
   const total = fed.tax + ont.total + claw;
   return { federal: fed.tax, provincial: ont.tax, surtax: ont.surtax, oasClawback: claw, total };
 }
 
 function initialBalances(p: Plan): YearResult["balances"] {
-  const bal = { tfsa: 0, rrsp: 0, nonreg: 0, home: 0, debt: 0 };
+  const bal = { tfsa: 0, rrsp: 0, nonreg: 0, cash: 0, home: 0, debt: 0, otherAssets: 0 };
   for (const a of p.accounts) bal[a.type] += a.balance;
-  for (const home of p.assets.filter((x) => x.kind === "primary-home")) bal.home += home.value;
+  for (const asset of p.assets) {
+    if (asset.kind === "primary-home") bal.home += asset.value;
+    else bal.otherAssets += asset.value;
+  }
   const m = p.debts[0];
   if (m) bal.debt = m.balance;
   return bal;
@@ -118,6 +121,7 @@ describe("simulate — focused, hand-checked cases", () => {
     // Surplus flows to non-registered by default (empty policy), after tax + expenses.
     expect(y.contributions.nonreg).toBeCloseTo(120_000 - t.total - 80_000, 2);
     expect(y.balances.nonreg).toBeCloseTo(120_000 - t.total - 80_000, 2);
+    expect(y.balances.cash).toBe(0); // default sweep lands once in non-reg, not cash too
     expect(y.netWorth).toBeCloseTo(120_000 - t.total - 80_000, 2);
     // TFSA room: seeded with the 2026 cumulative (includes the 2026 limit) + one more limit.
     expect(y.tfsaRoom).toBe(tables.tfsa.cumulativeRoomAsOf2026 + tables.tfsa.annualLimit);
@@ -157,7 +161,8 @@ describe("simulate — focused, hand-checked cases", () => {
     // GIS income = cpp 8,000 + other 2,000 (employment 0, no prior withdrawals).
     expect(y.income.gis).toBeCloseTo(tables.gis.annualMaxSingle - 0.5 * 10_000, 2);
     // CPP and OAS are taxable in reality; the combined engine treats them as other taxable income.
-    const t = combinedTax({ employmentIncome: 0, otherTaxableIncome: 18_000, rrspWithdrawals: 0, pensionEligibleIncome: 0, capitalGains: 0, dividendsEligible: 0, age: 65 });
+    const taxTables = applyIndexation(tables, 1981 + 65 - tables.year);
+    const t = combinedTax({ employmentIncome: 0, otherTaxableIncome: 18_000, rrspWithdrawals: 0, pensionEligibleIncome: 0, capitalGains: 0, dividendsEligible: 0, age: 65 }, taxTables);
     expect(y.tax.total).toBeCloseTo(t.total, 2);
     expect(y.tax.oasClawback).toBe(0); // far below the recovery threshold
     // Surplus = cpp + oas + other income + GIS - tax - expenses -> default non-registered
@@ -193,6 +198,189 @@ describe("simulate — focused, hand-checked cases", () => {
     expect(Math.abs(y.rrspRoom - expectedRoom)).toBeLessThanOrEqual(0.02);
   });
 
+  it("caps mortgage prepayment after scheduled payments and retains excess as cash", () => {
+    const p = plan((x) => {
+      x.profile.currentAge = 40;
+      x.profile.endAge = 41;
+      x.accounts = [{ id: "nr", type: "nonreg", balance: 0, assetMix: { equity: 0, bond: 0, cash: 1 } }];
+      x.assets = [];
+      x.debts = [{ id: "m", kind: "mortgage", rate: 0, termYears: 1, amortizationYears: 1, balance: 2_500, monthlyPayment: 0.01 }];
+      x.incomes = [{ id: "job", kind: "employment", annualAmount: 120_000, startAge: 40, raiseRate: 0 }];
+      x.expenses = [{ id: "life", name: "Life", annualAmount: 10_000, startAge: 40, inflationRate: 0 }];
+      x.savingsPolicy = [{ id: "prepay", priority: 1, target: "mortgage-prepay" }];
+    });
+    const y = run(p).years[0]!;
+    expect(y.savings.mortgage).toBeCloseTo(2_499.88, 2);
+    expect(y.balances.debt).toBe(0);
+    expect(y.balances.cash).toBeGreaterThan(70_000);
+    expect(y.balances.nonreg).toBe(0);
+    expect(y.netWorth).toBeCloseTo(-2_500 + 120_000 - 10_000 - y.tax.total, 2);
+  });
+
+  it("keeps a savings step active through untilAge, then stops it", () => {
+    const p = plan((x) => {
+      x.profile.currentAge = 40;
+      x.profile.endAge = 42;
+      x.accounts = [
+        { id: "tfsa", type: "tfsa", balance: 0, assetMix: { equity: 0, bond: 0, cash: 1 } },
+        { id: "nr", type: "nonreg", balance: 0, assetMix: { equity: 0, bond: 0, cash: 1 } },
+      ];
+      x.assets = [];
+      x.debts = [];
+      x.incomes = [{ id: "job", kind: "employment", annualAmount: 120_000, startAge: 40, raiseRate: 0 }];
+      x.expenses = [{ id: "life", name: "Life", annualAmount: 80_000, startAge: 40, inflationRate: 0 }];
+      x.savingsPolicy = [{ id: "tfsa-through-40", priority: 1, target: "tfsa", untilAge: 40 }];
+    });
+    const years = run(p).years;
+    expect(years[0]!.contributions.tfsa).toBeGreaterThan(0);
+    expect(years[1]!.contributions.tfsa).toBe(0);
+    expect(years[1]!.contributions.nonreg).toBeGreaterThan(0);
+  });
+
+  it("indexes federal and Ontario thresholds for each projected calendar year", () => {
+    const p = plan((x) => {
+      x.profile.currentAge = 45;
+      x.profile.endAge = 65;
+      x.accounts = [];
+      x.assets = [];
+      x.debts = [];
+      x.incomes = [{ id: "job", kind: "employment", annualAmount: 140_000, startAge: 45, raiseRate: 0 }];
+      x.expenses = [{ id: "life", name: "Life", annualAmount: 0, startAge: 45, inflationRate: 0 }];
+      x.savingsPolicy = [];
+    });
+    const years = run(p).years;
+    const first = years[0]!;
+    const last = years[years.length - 1]!;
+    const shape: IncomeForTax = { employmentIncome: 140_000, otherTaxableIncome: 0, rrspWithdrawals: 0, pensionEligibleIncome: 0, capitalGains: 0, dividendsEligible: 0, age: 65 };
+    const current = combinedTax({ ...shape, age: 45 }, tables);
+    const indexedTables = applyIndexation(tables, 20);
+    const indexed = combinedTax(shape, indexedTables);
+    expect(first.tax.federal).toBeCloseTo(current.federal, 2);
+    expect(first.tax.provincial).toBeCloseTo(current.provincial, 2);
+    expect(last.tax.federal).toBeCloseTo(indexed.federal, 2);
+    expect(last.tax.provincial).toBeCloseTo(indexed.provincial, 2);
+    expect(last.tax.federal).toBeLessThan(first.tax.federal);
+    expect(last.tax.provincial).toBeLessThan(first.tax.provincial);
+  });
+
+  it("does not count OAS as GIS income", () => {
+    const p = plan((x) => {
+      x.profile.currentAge = 65;
+      x.profile.endAge = 66;
+      x.accounts = [];
+      x.assets = [];
+      x.debts = [];
+      x.incomes = [{ id: "oas", kind: "oas", annualAmount: 10_000, startAge: 65, raiseRate: 0 }];
+      x.expenses = [{ id: "life", name: "Life", annualAmount: 0, startAge: 65, inflationRate: 0 }];
+      x.savingsPolicy = [];
+    });
+    const y = run(p).years[0]!;
+    expect(y.income.oas).toBe(10_000);
+    expect(y.income.gis).toBeCloseTo(tables.gis.annualMaxSingle, 2);
+  });
+
+  it("does not let prior non-reg capital losses reduce GIS-tested ordinary income", () => {
+    const p = plan((x) => {
+      x.profile.currentAge = 64;
+      x.profile.endAge = 65;
+      x.accounts = [{ id: "nr", type: "nonreg", balance: 1_000, bookValue: 2_000, assetMix: { equity: 0, bond: 0, cash: 1 } }];
+      x.assets = [];
+      x.debts = [];
+      x.incomes = [{ id: "other", kind: "other", annualAmount: 5_000, startAge: 64, raiseRate: 0 }];
+      x.expenses = [{ id: "life", name: "Life", annualAmount: 6_000, startAge: 64, inflationRate: 0 }];
+      x.savingsPolicy = [];
+    });
+    const years = run(p).years;
+    expect(years[0]!.withdrawals.nonreg).toBe(1_000);
+    expect(years[1]!.income.gis).toBeCloseTo(tables.gis.annualMaxSingle - 2_500, 2);
+  });
+
+  it("keeps surplus in cash when every savings-policy account target is absent", () => {
+    const p = plan((x) => {
+      x.profile.currentAge = 40;
+      x.profile.endAge = 41;
+      x.accounts = [];
+      x.assets = [];
+      x.debts = [];
+      x.incomes = [{ id: "job", kind: "employment", annualAmount: 120_000, startAge: 40, raiseRate: 0 }];
+      x.expenses = [{ id: "life", name: "Life", annualAmount: 10_000, startAge: 40, inflationRate: 0 }];
+      x.savingsPolicy = [
+        { id: "tfsa", priority: 1, target: "tfsa" },
+        { id: "rrsp", priority: 2, target: "rrsp" },
+        { id: "match", priority: 3, target: "rrsp-match", matchRate: 0.05 },
+        { id: "nonreg", priority: 4, target: "nonreg" },
+      ];
+    });
+    const y = run(p).years[0]!;
+    expect(y.contributions).toEqual({ tfsa: 0, rrsp: 0, nonreg: 0 });
+    expect(y.income.other).toBe(0);
+    expect(y.balances.cash).toBeCloseTo(120_000 - y.tax.total - 10_000, 2);
+    expect(y.netWorth).toBeCloseTo(y.balances.cash, 2);
+  });
+
+  it("caps OAS recovery at the benefit actually paid and charges none before OAS starts", () => {
+    const p = plan((x) => {
+      x.profile.currentAge = 65;
+      x.profile.endAge = 66;
+      x.accounts = [];
+      x.assets = [];
+      x.debts = [];
+      x.incomes = [
+        { id: "job", kind: "employment", annualAmount: 300_000, startAge: 65, raiseRate: 0 },
+        { id: "oas", kind: "oas", annualAmount: 1_000, startAge: 66, raiseRate: 0 },
+      ];
+      x.expenses = [{ id: "life", name: "Life", annualAmount: 0, startAge: 65, inflationRate: 0 }];
+      x.savingsPolicy = [];
+    });
+    const years = run(p).years;
+    expect(years[0]!.income.oas).toBe(0);
+    expect(years[0]!.tax.oasClawback).toBe(0);
+    expect(years[1]!.income.oas).toBe(1_000);
+    expect(years[1]!.tax.oasClawback).toBe(1_000);
+  });
+
+  it("grosses up non-reg proceeds to cover the tax on realized gains", () => {
+    const p = plan((x) => {
+      x.profile.currentAge = 50;
+      x.profile.endAge = 51;
+      x.accounts = [{ id: "nr", type: "nonreg", balance: 100_000, bookValue: 0, assetMix: { equity: 0, bond: 0, cash: 1 } }];
+      x.assets = [];
+      x.debts = [];
+      x.incomes = [{ id: "job", kind: "employment", annualAmount: 100_000, startAge: 50, raiseRate: 0 }];
+      const taxTables = applyIndexation(tables, 1981 + 50 - tables.year);
+      const baseTax = combinedTax({ employmentIncome: 100_000, otherTaxableIncome: 0, rrspWithdrawals: 0, pensionEligibleIncome: 0, capitalGains: 0, dividendsEligible: 0, age: 50 }, taxTables).total;
+      x.expenses = [{ id: "life", name: "Life", annualAmount: 100_000 - baseTax + 1_000, startAge: 50, inflationRate: 0 }];
+      x.savingsPolicy = [];
+    });
+    const y = run(p).years[0]!;
+    expect(y.withdrawals.nonreg).toBeGreaterThan(1_000);
+    expect(y.shortfall).toBe(0);
+    expect(y.tax.total).toBeGreaterThan(combinedTax({ employmentIncome: 100_000, otherTaxableIncome: 0, rrspWithdrawals: 0, pensionEligibleIncome: 0, capitalGains: 0, dividendsEligible: 0, age: 50 }, applyIndexation(tables, 1981 + 50 - tables.year)).total);
+  });
+
+  it("clips a return below -100% at zero instead of producing negative holdings", () => {
+    const p = plan((x) => {
+      x.profile.currentAge = 40;
+      x.profile.endAge = 41;
+      x.accounts = (["tfsa", "rrsp", "nonreg"] as const).map((type) => ({
+        id: type,
+        type,
+        balance: 100,
+        assetMix: { equity: 1, bond: 0, cash: 0 },
+      }));
+      x.assets = [];
+      x.debts = [];
+      x.incomes = [];
+      x.expenses = [{ id: "life", name: "Life", annualAmount: 0, startAge: 40, inflationRate: 0 }];
+      x.savingsPolicy = [];
+    });
+    const y = simulate(p, detScenario(65), { years: [{ age: 40, equity: -1.5, bond: 0, cash: 0 }] }).years[0]!;
+    expect(y.balances.tfsa).toBe(0);
+    expect(y.balances.rrsp).toBe(0);
+    expect(y.balances.nonreg).toBe(0);
+    expect(y.netWorth).toBe(0);
+  });
+
   it("the negative-amortization warning is emitted by the stepper (Task 10 note)", () => {
     const p = plan((x) => {
       x.debts[0]!.monthlyPayment = 100;
@@ -222,7 +410,7 @@ describe("simulate — focused, hand-checked cases", () => {
     const gain = Math.max(0, proceeds - acb);
     expect(sold.events).toContain("home-sold");
     expect(sold.balances.home).toBe(0);
-    const t = combinedTax({ employmentIncome: 0, otherTaxableIncome: 0, rrspWithdrawals: 0, pensionEligibleIncome: 0, capitalGains: gain, dividendsEligible: 0, age: sellAge });
+    const t = combinedTax({ employmentIncome: 0, otherTaxableIncome: 0, rrspWithdrawals: 0, pensionEligibleIncome: 0, capitalGains: gain, dividendsEligible: 0, age: sellAge }, applyIndexation(tables, 1981 + sellAge - tables.year));
     // The gain's own tax is funded from the proceeds that same year.
     expect(sold.taxableIncome).toBeCloseTo(0.5 * gain, 2);
     expect(sold.tax.total).toBeCloseTo(t.total, 2);
@@ -230,6 +418,35 @@ describe("simulate — focused, hand-checked cases", () => {
     expect(sold.balances.nonreg).toBeCloseTo(proceeds - t.total, 2);
     // Later years: home stays 0, nonreg persists.
     expect(out.years[out.years.length - 1]!.balances.home).toBe(0);
+  });
+
+  it("projects, appreciates, and sells other assets with net proceeds and taxable gains", () => {
+    const sellAge = 50;
+    const p = plan((x) => {
+      x.profile.endAge = 52;
+      x.accounts = [{ id: "nr", type: "nonreg", balance: 0, assetMix: { equity: 0, bond: 0, cash: 1 } }];
+      x.incomes = [];
+      x.expenses = [{ id: "life", name: "Life", annualAmount: 0, startAge: 45, inflationRate: 0 }];
+      x.assets = [{ id: "rental", kind: "other", name: "Rental", value: 100_000, appreciationRate: 0.1, sellEvent: { age: sellAge, costsPct: 0.1 } }];
+      x.debts = [];
+    });
+    const out = run(p, detScenario(65));
+    const beforeSale = out.years.find((y) => y.age === sellAge - 1)!;
+    const sold = out.years.find((y) => y.age === sellAge)!;
+    const value = 100_000 * Math.pow(1.1, sellAge - p.profile.currentAge);
+    const proceeds = value * 0.9;
+    const gain = Math.max(0, proceeds - 100_000);
+    const t = combinedTax({ employmentIncome: 0, otherTaxableIncome: 0, rrspWithdrawals: 0, pensionEligibleIncome: 0, capitalGains: gain, dividendsEligible: 0, age: sellAge }, applyIndexation(tables, 1981 + sellAge - tables.year));
+
+    expect(beforeSale.balances.otherAssets).toBeCloseTo(value, 2);
+    expect(beforeSale.balances.home).toBe(0);
+    expect(sold.events).toContain("other-asset-sold");
+    expect(sold.balances.otherAssets).toBe(0);
+    expect(sold.taxableIncome).toBeCloseTo(0.5 * gain, 2);
+    expect(sold.tax.total).toBeCloseTo(t.total, 2);
+    expect(sold.withdrawals.nonreg).toBeCloseTo(t.total, 2);
+    expect(sold.balances.nonreg).toBeCloseTo(proceeds - t.total, 2);
+    expect(sold.netWorth).toBeCloseTo(proceeds - t.total, 2);
   });
 
   it("RRIF minimums are withdrawn from age 71 and always returned to cash flow", () => {
@@ -335,7 +552,8 @@ describe("simulate — per-year reconciliation property (money cannot leak)", ()
 
     let prevBalances = initialBalances(p);
     let prevNW =
-      prevBalances.tfsa + prevBalances.rrsp + prevBalances.nonreg + prevBalances.home - prevBalances.debt;
+      prevBalances.tfsa + prevBalances.rrsp + prevBalances.nonreg + prevBalances.home +
+      (prevBalances.otherAssets ?? 0) - prevBalances.debt;
 
     for (let i = 0; i < out.years.length; i++) {
       const y = out.years[i]!;
@@ -361,6 +579,7 @@ describe("simulate — per-year reconciliation property (money cannot leak)", ()
       expect(y.balances.tfsa).toBeGreaterThanOrEqual(-0.005);
       expect(y.balances.rrsp).toBeGreaterThanOrEqual(-0.005);
       expect(y.balances.nonreg).toBeGreaterThanOrEqual(-0.005);
+      expect(y.balances.cash).toBeGreaterThanOrEqual(-0.005);
       expect(y.balances.debt).toBeGreaterThanOrEqual(-0.005);
       expect(y.balances.debt).toBeCloseTo(expectedDebt, 0);
       expect(y.balances.home).toBeCloseTo(expectedHome, 0);

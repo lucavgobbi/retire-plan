@@ -16,32 +16,35 @@ const rc = (x: number): number => Math.round(x * 100) / 100;
 interface FedOut { fed: number; on: number; onSurtax: number }
 
 /** Federal + Ontario tax on a working-age employment-only income shape. */
-function incomeTax(employment: number, tables: TaxYearTables, age: number): FedOut {
+function incomeTax(employment: number, tables: TaxYearTables, age: number, yearOffset: number): FedOut {
+  const fedFactor = tables.federal.indexationFactor ** yearOffset;
+  const onFactor = tables.ontario.indexationFactor ** yearOffset;
+  const fedBrackets = tables.federal.brackets.map((b) => ({ ...b, threshold: b.threshold * fedFactor }));
+  const onBrackets = tables.ontario.brackets.map((b) => ({ ...b, threshold: b.threshold * onFactor }));
   // ---- Federal: bracket tax minus non-refundable credits at the LOWEST rate.
   let fedGross = 0;
-  let prev = 0;
-  for (const b of tables.federal.brackets) {
+  for (const b of fedBrackets) {
     if (employment > b.threshold) {
-      fedGross += (Math.min(employment, nextThreshold(tables.federal.brackets, b.threshold)) - b.threshold) * b.rate;
+      fedGross += (Math.min(employment, nextThreshold(fedBrackets, b.threshold)) - b.threshold) * b.rate;
     }
-    prev = b.threshold;
   }
-  const creditBase = tables.federal.basicPersonalAmount + tables.federal.employmentCreditAmount;
-  const fed = Math.max(0, fedGross - tables.federal.brackets[0]!.rate * creditBase);
+  const creditBase = (tables.federal.basicPersonalAmount + tables.federal.employmentCreditAmount) * fedFactor;
+  const fed = Math.max(0, fedGross - fedBrackets[0]!.rate * creditBase);
 
   // ---- Ontario: brackets, credits at its lowest rate, then the surtax ladder
   // (thresholds are dollar amounts OF basic Ontario tax).
   let onGross = 0;
-  for (const b of tables.ontario.brackets) {
+  for (const b of onBrackets) {
     if (employment > b.threshold) {
-      const top = nextThreshold(tables.ontario.brackets, b.threshold);
+      const top = nextThreshold(onBrackets, b.threshold);
       if (employment > b.threshold) onGross += (Math.min(employment, top) - b.threshold) * b.rate;
     }
   }
-  const onBase = Math.max(0, onGross - tables.ontario.brackets[0]!.rate * tables.ontario.basicPersonalAmount);
+  const onBase = Math.max(0, onGross - onBrackets[0]!.rate * tables.ontario.basicPersonalAmount * onFactor);
   let onSurtax = 0;
   for (const s of tables.ontario.surtax) {
-    if (onBase > s.onTaxOverPctOfTaxable) onSurtax += s.rate * (onBase - s.onTaxOverPctOfTaxable);
+    const threshold = s.onTaxOverPctOfTaxable * onFactor;
+    if (onBase > threshold) onSurtax += s.rate * (onBase - threshold);
   }
   void age;
   return { fed: rc(fed), on: rc(onBase), onSurtax: rc(onSurtax) };
@@ -93,7 +96,7 @@ export function referenceGoldenYears(
   for (let age = startAge; age < startAge + count; age++) {
     const employment = rc(salary.annualAmount * Math.pow(1 + salary.raiseRate, age - salary.startAge));
     const expenses = living.annualAmount * Math.pow(1 + living.inflationRate, age - living.startAge);
-    const t = incomeTax(employment, tables, age);
+    const t = incomeTax(employment, tables, age, Math.max(0, plan.profile.birthYear + age - tables.year));
     const taxTotal = rc(t.fed + t.on + t.onSurtax);
 
     let tfsa = account.get("tfsa")!;

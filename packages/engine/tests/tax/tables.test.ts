@@ -90,25 +90,25 @@ describe("ca-2026 tax tables schema and invariants", () => {
     expectFactor(73, 0.0553);
     expectFactor(74, 0.0567);
     expectFactor(75, 0.0582);
-    expectFactor(76, 0.0599);
+    expectFactor(76, 0.0598);
     expectFactor(77, 0.0617);
     expectFactor(78, 0.0636);
-    expectFactor(79, 0.0657);
-    expectFactor(80, 0.0679);
-    expectFactor(81, 0.0704);
-    expectFactor(82, 0.0728);
-    expectFactor(83, 0.0755);
-    expectFactor(84, 0.0783);
-    expectFactor(85, 0.0811);
-    expectFactor(86, 0.0842);
-    expectFactor(87, 0.0875);
-    expectFactor(88, 0.0909);
-    expectFactor(89, 0.0955);
-    expectFactor(90, 0.1001);
-    expectFactor(91, 0.1054);
-    expectFactor(92, 0.1111);
-    expectFactor(93, 0.117);
-    expectFactor(94, 0.1234);
+    expectFactor(79, 0.0658);
+    expectFactor(80, 0.0682);
+    expectFactor(81, 0.0708);
+    expectFactor(82, 0.0738);
+    expectFactor(83, 0.0771);
+    expectFactor(84, 0.0808);
+    expectFactor(85, 0.0851);
+    expectFactor(86, 0.0899);
+    expectFactor(87, 0.0955);
+    expectFactor(88, 0.1021);
+    expectFactor(89, 0.1099);
+    expectFactor(90, 0.1192);
+    expectFactor(91, 0.1306);
+    expectFactor(92, 0.1449);
+    expectFactor(93, 0.1634);
+    expectFactor(94, 0.1879);
     expectFactor(95, 0.2);
     expect(tables.rrif.minimumFactors).toHaveLength(25); // 71..95, 95 is the cap
   });
@@ -189,13 +189,13 @@ describe("applyIndexation", () => {
     expect(out.ontario.indexationFactor).toBe(fixture.ontario.indexationFactor);
   });
 
-  it("indexes federal age-credit and pension-credit amounts+thresholds, and the OAS recovery threshold (federal factor)", () => {
+  it("indexes federal age-credit and OAS recovery threshold, while preserving the fixed pension amount", () => {
     const fixture = fixtureTables(1.02, 1.01);
     const out = applyIndexation(fixture, 2);
     expect(out.federal.ageCredit.amount).toBeCloseTo(8_000 * 1.02 ** 2, 4);
     expect(out.federal.ageCredit.reductionThreshold).toBeCloseTo(45_000 * 1.02 ** 2, 4);
-    expect(out.federal.pensionIncomeCredit.amount).toBeCloseTo(2_000 * 1.02 ** 2, 4);
-    expect(out.federal.pensionIncomeCredit.incomeThreshold).toBeCloseTo(90_000 * 1.02 ** 2, 4);
+    expect(out.federal.pensionIncomeCredit.amount).toBe(2_000);
+    expect(out.federal.pensionIncomeCredit.incomeThreshold).toBe(90_000);
     expect(out.oas.clawbackThreshold).toBeCloseTo(90_000 * 1.02 ** 2, 4);
   });
 
@@ -209,15 +209,8 @@ describe("applyIndexation", () => {
       unshifted.federal.ageCredit.reductionThreshold * 1.02 ** 30,
       4,
     );
-    // Pension credit amount/threshold drift equally by the same federal factor.
-    expect(shifted.federal.pensionIncomeCredit.amount).toBeCloseTo(
-      unshifted.federal.pensionIncomeCredit.amount * 1.02 ** 30,
-      4,
-    );
-    expect(shifted.federal.pensionIncomeCredit.incomeThreshold).toBeCloseTo(
-      unshifted.federal.pensionIncomeCredit.incomeThreshold * 1.02 ** 30,
-      4,
-    );
+    // The statutory pension income amount and unused phase-out fields stay fixed.
+    expect(shifted.federal.pensionIncomeCredit).toEqual(unshifted.federal.pensionIncomeCredit);
     // And the two are genuinely different for the high-bracket case: +30y threshold pair
     // (age amount vs pension threshold) does not collapse onto the +0y values.
     expect(shifted.federal.ageCredit.reductionThreshold).not.toEqual(
