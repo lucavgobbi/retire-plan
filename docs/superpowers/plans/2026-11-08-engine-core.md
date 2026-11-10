@@ -10,6 +10,44 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-08-budget-tool-design.md` (read both; the spec is authoritative for intent, this plan for decisions).
 
+## Progress Status (as of 2026-11-09)
+
+Suite health at time of writing: **156 tests / 17 files, all green**; `npx tsc --noEmit` clean (run `npm test -w packages/engine` from the repo root).
+
+| Task | Status | Commit(s) |
+|------|--------|-----------|
+| 1. Workspace scaffold | ✅ done | (scaffold) |
+| 2. Core domain types | ✅ done | 2487927 (extends review fix) |
+| 3. Tax tables (2026, verified) | ✅ done | 65470ec, bf923db, f15562e + `data/tax/ca-2026.json`, `SOURCES.md` |
+| 4. Federal tax | ✅ done | 2d42c4e |
+| 5. Ontario tax + surtax | ✅ done | (ontario.ts 14 tests) |
+| 6. OAS clawback | ✅ done | 71c0621 |
+| 7. GIS taper | ✅ done | d8b762c |
+| 8. RRIF minimums | ✅ done | 7e993d4, e64f20c (fractional-age guard) |
+| 9. TFSA/RRSP room tracking | ✅ done | 0483fdc, 7e3cb90 (contract pinning per review) |
+| 10. Mortgage amortization | ✅ done | 1403a9d, e64f20c (convention doc) |
+| 11. Deterministic + MC return series | ✅ done | 8dc6ed8 |
+| 12. Year stepper | ✅ done | a39bf37 |
+| 13. Savings allocation + withdrawals (`flows.ts`) | ✅ done (captain native) | dd2aa6c |
+| 14. Non-reg ACB + realized gains | ✅ done (captain native) | 7fc1ba9, faf41ef (assumptions doc) |
+| 15. Golden projection snapshot | ✅ done (captain native) | 87fc0ed + `tests/golden/reference.ts` independent calculator |
+| 16. External cross-check | ⏳ **PENDING** | dispatched twice; both runs lost (free-model quota + pane loss). No files landed yet. |
+
+### Completed-work ledger (for reviewers)
+
+- **Independent review coverage:** builder-reviewer rounds 1–2 audited Tasks 1–4 and 8–11 (found+fixed: TFSA room doc BLOCKER, room seeding MAJOR). Tasks 5–7, 12 audited (clean on second pass). **Tasks 13–15 (commits dd2aa6c / 7fc1ba9 / 87fc0ed) have NOT yet received an independent review** — the dispatched run was lost; re-dispatch before closing Phase 1.
+- **Golden pins (hand-derived, match engine exactly):** year-1 federal tax 13,157.59; ON basic 5,827.02 + surtax 1.80; total tax 18,986.41 on 95k employment; mortgage end balance 342,435.13; TFSA draw 2,146.41; TFSA end 60,167.73; RRSP end 187,200.00; non-reg end 41,600.00; home 714,000.00; net worth 660,532.60.
+- **Conventions locked during execution** (all documented in `docs/assumptions.md`):
+  - `tfsaRoomNextYear` takes room **POST-contribution**; seeding = `cumulativeRoomAsOf2026` for eligible-start plans.
+  - Mortgage `annualRate` = nominal compounded monthly; negative-amortization warning is emitted by the **stepper**, not `mortgageYear`.
+  - `mortgage-prepay` savings step is **terminal**: leftover surplus after it rests as cash (no sweep to non-reg); all other unallocated surplus sweeps to non-reg.
+  - Non-reg ACB: aggregate book across accounts (exact under proportional flow distribution); growth adds the blended dollar gain to **both** market and book; withdrawals realize gains at the current book/market ratio; oversized withdrawals cap at market.
+  - Non-reg draws in the deficit branch deliver net of their own chunk tax; the chunk tax folds component-wise into reported annual tax.
+  - Prior-year realized gains count as GIS income (with the employment exemption).
+- **Fleet ops note:** agents run opencode TUI pinned to `opencode/glm-5.3-flash-free` via repo `opencode.json`. Daily free-message quota (reset ~7:19 PM) can hard-block agents mid-task; when blocked, the captain implements natively and review is re-dispatched after reset. The 2026-11-09 reviewer run (PART A review of 13–15 + PART B Task 16) was lost before any output landed.
+
+**Task 16 remains the only open item in this plan.** After it lands (and Tasks 13–15 get their independent review), Phase 1 is complete → write the Phase 2 plan (UI: plan entry, projection view, scenarios/compare, IndexedDB persistence, JSON export, assumptions view) per spec sections 6–8.
+
 ## Global Constraints
 
 - TypeScript `strict: true`; **no `any` in exported interfaces**.
