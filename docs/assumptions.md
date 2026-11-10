@@ -54,3 +54,17 @@ $5,000 and $15,000 is a documented fast-follow.
 - **No cash account:** money is tracked only through account balances and debt; a year
   whose flows do not balance shows up as contributions, withdrawals, or shortfall —
   the per-year netWorth reconciliation property pins this.
+- **Non-registered ACB (Task 14):** basis is tracked as an aggregate across all
+  non-reg accounts. Because flows distribute proportional to balance, the
+  aggregate book/market ratio is exact under that distribution. Growth adds the
+  year's blended dollar gain to BOTH market and basis (ACB absorbs the year's
+  growth, so the unrealized-gain fraction shrinks over time). A withdrawal realizes
+  gains at the current basis/market ratio; an oversized withdrawal caps at market.
+- **Non-reg draws carry their own gains tax:** in the deficit branch, each non-reg
+  draw delivers `amount - (marginal tax on its realized gain chunk)` net; the
+  charged chunk tax is folded component-wise into the reported annual tax, keeping
+  the per-year ledger conserved exactly. TFSA draws carry no tax (Task 7 contract).
+- **Realized gains count as GIS income:** prior-year realized capital gains feed
+  the GIS income test (with the employment exemption unchanged) — GIS for tax
+  year N is computed from tax year N-1 income, matching the existing
+  prior-year-withdrawals sequencing.
