@@ -64,7 +64,7 @@ describe("golden projection (sample plan)", () => {
   });
 
   it("pins the hand-derived year-1 numbers exactly", () => {
-    const y = result.years[0];
+    const y = result.years[0]!;
     // From the derivation comment above.
     expect(y.tax.federal).toBeCloseTo(13_157.59, 1);
     expect(y.tax.provincial).toBeCloseTo(5_827.02, 1);
@@ -83,7 +83,7 @@ describe("golden projection (sample plan)", () => {
   it("survives to 95 with positive net worth and lifetime tax", () => {
     expect(result.summary.success).toBe(true);
     expect(result.summary.failureAge).toBeUndefined();
-    const last = result.years[result.years.length - 1];
+    const last = result.years[result.years.length - 1]!;
     expect(last.age).toBe(95);
     expect(last.netWorth).toBeGreaterThan(0);
     const lifetimeTax = result.years.reduce((s, y) => s + y.tax.total, 0);

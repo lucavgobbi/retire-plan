@@ -27,7 +27,7 @@ function incomeTax(employment: number, tables: TaxYearTables, age: number): FedO
     prev = b.threshold;
   }
   const creditBase = tables.federal.basicPersonalAmount + tables.federal.employmentCreditAmount;
-  const fed = Math.max(0, fedGross - tables.federal.brackets[0].rate * creditBase);
+  const fed = Math.max(0, fedGross - tables.federal.brackets[0]!.rate * creditBase);
 
   // ---- Ontario: brackets, credits at its lowest rate, then the surtax ladder
   // (thresholds are dollar amounts OF basic Ontario tax).
@@ -38,7 +38,7 @@ function incomeTax(employment: number, tables: TaxYearTables, age: number): FedO
       if (employment > b.threshold) onGross += (Math.min(employment, top) - b.threshold) * b.rate;
     }
   }
-  const onBase = Math.max(0, onGross - tables.ontario.brackets[0].rate * tables.ontario.basicPersonalAmount);
+  const onBase = Math.max(0, onGross - tables.ontario.brackets[0]!.rate * tables.ontario.basicPersonalAmount);
   let onSurtax = 0;
   for (const s of tables.ontario.surtax) {
     if (onBase > s.onTaxOverPctOfTaxable) onSurtax += s.rate * (onBase - s.onTaxOverPctOfTaxable);
@@ -80,7 +80,7 @@ export function referenceGoldenYears(
   const mortgage = plan.debts.find((d) => d.kind === "mortgage")!;
   const home = plan.assets.find((a) => a.kind === "primary-home")!;
   const salary = plan.incomes.find((i) => i.kind === "employment")!;
-  const living = plan.expenses[0];
+  const living = plan.expenses[0]!;
   const blend = 0.7 * 0.05 + 0.25 * 0.02 + 0.05 * 0; // 0.04
 
   const account = new Map<string, number>(
