@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useProjectionRun, useWorkspace } from "../../store/api";
+import { useEffect, useRef, useState } from "react";
+import { useProjectionRun, useRuns, useWorkspace } from "../../store/api";
 import { DashboardSection } from "./DashboardSection";
 import { ProjectionTable } from "./ProjectionTable";
 import { FailBanner } from "./FailBanner";
@@ -10,15 +10,58 @@ import "./projection.css";
  * Default (zero-prop) projection view: the deterministic year table with its audit
  * trail expansion, the run-out fail banner, and the dashboard charts above it.
  * Runs dispatch through the store hook — never `simulate` directly.
- * `stale` comes straight off `useProjectionRun`; legacy fixture runs without a
- * `birthYear` stamp fall back to the plan's profile birth year only for the table axis.
+ *
+ * A dropdown chooses WHAT to run: the baseline (the working plan with the base
+ * scenario) or any saved scenario. The selection is passed into
+ * `useProjectionRun(planId, scenarioId)`, which keys the active run, staleness,
+ * busy and cancel state on exactly that scenario id — the displayed result always
+ * belongs to the selected scenario, and `runProjection` re-runs the resolved
+ * delta (user item 7). While a run is busy the dropdown is disabled (the store
+ * has a single run slot) — cancel means cancelling the running projection. The
+ * selection is in-memory view state; the store has no
+ * UI-preferences persistence pattern, so none is invented here.
  */
 export function ProjectionView() {
   const [jumpAge, setJumpAge] = useState<number | null>(null);
   const [jumpKey, setJumpKey] = useState(0);
   const workspace = useWorkspace();
+  const runs = useRuns();
   const { validationErrors, runError } = workspace;
-  const { run, runProjection, stale, isRunning, runCancelled, cancelRun } = useProjectionRun();
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
+  // The ACTIVE run for the current plan (the store's single run slot). The dropdown
+  // initializes from it (entering Projection with a completed saved-scenario run
+  // must show that run, not hide it behind a null selection) and FOLLOWS each newly
+  // completed run by id — including a run that finishes after the view mounted
+  // mid-background-run. Idle manual dropdown changes are never reverted: the sync
+  // fires only when the active run ID changes, and stays locked while a run is busy.
+  const planId = workspace.workspace.meta?.id ?? "unsaved";
+  const activeRun = [...runs].reverse().find((record) => record.id === workspace.activeRunId && record.planId === planId);
+  const followedRunIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (activeRun === undefined || followedRunIdRef.current === activeRun.id) return;
+    followedRunIdRef.current = activeRun.id;
+    setSelectedScenarioId(activeRun.scenarioId);
+  }, [activeRun]);
+  // Actual state reset (not just the derived fallback): when the selected id no
+  // longer exists (scenario deleted / import dropped it), clear it so restoring
+  // the SAME id later does not auto-reselect. The functional updater validates
+  // the CURRENT value, so it never clobbers a newly-followed active run set by
+  // the effect above.
+  useEffect(() => {
+    setSelectedScenarioId((current) => {
+      if (current === null) return current;
+      const stillExists = workspace.workspace.scenarios.some((item) => item.id === current);
+      return stillExists ? current : null;
+    });
+  }, [workspace.workspace.scenarios]);
+  // Fallback guard: if the selected scenario is deleted (or a workspace import drops it)
+  // while the view is mounted, an unknown id must NOT keep keying the run lookup or
+  // silently no-op Run — it falls back to baseline (user item 7 edge).
+  const selectedScenario = selectedScenarioId === null
+    ? null
+    : workspace.workspace.scenarios.find((item) => item.id === selectedScenarioId) ?? null;
+  const effectiveScenarioId = selectedScenario?.id ?? null;
+  const { run, runProjection, stale, isRunning, runCancelled, cancelRun } = useProjectionRun(planId, effectiveScenarioId);
 
   const failureAge = run && !run.result.summary.success ? (run.result.summary.failureAge ?? null) : null;
   const birthYear = run?.birthYear ?? workspace.workspace.plan.profile.birthYear;
@@ -34,6 +77,23 @@ export function ProjectionView() {
             Plan tab before running.
           </p>
         )}
+        <label className="field">
+          Run
+          {" "}
+          <select
+            aria-label="Scenario to run"
+            value={effectiveScenarioId ?? ""}
+            disabled={isRunning}
+            onChange={(event) => {
+              setSelectedScenarioId(event.currentTarget.value === "" ? null : event.currentTarget.value);
+            }}
+          >
+            <option value="">Baseline — working plan with base scenario</option>
+            {workspace.workspace.scenarios.map((scenario) => (
+              <option key={scenario.id} value={scenario.id}>{scenario.name || scenario.id}</option>
+            ))}
+          </select>
+        </label>
         <button type="button" onClick={() => { void runProjection(); }} disabled={validationErrors.length > 0 || isRunning}>
           Run projection
         </button>
@@ -56,7 +116,10 @@ export function ProjectionView() {
       ) : (
         <>
           <p className="hint run-stamp">
-            Results for <strong>{run.scenario.name}</strong> · {new Date(run.createdAt).toLocaleString()}.
+            Results for <strong>{run.scenario.name}</strong>
+            {effectiveScenarioId === null
+              ? " (baseline)"
+              : selectedScenario?.name === run.scenario.name ? "" : " (saved scenario)"} · {new Date(run.createdAt).toLocaleString()}.
             {stale && (
               <>
                 {" "}

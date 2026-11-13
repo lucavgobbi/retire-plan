@@ -1,8 +1,9 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { RunOutcome } from "../../domain/run";
 import type { SimulationRunner } from "../../store/simulationWorkerProtocol";
-import { StoreProvider } from "../../store/StoreProvider";
+import type { Scenario } from "@retire-plan/engine";
+import { StoreProvider, useWorkspace } from "../../store/api";
 import { DEFAULT_SCENARIO_BASE } from "../../domain/defaults";
 import { makeRunOutPlan, makeSamplePlan, makeWorkspace } from "./testFixtures";
 import { ProjectionView } from "./ProjectionView";
@@ -16,6 +17,183 @@ function renderView(workspace = makeWorkspace(), simulationRunner?: SimulationRu
 }
 
 const emptyOutcome = { result: { years: [], summary: { success: true, finalNetWorth: 0 } } } as RunOutcome;
+
+function makeWorkspaceWithScenario(): ReturnType<typeof makeWorkspace> {
+  const workspace = makeWorkspace();
+  workspace.scenarios.push({ id: "scen-a", name: "Scenario A", basePlanId: "plan-test", simMode: "deterministic", overrides: {} });
+  workspace.scenarios.push({ id: "scen-b", name: "Scenario B", basePlanId: "plan-test", simMode: "deterministic", overrides: {} });
+  return workspace;
+}
+
+function selectScenario(name: string) {
+  fireEvent.change(screen.getByRole("combobox", { name: /scenario to run/i }), { target: { value: name } });
+}
+
+describe("ProjectionView scenario dropdown (user item 7)", () => {
+  it("defaults to baseline: the run is stamped as the base scenario", async () => {
+    renderView(makeWorkspaceWithScenario());
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(document.querySelector(".run-stamp")).toBeTruthy());
+    const stamp = document.querySelector(".run-stamp")!.textContent;
+    expect(stamp).toContain("Base scenario");
+    expect(stamp).toContain("(baseline)");
+  });
+
+  it("selecting a saved scenario runs THAT scenario and stamps its name", async () => {
+    renderView(makeWorkspaceWithScenario());
+    selectScenario("scen-a");
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(document.querySelector(".run-stamp")).toBeTruthy());
+    const stamp = document.querySelector(".run-stamp")!.textContent;
+    expect(stamp).toContain("Scenario A");
+    expect(stamp).not.toContain("Base scenario");
+  });
+
+  it("locks the dropdown for the whole run window; cancel means cancelling the running projection", async () => {
+    let finish: (() => void) | undefined;
+    const started: string[] = [];
+    const simulationRunner: SimulationRunner = () => {
+      started.push("run");
+      return new Promise((resolve) => { finish = () => resolve(emptyOutcome); });
+    };
+    renderView(makeWorkspaceWithScenario(), simulationRunner);
+    selectScenario("scen-a");
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    expect(screen.getByText("Projection running in the background…")).toBeTruthy();
+    // Locked for the entire run window: no selection switch, no second run.
+    expect((screen.getByRole("combobox", { name: /scenario to run/i }) as HTMLSelectElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /run projection/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(started).toHaveLength(1);
+    expect(document.querySelector(".run-stamp")).toBeNull();
+    // Cancel targets the running projection; the late result is discarded.
+    fireEvent.click(screen.getByRole("button", { name: /cancel projection/i }));
+    expect(screen.getByText("Projection cancelled.")).toBeTruthy();
+    finish?.();
+    await waitFor(() => expect((screen.getByRole("combobox", { name: /scenario to run/i }) as HTMLSelectElement).disabled).toBe(false));
+    expect(document.querySelector(".run-stamp")).toBeNull();
+    expect(started).toHaveLength(1);
+  });
+
+  it("a completed baseline run is not displayed as the result of a newly selected scenario", async () => {
+    renderView(makeWorkspaceWithScenario());
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(document.querySelector(".run-stamp")).toBeTruthy());
+    // Switch to Scenario B: the baseline run stays hidden — no stale wrong-scenario display.
+    selectScenario("scen-b");
+    expect(document.querySelector(".run-stamp")).toBeNull();
+    expect(screen.getByText(/run the projection/i)).toBeTruthy();
+    // Switching back re-shows the (still matching) baseline run.
+    selectScenario("");
+    expect(document.querySelector(".run-stamp")?.textContent).toContain("Base scenario");
+  });
+
+  it("falls back to baseline with BASE assumptions when the selected scenario is deleted while mounted", async () => {
+    const workspace = makeWorkspace();
+    workspace.scenarios.push({
+      id: "scen-a",
+      name: "Scenario A",
+      basePlanId: "plan-test",
+      simMode: "montecarlo",
+      overrides: { retirementAge: 70 },
+    });
+    const received: Scenario[] = [];
+    const simulationRunner: SimulationRunner = (_plan, scenario) => {
+      received.push(scenario);
+      return Promise.resolve(emptyOutcome);
+    };
+    let dispatchRef: ((action: Parameters<ReturnType<typeof useWorkspace>["dispatch"]>[0]) => void) | undefined;
+    function DispatchProbe() {
+      const ws = useWorkspace();
+      dispatchRef = ws.dispatch;
+      return null;
+    }
+    const view = render(
+      <StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={simulationRunner}>
+        <DispatchProbe />
+        <ProjectionView />
+      </StoreProvider>,
+    );
+    selectScenario("scen-a");
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(document.querySelector(".run-stamp")?.textContent).toContain("Scenario A"));
+    // The run carried the scenario's actual assumptions, not the base's.
+    expect(received).toHaveLength(1);
+    expect(received[0]!.simMode).toBe("montecarlo");
+    expect(received[0]!.retirementAge).toBe(70);
+
+    // Delete the selected scenario while the view is mounted (same path as ScenarioList).
+    act(() => { dispatchRef?.({ type: "scenario/remove", delta: workspace.scenarios[0]! }); });
+    // Selection falls back to BASE: the dropdown shows baseline and the Scenario A
+    // run is filtered out (no wrong-scenario display).
+    expect((screen.getByRole("combobox", { name: /scenario to run/i }) as HTMLSelectElement).value).toBe("");
+    expect(document.querySelector(".run-stamp")).toBeNull();
+    // Running again must dispatch the BASE scenario's assumptions.
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(document.querySelector(".run-stamp")?.textContent).toContain("Base scenario"));
+    expect(received).toHaveLength(2);
+    expect(received[1]!.simMode).toBe(DEFAULT_SCENARIO_BASE.simMode);
+    expect(received[1]!.retirementAge).toBe(DEFAULT_SCENARIO_BASE.retirementAge);
+    // Restoring the SAME scenario id later must NOT auto-reselect (the stale
+    // selection state was actually reset): the dropdown stays on baseline.
+    act(() => { dispatchRef?.({ type: "scenario/add", delta: workspace.scenarios[0]! }); });
+    expect((screen.getByRole("combobox", { name: /scenario to run/i }) as HTMLSelectElement).value).toBe("");
+    // Manual reselection after restore works and dispatches the scenario's assumptions.
+    selectScenario("scen-a");
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(document.querySelector(".run-stamp")?.textContent).toContain("Scenario A"));
+    expect(received).toHaveLength(3);
+    expect(received[2]!.simMode).toBe("montecarlo");
+    expect(received[2]!.retirementAge).toBe(70);
+    view.unmount();
+  });
+
+  it("falls back to baseline when a workspace import drops the selected scenario while mounted", async () => {
+    const workspace = makeWorkspace();
+    workspace.scenarios.push({
+      id: "scen-a",
+      name: "Scenario A",
+      basePlanId: "plan-test",
+      simMode: "montecarlo",
+      overrides: { retirementAge: 70 },
+    });
+    const received: Scenario[] = [];
+    const simulationRunner: SimulationRunner = (_plan, scenario) => {
+      received.push(scenario);
+      return Promise.resolve(emptyOutcome);
+    };
+    let dispatchRef: ((action: Parameters<ReturnType<typeof useWorkspace>["dispatch"]>[0]) => void) | undefined;
+    function DispatchProbe() {
+      const ws = useWorkspace();
+      dispatchRef = ws.dispatch;
+      return null;
+    }
+    const view = render(
+      <StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={simulationRunner}>
+        <DispatchProbe />
+        <ProjectionView />
+      </StoreProvider>,
+    );
+    selectScenario("scen-a");
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(document.querySelector(".run-stamp")?.textContent).toContain("Scenario A"));
+    expect(received[0]!.simMode).toBe("montecarlo");
+
+    // Import a workspace without Scenario A (different plan id, no scenarios).
+    const imported = makeWorkspace();
+    imported.meta = { id: "plan-imported", name: "Imported plan", updatedAt: "2026-02-01T00:00:00.000Z" };
+    act(() => { dispatchRef?.({ type: "workspace/loaded", workspace: imported }); });
+    // Selection falls back to baseline and binds the imported plan's id: no stale
+    // display, and Run dispatches the base scenario's assumptions.
+    expect((screen.getByRole("combobox", { name: /scenario to run/i }) as HTMLSelectElement).value).toBe("");
+    expect(document.querySelector(".run-stamp")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(document.querySelector(".run-stamp")?.textContent).toContain("Base scenario"));
+    expect(received).toHaveLength(2);
+    expect(received[1]!.simMode).toBe(DEFAULT_SCENARIO_BASE.simMode);
+    expect(received[1]!.retirementAge).toBe(DEFAULT_SCENARIO_BASE.retirementAge);
+    view.unmount();
+  });
+});
 
 describe("ProjectionView", () => {
   it("shows rolling-window outcomes and separates source years from household calendar years", async () => {

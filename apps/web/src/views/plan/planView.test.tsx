@@ -10,8 +10,8 @@ function WorkspaceProbe() {
   return <output data-testid="workspace-json">{JSON.stringify(workspace.plan)}</output>;
 }
 
-function renderPlan(simulationRunner?: SimulationRunner) {
-  return render(<StoreProvider now={() => "2026-11-10T12:00:00Z"} initialWorkspace={createEmptyWorkspace()} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={simulationRunner}>
+function renderPlan(simulationRunner?: SimulationRunner, initialWorkspace = createEmptyWorkspace()) {
+  return render(<StoreProvider now={() => "2026-11-10T12:00:00Z"} initialWorkspace={initialWorkspace} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={simulationRunner}>
     <PlanView /><WorkspaceProbe />
   </StoreProvider>);
 }
@@ -21,6 +21,57 @@ function planState() {
 }
 
 describe("PlanView", () => {
+  it("summarizes saved items and opens each editor at its own card", () => {
+    const workspace = createEmptyWorkspace();
+    workspace.plan.accounts = [
+      { id: "cash", name: "Emergency fund", type: "cash", balance: 12_500, interestRate: 0.0425 },
+      { id: "cash-zero", name: "Zero rate account", type: "cash", balance: 0, interestRate: 0 },
+      { id: "cash-missing", name: "Unconfigured rate account", type: "cash", balance: 0 },
+      { id: "nonreg", name: "Brokerage", type: "nonreg", balance: 2_000, assetMix: { equity: 0.6, bond: 0.3, cash: 0.1 } },
+    ];
+    workspace.plan.assets = [{ id: "home", kind: "primary-home", name: "Home", value: 500_000, appreciationRate: 0.02, sellEvent: { age: 70, costsPct: 0.05 } }];
+    workspace.plan.debts = [{ id: "mortgage", kind: "mortgage", rate: 0.045, termYears: 5, amortizationYears: 25, balance: 250_000, monthlyPayment: 1_800, paymentFrequency: "biweekly" }];
+    workspace.plan.incomes = [{ id: "pension", name: "Pension", kind: "other", annualAmount: 24_000, startAge: 65, raiseRate: 0.02 }];
+    workspace.plan.expenses = [{ id: "living", name: "Living costs", annualAmount: 48_000, startAge: 45, endAge: 90, inflationRate: 0.025 }];
+    workspace.plan.savingsPolicy = [{ id: "match", priority: 1, target: "rrsp-match", perYearCap: 5_000, untilAge: 65, matchRate: 0.05 }];
+    renderPlan(undefined, workspace);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Accounts" }));
+    const accountCard = screen.getByRole("region", { name: "Emergency fund summary" });
+    expect(accountCard.textContent).toContain("Cash account");
+    expect(accountCard.textContent).toContain("$12,500");
+    expect(accountCard.textContent).toContain("4.3%");
+    expect(screen.getByRole("region", { name: "Zero rate account summary" }).textContent).toContain("0.0%");
+    expect(screen.getByRole("region", { name: "Unconfigured rate account summary" }).textContent).toContain("Not set (defaults to 0%)");
+    expect(screen.getByRole("region", { name: "Brokerage summary" }).textContent).toContain("Not set (defaults to market value)");
+    fireEvent.click(within(accountCard).getByRole("button", { name: "Edit" }));
+    const accountEntry = accountCard.closest(".plan-item-entry") as HTMLElement;
+    expect(within(accountEntry).getByLabelText("Annual interest rate (%)")).toBeTruthy();
+    const closeAccount = within(accountCard).getByRole("button", { name: "Close editor" });
+    closeAccount.focus();
+    fireEvent.click(closeAccount);
+    expect(document.activeElement).toBe(closeAccount);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Assets & debts" }));
+    const assetCard = screen.getByRole("region", { name: "Home summary" });
+    expect(assetCard.textContent).toContain("$500,000");
+    expect(assetCard.textContent).toContain("Age 70 · 5.0% costs");
+    const debtCard = screen.getByRole("region", { name: "Mortgage summary" });
+    expect(debtCard.textContent).toContain("Biweekly");
+    expect(debtCard.textContent).toContain("$1,800");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Income" }));
+    const incomeCard = screen.getByRole("region", { name: "Pension summary" });
+    expect(incomeCard.textContent).toContain("$24,000");
+    expect(incomeCard.textContent).toContain("65–ongoing");
+    fireEvent.click(screen.getByRole("tab", { name: "Expenses" }));
+    expect(screen.getByRole("region", { name: "Living costs summary" }).textContent).toContain("2.5%");
+    fireEvent.click(screen.getByRole("tab", { name: "Savings" }));
+    const savingsCard = screen.getByRole("region", { name: "Savings step 1 summary" });
+    expect(savingsCard.textContent).toContain("RRSP (employer match)");
+    expect(savingsCard.textContent).toContain("$5,000");
+  });
+
   it("disables its run control and exposes cancellation while a shared run is active", () => {
     const simulationRunner: SimulationRunner = () => new Promise(() => {});
     renderPlan(simulationRunner);

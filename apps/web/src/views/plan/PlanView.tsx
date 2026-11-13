@@ -10,6 +10,7 @@ import type {
 } from "@retire-plan/engine";
 import { calculateCurrentAge, useWorkspace } from "../../store/api";
 import { NumberTextInput } from "../../components/NumberTextInput";
+import { fmtMoney, fmtPercent } from "../projection/fmt";
 import "./planView.css";
 
 type Tab = "Profile" | "Accounts" | "Assets & debts" | "Income" | "Expenses" | "Savings";
@@ -83,6 +84,36 @@ function ItemForm({ title, children, errors, onRemove }: {
     <div className="plan-fields">{children}</div>
     <ErrorList errors={errors} />
   </section>;
+}
+
+function ReadOnlyItemCard({ title, badge, primaryLabel, primaryValue, details, editing, onEdit }: {
+  title: string; badge: string; primaryLabel: string; primaryValue: string;
+  details: [string, string][]; editing: boolean; onEdit: () => void;
+}) {
+  return <section className="plan-summary-card" aria-label={`${title} summary`}>
+    <div className="plan-summary-heading"><div><span className="plan-type-badge">{badge}</span><h3>{title}</h3></div>
+      <button type="button" aria-expanded={editing} onClick={onEdit}>{editing ? "Close editor" : "Edit"}</button>
+    </div>
+    <div className="plan-primary-value"><span>{primaryLabel}</span><strong>{primaryValue}</strong></div>
+    {details.length > 0 && <dl className="plan-summary-details">{details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>}
+  </section>;
+}
+
+function useInlineEditors() {
+  const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
+  return {
+    isOpen: (id: string) => openIds.has(id),
+    open: (id: string) => setOpenIds(current => new Set(current).add(id)),
+    toggle: (id: string) => setOpenIds(current => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    }),
+    close: (id: string) => setOpenIds(current => {
+      if (!current.has(id)) return current;
+      const next = new Set(current); next.delete(id); return next;
+    }),
+  };
 }
 
 /**
@@ -313,13 +344,14 @@ function addFromDraft<TDraft extends object, TItem extends { id: string }>(
   section: "accounts" | "assets" | "debts" | "incomes" | "expenses" | "savingsPolicy",
   newDraft: TDraft,
   readDraft: (draft: TDraft) => { errors: string[]; item: TItem },
-) {
+): string | null {
   const parsed = readDraft(newDraft);
-  if (parsed.errors.length > 0) return;
+  if (parsed.errors.length > 0) return null;
   // Section and item come from the same call site, so the pair is a valid Action;
   // the generic TItem is erased by the union, hence the unknown cast.
   const action = { type: "plan/addItem", section, item: parsed.item } as unknown as Parameters<typeof dispatch>[0];
   dispatch(action);
+  return parsed.item.id;
 }
 
 function ProfileEditor() {
@@ -364,23 +396,80 @@ function ProfileEditor() {
   </section>;
 }
 
+function AccountSummary({ account, editing, onEdit }: { account: AccountPlan; editing: boolean; onEdit: () => void }) {
+  const label = ACCOUNT_LABELS[account.type];
+  const details: [string, string][] = account.type === "cash"
+    ? [["Annual interest", account.interestRate === undefined ? "Not set (defaults to 0%)" : fmtPercent(account.interestRate)]]
+    : [
+      ...(account.type === "nonreg" ? [["ACB / book value", account.bookValue === undefined ? "Not set (defaults to market value)" : fmtMoney(account.bookValue)] as [string, string]] : []),
+      ["Equity", fmtPercent(account.assetMix?.equity)], ["Bonds", fmtPercent(account.assetMix?.bond)], ["Investment cash", fmtPercent(account.assetMix?.cash)],
+    ];
+  return <ReadOnlyItemCard title={account.name || `${label} account`} badge={label} primaryLabel="Current balance" primaryValue={fmtMoney(account.balance)} details={details} editing={editing} onEdit={onEdit} />;
+}
+
+function AssetSummary({ asset, editing, onEdit }: { asset: AssetPlan; editing: boolean; onEdit: () => void }) {
+  const kind = ASSET_KIND_LABELS[asset.kind];
+  const details: [string, string][] = [["Annual appreciation", fmtPercent(asset.appreciationRate)]];
+  details.push(["Planned sale", asset.sellEvent ? `Age ${asset.sellEvent.age} · ${fmtPercent(asset.sellEvent.costsPct)} costs` : "None"]);
+  return <ReadOnlyItemCard title={asset.name || kind} badge={kind} primaryLabel="Current value" primaryValue={fmtMoney(asset.value)} details={details} editing={editing} onEdit={onEdit} />;
+}
+
+function DebtSummary({ debt, editing, onEdit }: { debt: DebtPlan; editing: boolean; onEdit: () => void }) {
+  const frequency = FREQUENCY_LABELS[debt.paymentFrequency ?? "monthly"].replace(/\s+\([^)]*\)/, "");
+  return <ReadOnlyItemCard title="Mortgage" badge="Debt" primaryLabel="Balance" primaryValue={fmtMoney(debt.balance)} details={[
+    ["Interest rate", fmtPercent(debt.rate)], ["Payment", `${fmtMoney(debt.monthlyPayment)} · ${frequency}`],
+    ["Term", `${debt.termYears} years`], ["Amortization", `${debt.amortizationYears} years`],
+  ]} editing={editing} onEdit={onEdit} />;
+}
+
+function IncomeSummary({ income, editing, onEdit }: { income: IncomePlan; editing: boolean; onEdit: () => void }) {
+  const kind = INCOME_LABELS[income.kind];
+  return <ReadOnlyItemCard title={income.name || kind} badge={kind} primaryLabel="Configured annual amount" primaryValue={fmtMoney(income.annualAmount)} details={[
+    ["Active ages", `${income.startAge}–${income.endAge ?? "ongoing"}`], ["Annual raise / indexing", fmtPercent(income.raiseRate)],
+  ]} editing={editing} onEdit={onEdit} />;
+}
+
+function ExpenseSummary({ expense, editing, onEdit }: { expense: ExpensePlan; editing: boolean; onEdit: () => void }) {
+  return <ReadOnlyItemCard title={expense.name || "Expense"} badge="Spending" primaryLabel="Annual amount" primaryValue={fmtMoney(expense.annualAmount)} details={[
+    ["Active ages", `${expense.startAge}–${expense.endAge ?? "ongoing"}`], ["Annual inflation", fmtPercent(expense.inflationRate)],
+  ]} editing={editing} onEdit={onEdit} />;
+}
+
+function SavingsSummary({ step, editing, onEdit }: { step: SavingsPolicyStep; editing: boolean; onEdit: () => void }) {
+  const details: [string, string][] = [["Priority", String(step.priority)], ["Active through age", step.untilAge === undefined ? "No age limit" : String(step.untilAge)]];
+  if (step.target === "rrsp-match") details.push(["Employer match", step.matchRate === undefined ? "Not set (defaults to 0%)" : fmtPercent(step.matchRate)]);
+  return <ReadOnlyItemCard title={`Savings step ${step.priority}`} badge={SAVINGS_TARGET_LABELS[step.target]} primaryLabel="Annual cap" primaryValue={step.perYearCap === undefined ? "No cap" : fmtMoney(step.perYearCap)} details={details} editing={editing} onEdit={onEdit} />;
+}
+
 function AccountsEditor() {
   const { workspace, dispatch } = useWorkspace(); const items = workspace.plan.accounts;
-  const add = () => addFromDraft(dispatch, "accounts", newAccountDraft(), readAccountDraft);
+  const editors = useInlineEditors();
+  const add = () => { const id = addFromDraft(dispatch, "accounts", newAccountDraft(), readAccountDraft); if (id) editors.open(id); };
   return <section className="plan-panel"><div className="plan-section-heading"><div><h2>Accounts</h2><p>Balances, account type, and investments. Cash accounts earn their own fixed interest rate.</p></div><button type="button" onClick={add}>Add account</button></div>
-    {items.map(item => <AccountForm key={item.id} account={item} onApply={value => dispatch({ type: "plan/updateItem", section: "accounts", id: item.id, patch: value })} onRemove={() => dispatch({ type: "plan/removeItem", section: "accounts", id: item.id })} />)}
+    {items.map(item => <div className="plan-item-entry" key={item.id}>
+      <AccountSummary account={item} editing={editors.isOpen(item.id)} onEdit={() => editors.toggle(item.id)} />
+      {editors.isOpen(item.id) && <AccountForm account={item} onApply={value => dispatch({ type: "plan/updateItem", section: "accounts", id: item.id, patch: value })} onRemove={() => { dispatch({ type: "plan/removeItem", section: "accounts", id: item.id }); editors.close(item.id); }} />}
+    </div>)}
     {!items.length && <p className="plan-empty">No accounts yet. Add a TFSA, RRSP, non-registered, or cash account.</p>}
   </section>;
 }
 
 function AssetsDebtsEditor() {
   const { workspace, dispatch } = useWorkspace(); const { assets, debts } = workspace.plan;
+  const assetEditors = useInlineEditors();
+  const debtEditors = useInlineEditors();
+  const addAsset = () => { const id = addFromDraft(dispatch, "assets", newAssetDraft(), readAssetDraft); if (id) assetEditors.open(id); };
+  const addDebt = () => { const id = addFromDraft(dispatch, "debts", newDebtDraft(), readDebtDraft); if (id) debtEditors.open(id); };
   return <section className="plan-panel">
-    <div className="plan-section-heading"><div><h2>Assets</h2><p>Homes and other assets, including optional sale events.</p></div><button type="button" onClick={() => addFromDraft(dispatch, "assets", newAssetDraft(), readAssetDraft)}>Add asset</button></div>
-    {assets.map(item => <AssetForm key={item.id} asset={item} onApply={value => dispatch({ type: "plan/updateItem", section: "assets", id: item.id, patch: value })} onRemove={() => dispatch({ type: "plan/removeItem", section: "assets", id: item.id })} />)}
+    <div className="plan-section-heading"><div><h2>Assets</h2><p>Homes and other assets, including optional sale events.</p></div><button type="button" onClick={addAsset}>Add asset</button></div>
+    {assets.map(item => <div className="plan-item-entry" key={item.id}><AssetSummary asset={item} editing={assetEditors.isOpen(item.id)} onEdit={() => assetEditors.toggle(item.id)} />
+      {assetEditors.isOpen(item.id) && <AssetForm asset={item} onApply={value => dispatch({ type: "plan/updateItem", section: "assets", id: item.id, patch: value })} onRemove={() => { dispatch({ type: "plan/removeItem", section: "assets", id: item.id }); assetEditors.close(item.id); }} />}
+    </div>)}
     {!assets.length && <p className="plan-empty">No assets yet.</p>}
-    <div className="plan-section-heading plan-subsection"><div><h2>Debts</h2><p>Mortgage rate, term, amortization, and payment.</p></div><button type="button" onClick={() => addFromDraft(dispatch, "debts", newDebtDraft(), readDebtDraft)} disabled={debts.length > 0}>Add mortgage</button></div>
-    {debts.map(item => <DebtForm key={item.id} debt={item} onApply={value => dispatch({ type: "plan/updateItem", section: "debts", id: item.id, patch: value })} onRemove={() => dispatch({ type: "plan/removeItem", section: "debts", id: item.id })} />)}
+    <div className="plan-section-heading plan-subsection"><div><h2>Debts</h2><p>Mortgage rate, term, amortization, and payment.</p></div><button type="button" onClick={addDebt} disabled={debts.length > 0}>Add mortgage</button></div>
+    {debts.map(item => <div className="plan-item-entry" key={item.id}><DebtSummary debt={item} editing={debtEditors.isOpen(item.id)} onEdit={() => debtEditors.toggle(item.id)} />
+      {debtEditors.isOpen(item.id) && <DebtForm debt={item} onApply={value => dispatch({ type: "plan/updateItem", section: "debts", id: item.id, patch: value })} onRemove={() => { dispatch({ type: "plan/removeItem", section: "debts", id: item.id }); debtEditors.close(item.id); }} />}
+    </div>)}
     {!debts.length && <p className="plan-empty">No mortgage added.</p>}
   </section>;
 }
@@ -407,26 +496,37 @@ export function PlanView() {
 
 function IncomesEditor() {
   const { workspace, dispatch, baseScenario } = useWorkspace(); const items = workspace.plan.incomes;
-  const add = (kind: IncomePlan["kind"]) => addFromDraft(dispatch, "incomes", newIncomeDraft(kind, workspace.plan.profile.currentAge, baseScenario.retirementAge), readIncomeDraft);
+  const editors = useInlineEditors();
+  const add = (kind: IncomePlan["kind"]) => { const id = addFromDraft(dispatch, "incomes", newIncomeDraft(kind, workspace.plan.profile.currentAge, baseScenario.retirementAge), readIncomeDraft); if (id) editors.open(id); };
   return <section className="plan-panel"><div className="plan-section-heading"><div><h2>Income</h2><p>Enter taxable income and the ages when each stream starts and ends. End age is optional.</p></div>
     <div className="plan-add-buttons">{(["employment", "cpp", "oas", "other"] as const).map(kind => <button key={kind} type="button" onClick={() => add(kind)}>Add {kind}</button>)}</div></div>
-    {items.map(item => <IncomeForm key={item.id} income={item} onApply={value => dispatch({ type: "plan/updateItem", section: "incomes", id: item.id, patch: value })} onRemove={() => dispatch({ type: "plan/removeItem", section: "incomes", id: item.id })} />)}
+    {items.map(item => <div className="plan-item-entry" key={item.id}><IncomeSummary income={item} editing={editors.isOpen(item.id)} onEdit={() => editors.toggle(item.id)} />
+      {editors.isOpen(item.id) && <IncomeForm income={item} onApply={value => dispatch({ type: "plan/updateItem", section: "incomes", id: item.id, patch: value })} onRemove={() => { dispatch({ type: "plan/removeItem", section: "incomes", id: item.id }); editors.close(item.id); }} />}
+    </div>)}
     {!items.length && <p className="plan-empty">No income streams yet.</p>}
   </section>;
 }
 
 function ExpensesEditor() {
   const { workspace, dispatch } = useWorkspace(); const items = workspace.plan.expenses;
-  return <section className="plan-panel"><div className="plan-section-heading"><div><h2>Expenses</h2><p>Annual spending, active years, and the inflation rate.</p></div><button type="button" onClick={() => addFromDraft(dispatch, "expenses", newExpenseDraft(workspace.plan.profile.currentAge), readExpenseDraft)}>Add expense</button></div>
-    {items.map(item => <ExpenseForm key={item.id} expense={item} onApply={value => dispatch({ type: "plan/updateItem", section: "expenses", id: item.id, patch: value })} onRemove={() => dispatch({ type: "plan/removeItem", section: "expenses", id: item.id })} />)}
+  const editors = useInlineEditors();
+  const add = () => { const id = addFromDraft(dispatch, "expenses", newExpenseDraft(workspace.plan.profile.currentAge), readExpenseDraft); if (id) editors.open(id); };
+  return <section className="plan-panel"><div className="plan-section-heading"><div><h2>Expenses</h2><p>Annual spending, active years, and the inflation rate.</p></div><button type="button" onClick={add}>Add expense</button></div>
+    {items.map(item => <div className="plan-item-entry" key={item.id}><ExpenseSummary expense={item} editing={editors.isOpen(item.id)} onEdit={() => editors.toggle(item.id)} />
+      {editors.isOpen(item.id) && <ExpenseForm expense={item} onApply={value => dispatch({ type: "plan/updateItem", section: "expenses", id: item.id, patch: value })} onRemove={() => { dispatch({ type: "plan/removeItem", section: "expenses", id: item.id }); editors.close(item.id); }} />}
+    </div>)}
     {!items.length && <p className="plan-empty">No expenses yet.</p>}
   </section>;
 }
 
 function SavingsEditor() {
   const { workspace, dispatch } = useWorkspace(); const items = workspace.plan.savingsPolicy;
-  return <section className="plan-panel"><div className="plan-section-heading"><div><h2>Savings policy</h2><p>Order savings steps by priority. A TFSA/RRSP contribution uses available room.</p></div><button type="button" onClick={() => addFromDraft(dispatch, "savingsPolicy", newSavingsDraft(items.length + 1), readSavingsDraft)}>Add savings step</button></div>
-    {items.map(item => <SavingsForm key={item.id} step={item} onApply={value => dispatch({ type: "plan/updateItem", section: "savingsPolicy", id: item.id, patch: value })} onRemove={() => dispatch({ type: "plan/removeItem", section: "savingsPolicy", id: item.id })} />)}
+  const editors = useInlineEditors();
+  const add = () => { const id = addFromDraft(dispatch, "savingsPolicy", newSavingsDraft(items.length + 1), readSavingsDraft); if (id) editors.open(id); };
+  return <section className="plan-panel"><div className="plan-section-heading"><div><h2>Savings policy</h2><p>Order savings steps by priority. A TFSA/RRSP contribution uses available room.</p></div><button type="button" onClick={add}>Add savings step</button></div>
+    {items.map(item => <div className="plan-item-entry" key={item.id}><SavingsSummary step={item} editing={editors.isOpen(item.id)} onEdit={() => editors.toggle(item.id)} />
+      {editors.isOpen(item.id) && <SavingsForm step={item} onApply={value => dispatch({ type: "plan/updateItem", section: "savingsPolicy", id: item.id, patch: value })} onRemove={() => { dispatch({ type: "plan/removeItem", section: "savingsPolicy", id: item.id }); editors.close(item.id); }} />}
+    </div>)}
     {!items.length && <p className="plan-empty">No savings steps yet. Unallocated surplus goes to non-registered savings when available.</p>}
   </section>;
 }

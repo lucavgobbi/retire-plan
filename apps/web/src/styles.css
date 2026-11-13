@@ -20,7 +20,7 @@ html,body,#root,.app-shell,main{min-width:0;max-width:100%}
 button{min-height:40px}.toolbar{align-items:center}.toolbar>strong{overflow-wrap:anywhere;min-width:0}
 .file-input-label{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;min-width:0}
 .file-input-label input{width:min(100%,290px);min-width:0}
-.save-status{padding:.65rem .9rem;background:#edf3ed;border-radius:6px;font-size:.85rem;border:1px solid var(--border)}
+.save-status{padding:.65rem .9rem;border-radius:6px;font-size:.85rem;border:1px solid #e9b9af;background:#fff4ef;color:#8c342c}
 .edit-notice{padding:.65rem .9rem;border-left:3px solid var(--accent);background:#e9f2e8;font-weight:600;margin-bottom:8px}
 .draft-notice{color:#70571f;background:#fff8e7;border-radius:5px;padding:.5rem .75rem;font-size:.85rem}
 .main-nav button{flex-shrink:0}.import-preview,.file-controls textarea{max-width:100%;overflow-wrap:anywhere}

@@ -39,8 +39,12 @@ export function YearDetailRow({
   return (
     <tr className="detail-row" data-detail-for={age} data-expanded={expanded ? "true" : "false"} data-group-collapsed={!groupExpanded ? "true" : undefined}>
       <td colSpan={colSpan}>
-        <div className="detail-grid">
-          <section className="detail-section" aria-label="Events"><h4>Events</h4>
+        {/* Bounded, compact card container: the td still spans the table, but the
+          detail cards form a width-bounded responsive cluster instead of a full-width
+          many-column table (user item 2). */}
+        <div className="detail-wrap">
+          <div className="detail-grid">
+            <section className="detail-section" aria-label="Events"><h4>Events</h4>
             {year.events.length === 0
               ? <p className="hint">No events</p>
               : <ul>{year.events.map((event, index) => <li key={`e${index}`}>{event}</li>)}</ul>}
@@ -79,6 +83,7 @@ export function YearDetailRow({
               {year.cashAccounts.map(account => <li key={account.id}>{account.name?.trim() || account.id}: {fmtMoneyDetail(account.balance)}</li>)}
             </ul></> : null}
           </section>
+          </div>
         </div>
       </td>
     </tr>

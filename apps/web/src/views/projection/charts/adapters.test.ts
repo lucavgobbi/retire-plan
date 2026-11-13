@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { YearResult } from "@retire-plan/engine";
 import {
   netWorthSeries,
+  netWorthBarSeries,
   incomeSpendSeries,
   taxStackSeries,
   drawdownSeries,
@@ -28,6 +29,23 @@ const year = (age: number, partial: Partial<YearResult> = {}): YearResult => ({
 });
 
 describe("chart adapters", () => {
+  it("netWorthBarSeries: owned stack minus debt equals the engine netWorth (no relabelling)", () => {
+    const [p] = netWorthBarSeries([
+      year(70, {
+        balances: { tfsa: 100, rrsp: 200, nonreg: 50, cash: 75, home: 400, debt: 120, otherAssets: 45 },
+        netWorth: 750, // engine arithmetic: 100+200+50+75+400+45−120
+      }),
+    ]);
+    const owned = p!.tfsa + p!.rrsp + p!.nonreg + p!.cash + p!.home + p!.otherAssets;
+    expect(owned).toBe(870); // gross owned total (includes home + other assets)
+    expect(owned - p!.debt).toBe(p!.netWorth); // identical to the engine netWorth
+  });
+
+  it("netWorthBarSeries: optional otherAssets normalizes to 0 for legacy runs", () => {
+    const [p] = netWorthBarSeries([year(71, { balances: { tfsa: 1, rrsp: 2, nonreg: 3, cash: 4, home: 5, debt: 0 } })]);
+    expect(p!.otherAssets).toBe(0);
+  });
+
   it("netWorthSeries: one point per year, x = age", () => {
     const points = netWorthSeries([year(45, { netWorth: 1_000 }), year(46, { netWorth: 1_200 })]);
     expect(points).toHaveLength(2);

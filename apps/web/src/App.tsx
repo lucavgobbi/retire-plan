@@ -38,7 +38,8 @@ function FileControls({ provider }: { provider: StorageProvider }) {
 function AutosaveStatus({ provider }: { provider: StorageProvider }) {
   const { workspace } = useWorkspace();
   const autosave = useAutosave(workspace, { storage: provider });
-  return <p className="save-status" aria-label="Workspace save status" role="status" aria-live="polite">{autosave.error ? `Could not save locally: ${autosave.error}` : autosave.isCurrentSaved ? "Saved on this device" : autosave.status === "saving" ? "Saving locally…" : "Workspace changes waiting for local save…"}</p>;
+  if (!autosave.error) return null;
+  return <div className="save-status save-error" aria-label="Workspace save error" role="alert">Could not save locally: {autosave.error} <button type="button" onClick={autosave.saveNow}>Retry save</button></div>;
 }
 
 /** Modal settings dialog: plan file controls plus base projection settings. */

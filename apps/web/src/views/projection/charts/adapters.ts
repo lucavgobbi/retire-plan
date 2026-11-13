@@ -19,6 +19,39 @@ export function netWorthSeries(years: YearResult[]): XyPoint[] {
   return dropNonFinite(years.map((y) => ({ x: y.age, y: y.netWorth })));
 }
 
+export interface NetWorthBarPoint {
+  x: number;
+  tfsa: number;
+  rrsp: number;
+  nonreg: number;
+  cash: number;
+  home: number;
+  otherAssets: number;
+  /** Debt is owed money: rendered as a below-zero segment, never stacked as owned. */
+  debt: number;
+  /** Engine net worth for the year: the stacked owned total minus debt (marker). */
+  netWorth: number;
+}
+
+/**
+ * Net-worth bar components, straight off the year's balances — the chart's stacked
+ * total minus debt must equal `netWorth` (the engine arithmetic is only displayed,
+ * never recomputed differently). Optional fields normalize to 0 for stacking.
+ */
+export function netWorthBarSeries(years: YearResult[]): NetWorthBarPoint[] {
+  return years.map((y) => ({
+    x: y.age,
+    tfsa: y.balances.tfsa,
+    rrsp: y.balances.rrsp,
+    nonreg: y.balances.nonreg,
+    cash: y.balances.cash,
+    home: y.balances.home,
+    otherAssets: y.balances.otherAssets ?? 0,
+    debt: y.balances.debt,
+    netWorth: y.netWorth,
+  }));
+}
+
 export function incomeSpendSeries(years: YearResult[]): { x: number; income: number; expenses: number; shortfall: number }[] {
   return years.map((y) => ({
     x: y.age,

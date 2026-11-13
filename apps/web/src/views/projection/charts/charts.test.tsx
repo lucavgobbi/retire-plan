@@ -5,6 +5,7 @@ import { StoreProvider } from "../../../store/StoreProvider";
 import { DEFAULT_SCENARIO_BASE } from "../../../domain/defaults";
 import { makeRunOutPlan, makeSamplePlan, makeWorkspace } from "../testFixtures";
 import { DashboardSection } from "../DashboardSection";
+import { ChartHelp } from "./ChartHelp";
 import { NetWorthChart } from "./NetWorthChart";
 import { IncomeSpendChart } from "./IncomeSpendChart";
 import { TaxStackChart } from "./TaxStackChart";
@@ -62,6 +63,91 @@ describe("DashboardSection (integration: plan → run → charts)", () => {
   });
 });
 
+describe("ChartHelp (coherent controlled visibility)", () => {
+  function renderHelp() {
+    const utils = render(<ChartHelp>Stacked bars explanation.</ChartHelp>);
+    const toggle = utils.container.querySelector(".chart-help-toggle") as HTMLButtonElement;
+    const body = utils.container.querySelector(".chart-help-body") as HTMLElement;
+    const visible = () => !body.hidden;
+    const expanded = () => toggle.getAttribute("aria-expanded") === "true";
+    // The core invariant: visibility and aria-expanded ALWAYS agree.
+    const coherent = () => visible() === expanded();
+    return { ...utils, toggle, body, visible, expanded, coherent };
+  }
+
+  it("links the button and body with aria-controls + aria-describedby", () => {
+    const h = renderHelp();
+    expect(h.toggle.getAttribute("aria-controls")).toBe(h.body.id);
+    expect(h.toggle.getAttribute("aria-describedby")).toBe(h.body.id);
+    expect(h.body.textContent).toContain("Stacked bars explanation.");
+    expect(h.coherent()).toBe(true); // closed: hidden and expanded=false
+  });
+
+  it("pointer hover reveals and re-hides, with aria-expanded tracking visibility", () => {
+    const h = renderHelp();
+    fireEvent.pointerEnter(h.toggle, { pointerType: "mouse" });
+    expect(h.visible()).toBe(true);
+    expect(h.coherent()).toBe(true); // open
+    fireEvent.pointerLeave(h.toggle, { pointerType: "mouse" });
+    expect(h.visible()).toBe(false);
+    expect(h.coherent()).toBe(true); // closed again
+  });
+
+  it("touch never hover-reveals: the toggle is the only channel", () => {
+    const h = renderHelp();
+    // jsdom has no PointerEvent class; stamp pointerType on a native event and
+    // dispatch it directly so React's pointerType check sees "touch".
+    const touchEnter = new Event("pointerenter", { bubbles: false });
+    Object.defineProperty(touchEnter, "pointerType", { value: "touch" });
+    fireEvent(h.toggle, touchEnter);
+    expect(h.visible()).toBe(false);
+    fireEvent.click(h.toggle);
+    expect(h.visible()).toBe(true); // tap opens persistently
+    expect(h.expanded()).toBe(true);
+    expect(h.coherent()).toBe(true);
+  });
+
+  it("keyboard focus reveals, blur hides, and Escape dismisses for real even under focus/hover", () => {
+    const h = renderHelp();
+    fireEvent.focus(h.toggle);
+    expect(h.visible()).toBe(true);
+    expect(h.coherent()).toBe(true);
+    // Escape while focus (and hover) holds: the body must actually hide and
+    // aria-expanded must drop to false — no focus-within ghost visibility.
+    fireEvent.pointerEnter(h.toggle, { pointerType: "mouse" });
+    fireEvent.keyDown(h.toggle, { key: "Escape" });
+    expect(h.visible()).toBe(false);
+    expect(h.expanded()).toBe(false);
+    expect(h.coherent()).toBe(true);
+    // Activation (Enter/click) while focus REMAINS reopens: opening clears the
+    // Escape suppression.
+    fireEvent.click(h.toggle);
+    expect(h.visible()).toBe(true);
+    expect(h.expanded()).toBe(true);
+    // Second activation closes for real despite focus (and hover) remaining.
+    fireEvent.click(h.toggle);
+    expect(h.visible()).toBe(false);
+    expect(h.expanded()).toBe(false);
+    // Returning the pointer or focus re-enables reveal.
+    fireEvent.pointerLeave(h.toggle, { pointerType: "mouse" });
+    fireEvent.pointerEnter(h.toggle, { pointerType: "mouse" });
+    expect(h.visible()).toBe(true);
+  });
+
+  it("click toggles persistently; closing hides even while the pointer still hovers", () => {
+    const h = renderHelp();
+    fireEvent.pointerEnter(h.toggle, { pointerType: "mouse" });
+    expect(h.visible()).toBe(true); // hover reveal
+    fireEvent.click(h.toggle); // activation opens persistently, clears suppression
+    expect(h.visible()).toBe(true);
+    expect(h.expanded()).toBe(true);
+    fireEvent.click(h.toggle); // second activation closes despite active hover
+    expect(h.visible()).toBe(false);
+    expect(h.expanded()).toBe(false);
+    expect(h.coherent()).toBe(true);
+  });
+});
+
 describe("individual charts render as SVG", () => {
   it("includes separately recorded cash interest in projected total income", () => {
     const year = {
@@ -74,9 +160,42 @@ describe("individual charts render as SVG", () => {
     expect(incomeSpendSeries([year])[0]?.income).toBe(125);
   });
 
-  it("NetWorthChart draws a polyline over age", () => {
-    const { container } = render(<NetWorthChart points={[{ x: 45, y: 100 }, { x: 46, y: 200 }]} />);
-    expect(container.querySelector("polyline")).toBeTruthy();
+  it("NetWorthChart draws stacked owned bars with debt below zero and a net-worth marker", () => {
+    const points = [
+      { x: 45, tfsa: 100, rrsp: 200, nonreg: 50, cash: 25, home: 300, otherAssets: 25, debt: 100, netWorth: 600 },
+      { x: 46, tfsa: 110, rrsp: 210, nonreg: 55, cash: 30, home: 300, otherAssets: 25, debt: 50, netWorth: 680 },
+    ];
+    const { container } = render(<NetWorthChart points={points} />);
+    // No polyline — stacked bars now.
+    expect(container.querySelector("polyline")).toBeNull();
+    // Per-age group with a rect per owned series present (age 45: TFSA + RRSP + nonreg + cash + home + other).
+    const age45 = container.querySelector('[data-bar-age="45"]')!;
+    expect(age45.querySelectorAll('rect[data-series="TFSA"], rect[data-series="RRSP"]').length).toBe(2);
+    expect(age45.querySelector('rect[data-series="Home"]')).toBeTruthy();
+    expect(age45.querySelector('rect[data-series="Other assets"]')).toBeTruthy();
+    // Debt is its own below-zero segment, never stacked as owned.
+    expect(age45.querySelector('rect[data-series="Debt"]')).toBeTruthy();
+    // Net-worth marker present on each bar.
+    expect(age45.querySelector('line[data-series="Net worth"]')).toBeTruthy();
+  });
+
+  it("NetWorthChart bar arithmetic is truthful: owned stack minus debt equals the engine net worth", () => {
+    // The marker is the engine's netWorth; the chart never relabels gross assets as net.
+    const points = [
+      { x: 70, tfsa: 10, rrsp: 20, nonreg: 30, cash: 5, home: 100, otherAssets: 35, debt: 0, netWorth: 200 },
+      { x: 71, tfsa: 10, rrsp: 20, nonreg: 30, cash: 5, home: 100, otherAssets: 35, debt: 45, netWorth: 155 },
+    ];
+    const { container } = render(<NetWorthChart points={points} />);
+    for (const point of points) {
+      const owned = point.tfsa + point.rrsp + point.nonreg + point.cash + point.home + point.otherAssets;
+      expect(owned - point.debt).toBe(point.netWorth); // engine arithmetic identity
+      const group = container.querySelector(`[data-bar-age="${point.x}"]`)!;
+      const marker = group.querySelector('line[data-series="Net worth"]')!;
+      // The marker sits at the net-worth scale position, NOT at the owned-stack top.
+      const debtVisual = group.querySelector('rect[data-series="Debt"]');
+      expect((debtVisual !== null) === (point.debt > 0)).toBe(true);
+      expect(marker).toBeTruthy();
+    }
   });
 
   it("stacked charts draw one area per series", () => {

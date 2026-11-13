@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { describe, expect, it, vi } from "vitest";
 import App, { AppShell } from "./App";
 import { StoreProvider, useRuns } from "./store/api";
+import type { SimulationRunner } from "./store/simulationWorkerProtocol";
+import type { RunOutcome } from "./domain/run";
 import { makeSampleWorkspace } from "./data/samplePlan";
 import { createMemoryStorageProvider } from "./storage";
 import type { StorageProvider } from "./storage";
@@ -149,17 +151,83 @@ describe("local workspace integration", () => {
     expect(screen.getByRole("table").textContent).toMatch(/retirement/i);
   });
 
-  it("distinguishes applied edits and completed local saves without draft gating", async () => {
+  it("navigating to Projection after a saved-scenario run shows that run: dropdown matches its id and displays the completed result", async () => {
+    const workspace = makeSampleWorkspace();
+    workspace.scenarios = [{ id: "early", name: "Early retirement", basePlanId: workspace.meta!.id, simMode: "deterministic", overrides: { retirementAge: 62 } }];
+    render(<StoreProvider initialWorkspace={workspace}><AppShell /></StoreProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Scenarios" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run Early retirement" }));
+    await screen.findByRole("table");
+    // Projection auto-navigates on the activeRun change (AppShell) and shows the
+    // SAVED scenario's completed run, not the base result.
+    const select = screen.getByRole("combobox", { name: /scenario to run/i }) as HTMLSelectElement;
+    expect(select.value).toBe("early");
+    expect(document.querySelector(".run-stamp")?.textContent).toContain("Early retirement");
+    // The run carries the scenario's actual assumptions (retirement age 62 override).
+    expect(screen.getAllByRole("button", { name: /^Age 62$/ }).length).toBeGreaterThanOrEqual(1);
+    expect(document.querySelectorAll('[data-age="62"]').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("entering Projection mid-background-run locks the dropdown, then follows the just-completed scenario run", async () => {
+    const workspace = makeSampleWorkspace();
+    workspace.scenarios = [{ id: "early", name: "Early retirement", basePlanId: workspace.meta!.id, simMode: "deterministic", overrides: { retirementAge: 62 } }];
+    let finish: (() => void) | undefined;
+    const emptyOutcome: RunOutcome = { result: { years: [], summary: { success: true, finalNetWorth: 0 } } };
+    const simulationRunner: SimulationRunner = () => new Promise<RunOutcome>((resolve) => {
+      finish = () => resolve(emptyOutcome);
+    });
+    render(
+      <StoreProvider initialWorkspace={workspace} simulationRunner={simulationRunner}>
+        <AppShell />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Scenarios" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run Early retirement" }));
+    // Enter Projection while the run is still in flight: dropdown locked, no result.
+    fireEvent.click(screen.getByRole("button", { name: "Projection" }));
+    expect((screen.getByRole("combobox", { name: /scenario to run/i }) as HTMLSelectElement).disabled).toBe(true);
+    expect(document.querySelector(".run-stamp")).toBeNull();
+    // The run completes: the view follows the newly active run — dropdown unlocks
+    // on the run's scenario id and the completed run is displayed.
+    finish!();
+    await waitFor(() => expect(document.querySelector(".run-stamp")?.textContent).toContain("Early retirement"));
+    expect((screen.getByRole("combobox", { name: /scenario to run/i }) as HTMLSelectElement).value).toBe("early");
+    expect((screen.getByRole("combobox", { name: /scenario to run/i }) as HTMLSelectElement).disabled).toBe(false);
+  });
+
+  it("hides routine save confirmation while edits still persist without draft gating", async () => {
     const provider = createMemoryStorageProvider();
     render(<App storageProvider={provider} />);
-    await screen.findByText("Saved on this device");
+    await screen.findByLabelText("Birth year");
+    expect(screen.queryByText("Saved on this device")).toBeNull();
     fireEvent.change(screen.getByLabelText("Birth year"), { target: { value: String(new Date().getFullYear() - 46) } });
     expect(screen.getByText("Profile changes applied.")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Run projection" }) as HTMLButtonElement).disabled).toBe(false);
-    expect(screen.getByLabelText("Workspace save status").textContent).not.toBe("Saved on this device");
-    await screen.findByText("Saved on this device");
-    const loaded = await provider.load();
-    if (loaded.kind === "loaded") expect(loaded.workspace.plan.profile.currentAge).toBe(46);
+    expect(screen.queryByLabelText("Workspace save status")).toBeNull();
+    expect(screen.queryByText("Saved on this device")).toBeNull();
+    await waitFor(async () => {
+      const loaded = await provider.load();
+      expect(loaded.kind).toBe("loaded");
+      if (loaded.kind === "loaded") expect(loaded.workspace.plan.profile.currentAge).toBe(46);
+    }, { timeout: 2000 });
+  });
+
+  it("keeps local save failures visible and actionable after removing the routine saved banner", async () => {
+    const base = createMemoryStorageProvider();
+    let failNextSave = true;
+    const provider: StorageProvider = {
+      ...base,
+      save: async workspace => {
+        if (failNextSave) { failNextSave = false; throw new Error("storage is full"); }
+        await base.save(workspace);
+      },
+    };
+    render(<App storageProvider={provider} />);
+    expect((await screen.findByRole("alert", { name: "Workspace save error" })).textContent).toContain("Could not save locally: storage is full");
+    fireEvent.click(screen.getByRole("button", { name: "Retry save" }));
+    await waitFor(async () => expect((await provider.load()).kind).toBe("loaded"), { timeout: 2000 });
+    expect(screen.queryByText("Saved on this device")).toBeNull();
+    expect(screen.queryByRole("alert", { name: "Workspace save error" })).toBeNull();
   });
 
   it("normalizes an old export before import and continues autosaving later edits", async () => {
@@ -208,17 +276,22 @@ describe("local workspace integration", () => {
     render(<App storageProvider={provider} />);
     await screen.findByLabelText("Birth year");
     fireEvent.click(screen.getByRole("tab", { name: "Accounts" }));
-    await screen.findByText("Saved on this device");
+    expect(screen.queryByText("Saved on this device")).toBeNull();
+    const card = screen.getByRole("region", { name: "TFSA account summary" });
+    fireEvent.click(within(card).getByRole("button", { name: "Edit" }));
     const row = screen.getByRole("region", { name: "TFSA account" });
     expect(within(row).queryByRole("button", { name: /save/i })).toBeNull();
     fireEvent.change(within(row).getByLabelText("Current balance ($)"), { target: { value: "125" } });
     expect(within(row).getByText(/Changes applied automatically/)).toBeTruthy();
-    expect(screen.getByLabelText("Workspace save status").textContent).not.toBe("Saved on this device");
+    expect(screen.queryByLabelText("Workspace save status")).toBeNull();
     const pending = await provider.load();
     if (pending.kind === "loaded") expect(pending.workspace.plan.accounts[0]?.balance).toBe(100);
-    await screen.findByText("Saved on this device");
-    const saved = await provider.load();
-    if (saved.kind === "loaded") expect(saved.workspace.plan.accounts[0]?.balance).toBe(125);
+    expect(screen.queryByText("Saved on this device")).toBeNull();
+    await waitFor(async () => {
+      const saved = await provider.load();
+      expect(saved.kind).toBe("loaded");
+      if (saved.kind === "loaded") expect(saved.workspace.plan.accounts[0]?.balance).toBe(125);
+    }, { timeout: 2000 });
 
     fireEvent.change(within(row).getByLabelText("Equity (%)"), { target: { value: "80" } });
     fireEvent.change(within(row).getByLabelText("Current balance ($)"), { target: { value: "222" } });
@@ -227,8 +300,11 @@ describe("local workspace integration", () => {
     if (invalidDraft.kind === "loaded") expect(invalidDraft.workspace.plan.accounts[0]).toMatchObject({ balance: 125, assetMix: { equity: 0.6, bond: 0.3, cash: 0.1 } });
     fireEvent.change(within(row).getByLabelText("Bonds (%)"), { target: { value: "10" } });
     expect(within(row).queryByRole("alert")).toBeNull();
-    await screen.findByText("Saved on this device");
-    const corrected = await provider.load();
-    if (corrected.kind === "loaded") expect(corrected.workspace.plan.accounts[0]).toMatchObject({ balance: 222, assetMix: { equity: 0.8, bond: 0.1, cash: 0.1 } });
+    await waitFor(async () => {
+      const corrected = await provider.load();
+      expect(corrected.kind).toBe("loaded");
+      if (corrected.kind === "loaded") expect(corrected.workspace.plan.accounts[0]).toMatchObject({ balance: 222, assetMix: { equity: 0.8, bond: 0.1, cash: 0.1 } });
+    }, { timeout: 2000 });
+    expect(screen.queryByText("Saved on this device")).toBeNull();
   });
 });
