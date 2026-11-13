@@ -65,9 +65,13 @@ export function stackedBandPaths(xs: number[], bands: number[][], yDomain: [numb
     for (let i = 0; i < xs.length; i++) {
       const raw = band[i];
       const value = raw !== undefined && Number.isFinite(raw) ? raw : 0;
+      // A non-finite sample is a GAP: this band's cumulative becomes NaN here and
+      // NaN propagates to every later band at that index (NaN + value = NaN), so a
+      // lower boundary never silently drops to zero and invents coverage.
       const prev = cum[i] ?? 0;
-      cum[i] = prev + value;
-      next.push(cum[i] ?? 0);
+      const isGap = raw === undefined || !Number.isFinite(raw);
+      cum[i] = isGap ? NaN : (Number.isFinite(prev) ? prev + value : NaN);
+      next.push(cum[i] ?? NaN);
     }
     return next;
   });
@@ -81,17 +85,18 @@ export function stackedBandPaths(xs: number[], bands: number[][], yDomain: [numb
     if (firstX === undefined || lastX === undefined) return "";
     const xDomain: [number, number] = [firstX, lastX];
     const segments: string[] = [];
-    let open: string[] = [];
+    let open: { top: string; bottom: string }[] = [];
     const flush = () => {
       if (open.length > 1) {
-        segments.push(closedPath(open, yDomain));
-      } else if (open.length === 1 && open[0] !== undefined) {
-        // Single (non-adjacent) point: render a 3px-wide sliver so the band is visible.
-        const parts = open[0].split(",");
-        const px = parts[0] ?? "0";
-        const py = parts[1] ?? "0";
-        const baseline = yScale(0, yDomain).toFixed(1);
-        segments.push(`M${px},${baseline} L${px},${py} L${Number(px) + 3},${py} L${Number(px) + 3},${baseline} Z`);
+        segments.push(bandPath(open.map((point) => point.top), open.map((point) => point.bottom)));
+      } else if (open.length === 1) {
+        // Single (non-adjacent) point: render a 3px-wide sliver spanning the band's
+        // OWN lower→upper slice (never down to the baseline — zero-area stays zero,
+        // lower bands are not covered).
+        const px = (open[0]!.bottom.split(",")[0] ?? "0");
+        const topY = open[0]!.top.split(",")[1] ?? "0";
+        const bottomY = open[0]!.bottom.split(",")[1] ?? "0";
+        segments.push(`M${px},${bottomY} L${px},${topY} L${Number(px) + 3},${topY} L${Number(px) + 3},${bottomY} Z`);
       }
       open = [];
     };
@@ -100,7 +105,11 @@ export function stackedBandPaths(xs: number[], bands: number[][], yDomain: [numb
       const low = lower[i];
       const x = xs[i];
       if (x !== undefined && up !== undefined && low !== undefined && Number.isFinite(up) && Number.isFinite(low)) {
-        open.push(`${xScale(x, xDomain).toFixed(1)},${yScale(up, yDomain).toFixed(1)}`);
+        const px = xScale(x, xDomain).toFixed(1);
+        open.push({
+          top: `${px},${yScale(up, yDomain).toFixed(1)}`,
+          bottom: `${px},${yScale(low, yDomain).toFixed(1)}`,
+        });
       } else {
         flush();
       }
@@ -110,11 +119,10 @@ export function stackedBandPaths(xs: number[], bands: number[][], yDomain: [numb
   });
 }
 
-/** Builds a closed area: top points left→right, then back along the zero baseline. */
-function closedPath(topPoints: string[], yDomain: [number, number]): string {
-  const firstParts = topPoints[0]?.split(",");
-  const lastParts = topPoints[topPoints.length - 1]?.split(",");
-  if (!firstParts || !lastParts) return "";
-  const baseline = yScale(0, yDomain).toFixed(1);
-  return `M${firstParts[0]},${baseline} L${topPoints.join(" L")} L${lastParts[0]},${baseline} Z`;
+/** Closes one stacked band: top edge left→right, then BACK along the lower boundary —
+ * each band fills only its own slice [lower, upper] and never occludes the bands below. */
+function bandPath(topPoints: string[], bottomPoints: string[]): string {
+  if (topPoints.length === 0 || bottomPoints.length === 0) return "";
+  const reversed = [...bottomPoints].reverse();
+  return `M${topPoints.join(" L")} L${reversed.join(" L")} Z`;
 }

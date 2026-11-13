@@ -13,7 +13,7 @@ export function dropNonFinite(points: XyPoint[]): XyPoint[] {
 }
 
 const totalIncome = (year: YearResult): number =>
-  year.income.employment + year.income.cpp + year.income.oas + year.income.gis + year.income.other;
+  year.income.employment + year.income.cpp + year.income.oas + year.income.gis + year.income.other + (year.cashInterest ?? 0);
 
 export function netWorthSeries(years: YearResult[]): XyPoint[] {
   return dropNonFinite(years.map((y) => ({ x: y.age, y: y.netWorth })));

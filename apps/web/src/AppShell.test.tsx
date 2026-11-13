@@ -12,8 +12,9 @@ describe("local workspace integration", () => {
     const first = render(<App storageProvider={provider} />);
     await screen.findByText(/Sample plan — edit the example/);
     fireEvent.change(screen.getByLabelText("Birth year"), { target: { value: String(new Date().getFullYear() - 46) } });
-    fireEvent.click(screen.getByText("Base projection settings"));
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     fireEvent.change(screen.getByLabelText("Base retirement age"), { target: { value: "62" } });
+    fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
     await waitFor(async () => {
       const loaded = await provider.load();
       expect(loaded.kind).toBe("loaded");
@@ -24,14 +25,15 @@ describe("local workspace integration", () => {
     }, { timeout: 2000 });
     fireEvent.click(screen.getByRole("button", { name: "Projection" }));
     fireEvent.click(screen.getByRole("button", { name: "Run projection" }));
-    expect(screen.getByRole("table")).toBeTruthy();
+    await screen.findByRole("table");
     expect(screen.getByRole("table").textContent).not.toContain("NaN");
     first.unmount();
     render(<App storageProvider={provider} />);
     await screen.findByLabelText("Current age");
     expect((screen.getByLabelText("Current age") as HTMLInputElement).value).toBe("46");
-    fireEvent.click(screen.getByText("Base projection settings"));
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     expect((screen.getByLabelText("Base retirement age") as HTMLInputElement).value).toBe("62");
+    fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
   });
 
   it("does not autosave or overwrite an unreadable row before the user chooses recovery", async () => {
@@ -56,6 +58,8 @@ describe("local workspace integration", () => {
     const provider = createMemoryStorageProvider();
     await provider.save(makeSampleWorkspace({ id: "original", name: "Original" }));
     render(<App storageProvider={provider} />);
+    await screen.findByLabelText("Birth year");
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     await screen.findByText("Original");
     const replacement = makeSampleWorkspace({ id: "replacement", name: "Replacement" });
     const json = JSON.stringify({ schemaVersion: 1, plans: [{ meta: replacement.meta, plan: replacement.plan }], scenarios: replacement.scenarios });
@@ -97,6 +101,7 @@ describe("local workspace integration", () => {
     render(<StoreProvider initialWorkspace={makeSampleWorkspace()}><AppShell /><RunProbe /></StoreProvider>);
     fireEvent.click(screen.getByRole("button", { name: "Projection" }));
     fireEvent.click(screen.getByRole("button", { name: "Run projection" }));
+    await screen.findByRole("table");
     // Provenance: packages/engine/tests/golden/golden.test.ts:79 pins year-one
     // net worth to 660_532.60 with precision 0 (±$0.50). The current engine emits
     // 660_532.49 due to mortgage monthly rounding, within that documented pin.
@@ -107,6 +112,7 @@ describe("local workspace integration", () => {
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Retire three years earlier" } });
     fireEvent.change(screen.getByLabelText("Retirement age override"), { target: { value: "62" } });
     fireEvent.click(screen.getByRole("button", { name: "Run Retire three years earlier" }));
+    await waitFor(() => expect(JSON.parse(screen.getByTestId("run-records").textContent ?? "[]")).toHaveLength(2));
     fireEvent.click(screen.getByRole("button", { name: "Compare" }));
     const choices = screen.getAllByRole("checkbox");
     expect(choices).toHaveLength(2);
@@ -118,22 +124,25 @@ describe("local workspace integration", () => {
     expect(screen.getByRole("table").textContent).toContain("Δ");
   });
 
-  it("opens and focuses the projection table after running directly from Plan", () => {
+  it("opens and focuses the projection table after running directly from Plan", async () => {
     render(<StoreProvider initialWorkspace={makeSampleWorkspace()}><AppShell /></StoreProvider>);
     fireEvent.click(screen.getByRole("button", { name: "Run projection" }));
+    await screen.findByRole("table");
     expect(screen.getByRole("button", { name: "Projection" }).getAttribute("aria-current")).toBe("page");
     expect(document.activeElement?.id).toBe("projection-year-table");
     expect(screen.getByRole("table")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Plan" })).toBeNull();
   });
 
-  it("opens the scenario just run rather than a previously stored base result", () => {
+  it("opens the scenario just run rather than a previously stored base result", async () => {
     const workspace = makeSampleWorkspace();
     workspace.scenarios = [{ id: "early", name: "Early retirement", basePlanId: workspace.meta!.id, simMode: "deterministic", overrides: { retirementAge: 62 } }];
     render(<StoreProvider initialWorkspace={workspace}><AppShell /></StoreProvider>);
     fireEvent.click(screen.getByRole("button", { name: "Run projection" }));
+    await screen.findByRole("table");
     fireEvent.click(screen.getByRole("button", { name: "Scenarios" }));
     fireEvent.click(screen.getByRole("button", { name: "Run Early retirement" }));
+    await screen.findByRole("table");
     expect(screen.getByRole("button", { name: "Projection" }).getAttribute("aria-current")).toBe("page");
     expect(document.activeElement?.id).toBe("projection-year-table");
     fireEvent.click(screen.getByRole("button", { name: "Age 62" }));
@@ -157,6 +166,7 @@ describe("local workspace integration", () => {
     const provider = createMemoryStorageProvider();
     render(<App storageProvider={provider} />);
     await screen.findByLabelText("Birth year");
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     const old = makeSampleWorkspace({ id: "old-export", name: "Old export" });
     old.plan.profile.birthYear = new Date().getFullYear() - 45;
     old.plan.profile.currentAge = 44;
@@ -179,6 +189,7 @@ describe("local workspace integration", () => {
     await provider.save(makeSampleWorkspace({ id: "original", name: "Original" }));
     render(<App storageProvider={provider} />);
     await screen.findByLabelText("Birth year");
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     const old = makeSampleWorkspace();
     old.plan.profile = { birthYear: new Date().getFullYear() - 95, currentAge: 45, endAge: 80, province: "ON" };
     const file = new File([JSON.stringify({ schemaVersion: 1, plans: [{ meta: old.meta, plan: old.plan }], scenarios: old.scenarios })], "expired.json", { type: "application/json" });

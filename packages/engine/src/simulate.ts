@@ -2,13 +2,18 @@ import tablesJson from "../data/tax/ca-2026.json";
 import { applyIndexation, loadTables, type TaxYearTables } from "./tax/tables";
 import {
   validatePlan,
+  validateScenarioSettings,
   type AccountPlan,
+  type AccountType,
   type Plan,
+  type PlannedWithdrawals,
   type ReturnSeries,
   type Scenario,
   type SimulationResult,
+  type WithdrawalPlanMetadata,
   type YearResult,
 } from "./types";
+import { planWithdrawalPolicy } from "./strategy/withdrawalPlanner";
 import { federalTax, taxableIncome, type IncomeForTax } from "./tax/federal";
 import { ontarioTax } from "./tax/ontario";
 import { oasClawback } from "./tax/oasClawback";
@@ -29,9 +34,11 @@ function roundCent4(x: number): number {
 
 interface AccountState {
   id: string;
+  name?: string;
   type: AccountPlan["type"];
   balance: number;
   mix: AccountPlan["assetMix"];
+  interestRate?: number; // cash accounts only
 }
 
 interface AssetState {
@@ -113,20 +120,67 @@ export function simulate(
   scenario: Scenario,
   returns: ReturnSeries,
   tables: TaxYearTables = loadTables(tablesJson),
+  planned?: PlannedWithdrawals,
 ): SimulationResult {
   const errors = validatePlan(plan);
-  if (errors.length > 0) {
-    throw new Error(`validatePlan: ${errors.join(" ")}`);
+  const scenarioErrors = validateScenarioSettings(scenario);
+  if (errors.length > 0 || scenarioErrors.length > 0) {
+    throw new Error(`validatePlan: ${[...errors, ...scenarioErrors].join(" ")}`);
   }
+
+  // Tax-minimizing policy: injected `planned` (candidate evaluation, runners) is used
+  // verbatim and NEVER replans or attaches metadata; only the top-level deterministic
+  // path without an injected plan plans internally and attaches the planning metadata.
+  let policy: PlannedWithdrawals | null = null;
+  let withdrawalPlan: WithdrawalPlanMetadata | undefined;
+  if (scenario.withdrawalStrategy === "tax-minimizing") {
+    if (planned !== undefined) {
+      policy = planned;
+    } else {
+      const plannerOutput = planWithdrawalPolicy(plan, scenario, tables);
+      policy = plannerOutput.planned;
+      withdrawalPlan = plannerOutput.metadata;
+    }
+  }
+
+  // Withdrawal-order contract: tfsa/nonreg/rrsp exactly once each, cash at most
+  // once (and only ever drawn when named cash accounts exist).
+  const orderCounts = new Map<AccountType, number>();
+  for (const t of scenario.withdrawalOrder) orderCounts.set(t, (orderCounts.get(t) ?? 0) + 1);
+  for (const t of ["tfsa", "nonreg", "rrsp"] as const) {
+    if (orderCounts.get(t) !== 1) {
+      throw new Error(
+        `withdrawalOrder must include "${t}" exactly once (got ${orderCounts.get(t) ?? 0}).`,
+      );
+    }
+  }
+  if ((orderCounts.get("cash") ?? 0) > 1) {
+    throw new Error('withdrawalOrder must include "cash" at most once.');
+  }
+  for (const t of orderCounts.keys()) {
+    if (t !== "cash" && t !== "tfsa" && t !== "nonreg" && t !== "rrsp") {
+      throw new Error(`withdrawalOrder contains unknown account type "${t}".`);
+    }
+  }
+
+  const hasNamedCash = plan.accounts.some((a) => a.type === "cash");
+  // Engine cash-first fallback: when named cash accounts exist but the stored
+  // (legacy) order predates cash, cash is drawn first as the most liquid bucket.
+  // An explicit order that already positions cash is respected verbatim.
+  const withdrawalOrder = hasNamedCash && !orderCounts.has("cash")
+    ? ["cash" as const, ...scenario.withdrawalOrder]
+    : scenario.withdrawalOrder;
 
   const startAge = plan.profile.currentAge;
   const endAge = plan.profile.endAge;
 
   const accounts: AccountState[] = plan.accounts.map((a) => ({
     id: a.id,
+    ...(a.name === undefined ? {} : { name: a.name }),
     type: a.type,
     balance: a.balance,
     mix: a.assetMix,
+    ...(a.interestRate === undefined ? {} : { interestRate: a.interestRate }),
   }));
   const assetStates: AssetState[] = plan.assets.map((h) => ({
       id: h.id,
@@ -149,6 +203,7 @@ export function simulate(
   const returnByAge = new Map(returns.years.map((y) => [y.age, y]));
 
   let prevWithdrawals: YearResult["withdrawals"] = { tfsa: 0, rrsp: 0, nonreg: 0 }; // GIS uses the prior year's draws
+  let prevCashInterest = 0; // prior year's cash-account interest counts as GIS income (principal never does)
 
   // Aggregate non-reg basis (ACB), plan Task 14 — tracked in aggregate because
   // applyFlows distributes proportional to balance, which makes the aggregate
@@ -176,10 +231,35 @@ export function simulate(
     const events: string[] = [];
     const warnings: string[] = [];
 
+    // ---- 0. Cash interest (documented timing): interest accrues on the OPENING
+    // named-cash balances and is credited to the accounts BEFORE any flows, so the
+    // same year's withdrawals can draw it. It is ordinary income taxed this year
+    // (CRA Line 12100: interest "form[s] part of your total income"), counted once —
+    // the credit lands in the balance and the taxable amount folds into
+    // otherTaxableIncome; it is NOT added to the spendable `cash` line. Principal
+    // is never taxed. Zero-rate accounts and legacy plans accrue nothing.
+    let cashInterest = 0;
+    for (const a of accounts) {
+      if (a.type !== "cash") continue;
+      const rate = a.interestRate ?? 0;
+      if (rate === 0 || a.balance <= 0) continue;
+      const interest = roundCent(a.balance * rate);
+      a.balance = roundCent(a.balance + interest);
+      cashInterest += interest;
+    }
+    // Per-account interest is cent-rounded; round the aggregate too so the
+    // reported field carries no floating-point noise into JSON/tax inputs.
+    cashInterest = roundCent(cashInterest);
+
     // ---- 1. Retirement event
     if (age === scenario.retirementAge) events.push("retirement");
 
     // ---- 2. Income (streams grow at their own raiseRate; CG streams are event-driven)
+    // Benefit flags (absent = all received, legacy) only GATE the user's configured
+    // streams — no entitlement income is ever invented. GIS additionally requires OAS
+    // (canada.ca GIS: "available to Old Age Security pensioners", "To qualify for the
+    // GIS, you must also qualify for OAS"), so oas:false forces GIS off.
+    const benefits = scenario.benefits ?? { cpp: true, oas: true, gis: true };
     const isActive = (s: { startAge: number; endAge?: number }) =>
       age >= s.startAge && (s.endAge === undefined || age <= s.endAge);
     const grown = (s: { annualAmount: number; startAge: number; raiseRate: number }) =>
@@ -193,10 +273,12 @@ export function simulate(
       if (!isActive(s)) continue;
       const amount = grown(s);
       if (s.kind === "employment") employment += amount;
-      else if (s.kind === "cpp") cpp += amount;
-      else if (s.kind === "oas") oas += amount;
-      else otherPlan += amount;
-      if (s.startAge === age && (s.kind === "cpp" || s.kind === "oas")) {
+      else if (s.kind === "cpp" && benefits.cpp) cpp += amount;
+      else if (s.kind === "oas" && benefits.oas) oas += amount;
+      else if (s.kind === "other") otherPlan += amount;
+      // Gated-off CPP/OAS streams contribute nothing this year — they are not
+      // reclassified as other income and no entitlement amount is invented.
+      if (s.startAge === age && ((s.kind === "cpp" && benefits.cpp) || (s.kind === "oas" && benefits.oas))) {
         events.push(`${s.kind}-start`);
       }
     }
@@ -204,14 +286,14 @@ export function simulate(
     const taxForYear = (income: IncomeForTax) => taxOf(income, yearTables, oas);
 
     const gis =
-      age >= 65
+      age >= 65 && benefits.gis && benefits.oas
         ? gisAnnual(
             age,
             {
               cpp,
               rrspRrifWithdrawals: prevWithdrawals.rrsp,
               employmentIncome: employment,
-              otherTaxableIncome: otherPlan + Math.max(0, prevNonregGains), // positive gains count; losses are not GIS deductions
+              otherTaxableIncome: otherPlan + Math.max(0, prevNonregGains) + prevCashInterest, // positive gains count; losses are not GIS deductions
               tfsaWithdrawals: prevWithdrawals.tfsa,
             },
             yearTables,
@@ -219,9 +301,12 @@ export function simulate(
         : 0;
 
     let expenses = 0;
+    const expenseBreakdown: NonNullable<YearResult["expenseBreakdown"]> = [];
     for (const e of plan.expenses) {
       if (!isActive(e)) continue;
-      expenses += e.annualAmount * Math.pow(1 + e.inflationRate, age - e.startAge);
+      const amount = e.annualAmount * Math.pow(1 + e.inflationRate, age - e.startAge);
+      expenses += amount;
+      expenseBreakdown.push({ id: e.id, ...(e.name === undefined ? {} : { name: e.name }), amount });
     }
 
     // ---- 1b. Asset sales (value grown through prior years; sold assets never grow again).
@@ -252,13 +337,14 @@ export function simulate(
 
     // ---- 3. Mortgage (Task 10); negative-amortization detection is the stepper's job
     const mortgageStart = debtBalance;
+    const paymentsPerYear = debt?.paymentFrequency === "biweekly" ? 26 : debt?.paymentFrequency === "weekly" ? 52 : 12;
     const mres =
       debt && debtBalance > 0
-        ? mortgageYear({ balance: debtBalance, annualRate: debt.rate, monthlyPayment: debt.monthlyPayment })
+        ? mortgageYear({ balance: debtBalance, annualRate: debt.rate, monthlyPayment: debt.monthlyPayment, paymentsPerYear })
         : { endBalance: debtBalance, interest: 0, principalPaid: 0, paymentsMade: 0 };
     if (debt && debt.monthlyPayment > 0 && mres.endBalance > mortgageStart + 0.005) {
       warnings.push(
-        `negative amortization: mortgage payment ($${debt.monthlyPayment}/mo) does not cover interest at age ${age}; balance grows`,
+        `negative amortization: mortgage payment ($${debt.monthlyPayment} x ${paymentsPerYear}/yr) does not cover interest at age ${age}; balance grows`,
       );
     }
     const mortgageCash =
@@ -273,7 +359,7 @@ export function simulate(
     // layered on top per branch (tax0 is the floor, taxWithDue adds the RRIF minimum).
     const incomeBase: IncomeForTax = {
       employmentIncome: employment,
-      otherTaxableIncome: cpp + oas + otherPlan,
+      otherTaxableIncome: cpp + oas + otherPlan + cashInterest,
       rrspWithdrawals: 0,
       pensionEligibleIncome: 0,
       capitalGains,
@@ -293,14 +379,41 @@ export function simulate(
     // funding is the RRIF minimum must land in the deficit branch when minimum plus
     // streams cannot cover expenses plus its tax (otherwise the surplus branch would
     // silently swallow the gap with its Math.max(0, ...) clamp).
+    // ---- 5a-pre. Proactive tax-strategy draw (tax-minimizing only): an EXTRA draw
+    // above the mandatory RRIF minimum (the minimum itself is unchanged — it stays
+    // factor x opening balance) that fills this year's taxable income to the planned
+    // target, capped by the RRSP balance remaining after the minimum. The target is a
+    // base-table federal value in the plan; execution re-resolves the SAME semantics
+    // per year from the INDEXED year tables, using current-year state only (no
+    // lookahead). Proceeds land in spendable cash; the draw is taxed like any RRSP
+    // withdrawal and counts as GIS income next year (via prevWithdrawals, automatic).
+    let plannedRrspDraw = 0;
+    if (policy && policy.fillTargetTaxable > 0) {
+      const rrspRoomLeft = Math.max(0, rrspAtStart - rrifDue);
+      if (rrspRoomLeft > 0) {
+        const baseTaxable = taxableIncome(
+          { ...incomeBase, rrspWithdrawals: rrifDue, pensionEligibleIncome: age >= 65 ? rrifDue : 0 },
+        );
+        plannedRrspDraw = roundCent(
+          Math.min(rrspRoomLeft, Math.max(0, policy.fillTargetTaxable - baseTaxable)),
+        );
+      }
+    }
+    if (plannedRrspDraw > 0) {
+      // Fold the draw into the year's income base so every tax shape below (RRIF
+      // obligation pricing, non-reg gross-ups, final tax, marginal rate) sees it.
+      incomeBase.rrspWithdrawals += plannedRrspDraw;
+      if (age >= 65) incomeBase.pensionEligibleIncome += plannedRrspDraw;
+    }
     const taxWithDue = taxForYear(
-      { ...incomeBase, rrspWithdrawals: rrifDue, pensionEligibleIncome: age >= 65 ? rrifDue : 0 },
+      { ...incomeBase, rrspWithdrawals: rrifDue + plannedRrspDraw, pensionEligibleIncome: age >= 65 ? rrifDue + plannedRrspDraw : 0 },
     );
-    const cash = employment + cpp + oas + otherPlan + gis + rrifDue + cashBalance;
+    const cash = employment + cpp + oas + otherPlan + gis + rrifDue + plannedRrspDraw + cashBalance;
     const obligation = expenses + taxWithDue.total + mortgageCash;
 
     const withdrawals: YearResult["withdrawals"] = { tfsa: 0, rrsp: 0, nonreg: 0 };
     const contributions: YearResult["contributions"] = { tfsa: 0, rrsp: 0, nonreg: 0 };
+    let contributionsCash = 0;
     let employerMatch = 0;
     let mortgagePrepay = 0;
     let shortfall = 0;
@@ -327,7 +440,7 @@ export function simulate(
       // Mandatory RRIF minimum is taken even in surplus years (counted as withdrawal,
       // returned to cash inside `cash`).
       finalTax = taxWithDue;
-      withdrawals.rrsp = rrifDue;
+      withdrawals.rrsp = rrifDue + plannedRrspDraw;
       const allocation = allocateSurplus(
         Math.max(0, cash - expenses - finalTax.total - mortgageCash),
         plan.savingsPolicy,
@@ -345,31 +458,42 @@ export function simulate(
           rrsp: accounts.some((a) => a.type === "rrsp"),
           nonreg: accounts.some((a) => a.type === "nonreg"),
         },
+        // Circularity guard: suppress only EMPLOYEE rrsp savings steps in years with
+        // a proactive draw (the same cash must not flow RRSP -> out -> RRSP again).
+        // Employer rrsp-match, tfsa/nonreg/cash steps and mortgage prepay continue.
+        plannedRrspDraw > 0,
       );
       contributions.tfsa = roundCent(allocation.contributions.tfsa);
       contributions.rrsp = roundCent(allocation.contributions.rrsp);
       contributions.nonreg = roundCent(allocation.contributions.nonreg);
+      contributionsCash = roundCent(allocation.contributions.cash ?? 0);
       roomTf = allocation.newRooms.tfsa;
       roomRr = allocation.newRooms.rrsp;
       mortgagePrepay = roundCent(allocation.amounts.mortgage);
       employerMatch = roundCent(allocation.employerMatch);
       cashBalance = roundCent(allocation.cash);
+      // A cash-savings deposit with no named cash account to land in is retained
+      // as the floating idle-cash pool (the same store `balances.cash` counts);
+      // it stays reported as a cash contribution, mirroring account deposits.
+      if (contributionsCash > 0 && !hasNamedCash) {
+        cashBalance = roundCent(cashBalance + contributionsCash);
+      }
     } else {
       // ---- Deficit branch: withdraw in `withdrawalOrder`, grossing RRSP draws for tax
       let need = obligation - cash;
       // The opening cash balance is fungible with this year's income and is fully
       // consumed whenever total cash is below the year's obligation.
       cashBalance = 0;
-      for (const type of scenario.withdrawalOrder) {
-        const available = Math.max(0, sumType(accounts, type) - withdrawals[type]);
+      for (const type of withdrawalOrder) {
+        const available = Math.max(0, sumType(accounts, type) - (withdrawals[type] ?? 0));
         if (type === "rrsp") {
-          // RRIF due is already earmarked against this balance: new draws may only
-          // consume what is left of it.
-          const drawable = Math.max(0, sumType(accounts, type) - rrifDue);
+          // RRIF due and the proactive draw are already earmarked against this
+          // balance: new deficit draws may only consume what is left of it.
+          const drawable = Math.max(0, sumType(accounts, type) - rrifDue - plannedRrspDraw);
           const shape = (amount: number): IncomeForTax => ({
             ...incomeBase,
-            rrspWithdrawals: rrifDue + amount,
-            pensionEligibleIncome: age >= 65 ? rrifDue + amount : 0,
+            rrspWithdrawals: rrifDue + plannedRrspDraw + amount,
+            pensionEligibleIncome: age >= 65 ? rrifDue + plannedRrspDraw + amount : 0,
           });
           // Iterate to a SELF-CONSISTENT grossed-up draw: the draw must deliver `need`
           // net of the marginal tax the new draw itself creates (the mandatory
@@ -389,7 +513,7 @@ export function simulate(
           // Re-derive the tax from the FINAL draw so `extra` and the recorded tax
           // describe the same shape — otherwise the ledger leaks the difference.
           extra = Math.max(0, taxForYear(shape(draw)).total - taxWithDue.total);
-          withdrawals.rrsp = rrifDue + draw;
+          withdrawals.rrsp = rrifDue + plannedRrspDraw + draw;
           finalTax = taxForYear(shape(draw));
           need -= Math.max(0, draw - extra); // net cash actually delivered after its tax
         } else if (type === "nonreg") {
@@ -443,9 +567,11 @@ export function simulate(
             withdrawals[type] += take;
           }
         } else {
+          // TFSA and named-cash draws: neither carries tax in v1 (cash principal is
+          // never taxed; cash interest was already taxed at the year's opening).
           const take = Math.min(Math.max(0, available), Math.max(0, need));
-          withdrawals[type] += take;
-          need -= take; // withdrawal accounts (tfsa) carry no extra tax in v1
+          withdrawals[type] = (withdrawals[type] ?? 0) + take;
+          need -= take;
         }
       }
       shortfall = Math.max(0, roundCent(need));
@@ -462,6 +588,7 @@ export function simulate(
       taxable: finalTax.taxable + nonregGains,
     };
     nonregBook += contributions.nonreg;
+    if (contributionsCash > 0) contributions.cash = contributionsCash;
 
     // ---- 5b. Flows into the accounts (proportional among same-type accounts)
     applyFlows(accounts, withdrawals, contributions);
@@ -470,8 +597,11 @@ export function simulate(
     // Non-reg basis grows with the market (Task 14 convention: ACB absorbs the
     // year's growth — book += market x weightedBlended, computed on the
     // value-weighted mix across non-reg accounts).
+    // Cash accounts are skipped: they earn their fixed interestRate, credited at
+    // the year's opening, and never follow the market return series (any mode).
     const nonregMarketPre = sumType(accounts, "nonreg");
     for (const a of accounts) {
+      if (a.type === "cash" || a.mix === undefined) continue;
       a.balance = roundCent(
         Math.max(0, a.balance * (1 + a.mix.equity * r.equity + a.mix.bond * r.bond + a.mix.cash * r.cash)),
       );
@@ -523,7 +653,7 @@ export function simulate(
     const taxNow = taxForYear(
       {
         employmentIncome: employment,
-        otherTaxableIncome: cpp + oas + otherPlan,
+        otherTaxableIncome: cpp + oas + otherPlan + cashInterest,
         rrspWithdrawals: withdrawals.rrsp,
         pensionEligibleIncome: age >= 65 ? withdrawals.rrsp : 0,
         capitalGains: capitalGains + nonregGains,
@@ -534,7 +664,7 @@ export function simulate(
     const taxPlus = taxForYear(
       {
         employmentIncome: employment,
-        otherTaxableIncome: cpp + oas + otherPlan,
+        otherTaxableIncome: cpp + oas + otherPlan + cashInterest,
         rrspWithdrawals: withdrawals.rrsp + 100,
         pensionEligibleIncome: age >= 65 ? withdrawals.rrsp + 100 : 0,
         capitalGains: capitalGains + nonregGains,
@@ -548,12 +678,14 @@ export function simulate(
       sumType(accounts, "tfsa") +
         sumType(accounts, "rrsp") +
         sumType(accounts, "nonreg") +
+        sumType(accounts, "cash") +
         cashBalance +
         homeValue -
         debtEnd +
         otherAssetValue,
     );
 
+    const namedCash = accounts.filter((a) => a.type === "cash");
     const year: YearResult = {
       age,
       income: {
@@ -563,6 +695,10 @@ export function simulate(
         gis: roundCent(gis),
         other: roundCent(otherPlan + employerMatch),
       },
+      // Optional cash fields are ABSENT (not 0) for plans without cash activity,
+      // so legacy saved plans keep their exact result shapes.
+      ...(cashInterest > 0 ? { cashInterest } : {}),
+      ...(plannedRrspDraw > 0 ? { plannedRrspDraw: roundCent(plannedRrspDraw) } : {}),
       taxableIncome: roundCent(taxNow.taxable),
       tax: {
         federal: roundCent(finalTax.federal),
@@ -576,29 +712,44 @@ export function simulate(
         tfsa: roundCent(withdrawals.tfsa),
         rrsp: roundCent(withdrawals.rrsp),
         nonreg: roundCent(withdrawals.nonreg),
+        ...(withdrawals.cash ? { cash: roundCent(withdrawals.cash) } : {}),
       },
       contributions: {
         tfsa: roundCent(contributions.tfsa),
         rrsp: roundCent(contributions.rrsp),
         nonreg: roundCent(contributions.nonreg),
+        ...(contributions.cash ? { cash: roundCent(contributions.cash) } : {}),
       },
       savings: {
         tfsa: roundCent(contributions.tfsa),
         rrsp: roundCent(contributions.rrsp),
         nonreg: roundCent(contributions.nonreg),
+        ...(contributions.cash ? { cash: roundCent(contributions.cash) } : {}),
         mortgage: roundCent(mortgagePrepay),
       },
       expenses: roundCent(expenses),
+      ...(rrifDue > 0 ? { rrifMinimumWithdrawal: roundCent(rrifDue) } : {}),
+      expenseBreakdown,
       shortfall: roundCent(shortfall),
       balances: {
         tfsa: roundBal(accounts, "tfsa"),
         rrsp: roundBal(accounts, "rrsp"),
         nonreg: roundBal(accounts, "nonreg"),
-        cash: roundCent(cashBalance),
+        // The floating idle-cash pool plus every named cash account, counted once.
+        cash: roundCent(cashBalance + roundBal(accounts, "cash")),
         home: roundCent(homeValue),
         otherAssets: roundCent(otherAssetValue),
         debt: roundCent(debtEnd),
       },
+      ...(namedCash.length > 0
+        ? {
+            cashAccounts: namedCash.map((a) => ({
+              id: a.id,
+              ...(a.name === undefined ? {} : { name: a.name }),
+              balance: roundCent(a.balance),
+            })),
+          }
+        : {}),
       netWorth,
       tfsaRoom,
       rrspRoom,
@@ -617,6 +768,7 @@ export function simulate(
     years.push(year);
     prevWithdrawals = { tfsa: year.withdrawals.tfsa, rrsp: year.withdrawals.rrsp, nonreg: year.withdrawals.nonreg };
     prevNonregGains = nonregGains;
+    prevCashInterest = cashInterest;
   }
 
   const finalNW = years[years.length - 1]?.netWorth ?? 0;
@@ -628,6 +780,7 @@ export function simulate(
       finalNetWorth: finalNW,
       worstShortfallAge,
     },
+    ...(withdrawalPlan ? { withdrawalPlan } : {}),
   };
 }
 
@@ -662,6 +815,8 @@ function applyFlows(
   distribute(contributions.rrsp, "rrsp", 1);
   distribute(withdrawals.nonreg, "nonreg", -1);
   distribute(contributions.nonreg, "nonreg", 1);
+  distribute(withdrawals.cash ?? 0, "cash", -1);
+  distribute(contributions.cash ?? 0, "cash", 1);
 }
 
 /** Adds external cash (e.g. asset-sale proceeds) to accounts of one type. */

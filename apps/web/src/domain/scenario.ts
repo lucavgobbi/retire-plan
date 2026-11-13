@@ -8,10 +8,13 @@ export function resolveScenario(delta: ScenarioDelta | null, base: ScenarioBase)
   return {
     id: delta?.id ?? "base",
     name: delta?.name ?? "Base scenario",
-    simMode: "deterministic",
+    simMode: delta?.simMode ?? base.simMode ?? "deterministic",
     retirementAge: overrides?.retirementAge ?? base.retirementAge ?? DEFAULT_SCENARIO_BASE.retirementAge,
     returnAssumptions: { ...(overrides?.returnAssumptions ?? base.returnAssumptions ?? DEFAULT_SCENARIO_BASE.returnAssumptions) },
     withdrawalOrder: [...(overrides?.withdrawalOrder ?? base.withdrawalOrder ?? DEFAULT_SCENARIO_BASE.withdrawalOrder)],
-    ...(delta?.mcConfig ? { mcConfig: structuredClone(delta.mcConfig) } : {}),
+    benefits: structuredClone(delta?.benefits ?? base.benefits ?? DEFAULT_SCENARIO_BASE.benefits!),
+    withdrawalStrategy: delta?.withdrawalStrategy ?? base.withdrawalStrategy ?? "manual",
+    ...((delta?.mcConfig ?? base.mcConfig) ? { mcConfig: structuredClone(delta?.mcConfig ?? base.mcConfig) } : {}),
+    ...((delta?.historicalConfig ?? base.historicalConfig) ? { historicalConfig: structuredClone(delta?.historicalConfig ?? base.historicalConfig) } : {}),
   };
 }

@@ -1,5 +1,6 @@
 import type { YearResult } from "@retire-plan/engine";
 import { fmtMoneyDetail } from "./fmt";
+import { yearNotices } from "./yearNotices";
 
 /** Bullet summary of a year's audit counts — cell inside the dense table. */
 export function EventsCell({ year }: { year: YearResult }) {
@@ -19,40 +20,66 @@ export function YearDetailRow({
   age,
   year,
   expanded,
+  groupExpanded = true,
   colSpan,
+  householdCalendarYear,
+  historicalReturnYear,
 }: {
   age: number;
   year: YearResult;
   expanded: boolean;
+  groupExpanded?: boolean;
   colSpan: number;
+  householdCalendarYear?: number;
+  historicalReturnYear?: number;
 }) {
-  if (!expanded) return null;
+  const notices = yearNotices(year, householdCalendarYear !== undefined && historicalReturnYear !== undefined
+    ? { householdCalendarYear, returnSourceYear: historicalReturnYear }
+    : undefined);
   return (
-    <tr className="detail-row" data-detail-for={age}>
+    <tr className="detail-row" data-detail-for={age} data-expanded={expanded ? "true" : "false"} data-group-collapsed={!groupExpanded ? "true" : undefined}>
       <td colSpan={colSpan}>
-        <dl className="detail-list">
-          <dt>Events</dt>
-          <dd>
+        <div className="detail-grid">
+          <section className="detail-section" aria-label="Events"><h4>Events</h4>
             {year.events.length === 0
-              ? "—"
-              : year.events.map((event, index) => <div key={`e${index}`}>{event}</div>)}
-          </dd>
-          <dt>Warnings</dt>
-          <dd>
+              ? <p className="hint">No events</p>
+              : <ul>{year.events.map((event, index) => <li key={`e${index}`}>{event}</li>)}</ul>}
+          </section>
+          <section className="detail-section" aria-label="Warnings"><h4>Warnings</h4>
             {year.warnings.length === 0
-              ? "—"
-              : year.warnings.map((warning, index) => <div key={`w${index}`}>{warning}</div>)}
-          </dd>
-          <dt>Savings flows</dt>
-          <dd>
-            <div>{`TFSA ${fmtMoneyDetail(year.savings.tfsa)} · RRSP ${fmtMoneyDetail(year.savings.rrsp)} · Non-registered ${fmtMoneyDetail(year.savings.nonreg)} · Mortgage ${fmtMoneyDetail(year.savings.mortgage)}`}</div>
-          </dd>
-          <dt>Net worth breakdown</dt>
-          <dd>
-            <div>{`TFSA ${fmtMoneyDetail(year.balances.tfsa)} · RRSP ${fmtMoneyDetail(year.balances.rrsp)} · Non-registered ${fmtMoneyDetail(year.balances.nonreg)} · Cash ${fmtMoneyDetail(year.balances.cash)} · Other assets ${fmtMoneyDetail(year.balances.otherAssets ?? 0)} · Home ${fmtMoneyDetail(year.balances.home)} · Debt ${fmtMoneyDetail(year.balances.debt)}`}</div>
-            <div className="hint">{`Total ${fmtMoneyDetail(year.netWorth)} (accounts + other assets + home − debt)`}</div>
-          </dd>
-        </dl>
+              ? <p className="hint">No warnings</p>
+              : <ul>{year.warnings.map((warning, index) => <li key={`w${index}`}>{warning}</li>)}</ul>}
+            {notices.length > 0 && <div className="detail-notices" role="note" aria-label="Year cashflow explanations">
+              {notices.map((notice, index) => <p key={`n${index}`}>{notice}</p>)}
+            </div>}
+          </section>
+          <section className="detail-section" aria-label="Expenses"><h4>Expenses</h4>
+            {year.expenseBreakdown === undefined
+              ? <p className="hint">Per-expense details were not recorded for this saved result.</p>
+              : year.expenseBreakdown.length === 0
+                ? <p className="hint">No expenses in this year.</p>
+                : <ul className="expense-list">{year.expenseBreakdown.map((expense) => <li key={expense.id}><span>{expense.name?.trim() || expense.id}</span><span>{fmtMoneyDetail(expense.amount)}</span></li>)}</ul>}
+            <p className="detail-expense-total"><strong>Modelled annual total</strong><strong>{fmtMoneyDetail(year.expenses)}</strong></p>
+            {year.expenseBreakdown?.length ? <p className="hint expense-rounding-note">Per-item amounts are shown rounded to cents; the total is the engine result.</p> : null}
+          </section>
+          <section className="detail-section" aria-label="Savings flows"><h4>Savings flows</h4>
+            <dl className="detail-values">
+              <dt>TFSA</dt><dd>{fmtMoneyDetail(year.savings.tfsa)}</dd><dt>RRSP</dt><dd>{fmtMoneyDetail(year.savings.rrsp)}</dd>
+              <dt>Non-registered</dt><dd>{fmtMoneyDetail(year.savings.nonreg)}</dd><dt>Cash accounts</dt><dd>{fmtMoneyDetail(year.savings.cash ?? 0)}</dd><dt>Mortgage</dt><dd>{fmtMoneyDetail(year.savings.mortgage)}</dd>
+            </dl>
+          </section>
+          <section className="detail-section" aria-label="Net worth breakdown"><h4>Net worth breakdown</h4>
+            <dl className="detail-values">
+              <dt>TFSA</dt><dd>{fmtMoneyDetail(year.balances.tfsa)}</dd><dt>RRSP</dt><dd>{fmtMoneyDetail(year.balances.rrsp)}</dd>
+              <dt>Non-registered</dt><dd>{fmtMoneyDetail(year.balances.nonreg)}</dd><dt>{year.cashAccounts === undefined ? "Cash reserve" : "Total cash (accounts + reserve)"}</dt><dd>{fmtMoneyDetail(year.balances.cash)}</dd>
+              <dt>Other assets</dt><dd>{fmtMoneyDetail(year.balances.otherAssets ?? 0)}</dd><dt>Home</dt><dd>{fmtMoneyDetail(year.balances.home)}</dd>
+              <dt>Debt</dt><dd>{fmtMoneyDetail(year.balances.debt)}</dd><dt className="detail-total-label">Net worth</dt><dd className="detail-total">{fmtMoneyDetail(year.netWorth)}</dd>
+            </dl>
+            {year.cashAccounts?.length ? <><p className="hint">Named account balances are included in total cash above.</p><ul className="cash-account-balances" aria-label="Named cash account balances">
+              {year.cashAccounts.map(account => <li key={account.id}>{account.name?.trim() || account.id}: {fmtMoneyDetail(account.balance)}</li>)}
+            </ul></> : null}
+          </section>
+        </div>
       </td>
     </tr>
   );

@@ -98,6 +98,28 @@ function run(plan_: Plan, scen: Scenario = detScenario(65), assumptions = ZERO_R
   return simulate(plan_, scen, detReturns(plan_.profile.currentAge, plan_.profile.endAge, assumptions));
 }
 
+describe("simulate — mortgage payment frequencies", () => {
+  it("applies biweekly/weekly frequencies so equal annual cash amortizes faster", () => {
+    // Same annual cash ($39,000/yr): 12 x $3,250 monthly vs 26 x $1,500 biweekly vs 52 x $750 weekly.
+    // Zero returns isolate the amortization difference.
+    const debt = { id: "m", kind: "mortgage" as const, rate: 0.06, termYears: 25, amortizationYears: 25, balance: 300_000 };
+    const base = plan((x) => {
+      x.profile.currentAge = 40;
+      x.profile.endAge = 41;
+      x.accounts = [];
+      x.assets = [];
+      x.incomes = [{ id: "job", kind: "employment", annualAmount: 120_000, startAge: 40, raiseRate: 0 }];
+      x.expenses = [{ id: "life", name: "Life", annualAmount: 60_000, startAge: 40, inflationRate: 0 }];
+      x.savingsPolicy = [];
+    });
+    const monthly = run({ ...base, debts: [{ ...debt, monthlyPayment: 3_250 }] }).years[0]!.balances.debt;
+    const biweekly = run({ ...base, debts: [{ ...debt, monthlyPayment: 1_500, paymentFrequency: "biweekly" }] }).years[0]!.balances.debt;
+    const weekly = run({ ...base, debts: [{ ...debt, monthlyPayment: 750, paymentFrequency: "weekly" }] }).years[0]!.balances.debt;
+    expect(biweekly).toBeLessThan(monthly);
+    expect(weekly).toBeLessThan(biweekly);
+  });
+});
+
 describe("simulate — focused, hand-checked cases", () => {
   it("a simple employed plan: income, tax, expenses, default surplus to non-registered", () => {
     const p = plan((x) => {
@@ -107,7 +129,11 @@ describe("simulate — focused, hand-checked cases", () => {
       x.assets = [];
       x.debts = [];
       x.incomes = [{ id: "job", kind: "employment", annualAmount: 120_000, startAge: 40, raiseRate: 0 }];
-      x.expenses = [{ id: "life", name: "Life", annualAmount: 80_000, startAge: 40, inflationRate: 0 }];
+      x.expenses = [
+        { id: "living", name: "Living costs", annualAmount: 30_000, startAge: 40, inflationRate: 0.01 },
+        { id: "travel", name: "Travel", annualAmount: 50_000, startAge: 40, endAge: 40, inflationRate: 0 },
+        { id: "inactive", name: "Later expense", annualAmount: 700, startAge: 41, inflationRate: 0 },
+      ];
       x.savingsPolicy = [];
     });
     const out = run(p, detScenario(65), ZERO_RETURNS);
@@ -116,6 +142,11 @@ describe("simulate — focused, hand-checked cases", () => {
     expect(y.age).toBe(40);
     expect(y.income.employment).toBe(120_000);
     expect(y.expenses).toBe(80_000);
+    expect(y.expenseBreakdown).toEqual([
+      { id: "living", name: "Living costs", amount: 30_000 },
+      { id: "travel", name: "Travel", amount: 50_000 },
+    ]);
+    expect(y.expenseBreakdown!.reduce((sum, item) => sum + item.amount, 0)).toBeCloseTo(y.expenses, 2);
     const t = combinedTax({ employmentIncome: 120_000, otherTaxableIncome: 0, rrspWithdrawals: 0, pensionEligibleIncome: 0, capitalGains: 0, dividendsEligible: 0, age: 40 });
     expect(y.tax.total).toBeCloseTo(t.total, 2);
     // Surplus flows to non-registered by default (empty policy), after tax + expenses.
@@ -464,10 +495,44 @@ describe("simulate — focused, hand-checked cases", () => {
     const y71 = out.years[0]!;
     // 5.28% x 400,000 = 21,120, taken regardless of surplus/deficit, counted in rrsp withdrawals.
     expect(y71.withdrawals.rrsp).toBeCloseTo(21_120, 2);
+    expect(y71.rrifMinimumWithdrawal).toBeCloseTo(21_120, 2);
     expect(y71.balances.rrsp).toBeCloseTo(400_000 - 21_120, 2);
     // Income: employment 0; taxable income includes the RRIF draw.
     expect(y71.taxableIncome).toBeCloseTo(21_120, 2);
     expect(y71.income.cpp + y71.income.oas + y71.income.other).toBe(0);
+  });
+
+  it("records only the mandatory minimum separately when voluntary RRSP withdrawals add to it", () => {
+    const p = plan((x) => {
+      x.profile.currentAge = 71;
+      x.profile.endAge = 72;
+      x.accounts = [{ id: "rrsp", type: "rrsp", balance: 400_000, assetMix: { equity: 0, bond: 0, cash: 1 } }];
+      x.assets = [];
+      x.debts = [];
+      x.incomes = [];
+      x.expenses = [{ id: "life", name: "Life", annualAmount: 100_000, startAge: 71, inflationRate: 0 }];
+      x.savingsPolicy = [];
+    });
+    const y71 = run(p, detScenario(70)).years[0]!;
+
+    expect(y71.rrifMinimumWithdrawal).toBeCloseTo(21_120, 2);
+    expect(y71.withdrawals.rrsp).toBeGreaterThan(y71.rrifMinimumWithdrawal!);
+    expect(y71.contributions.tfsa + y71.contributions.nonreg).toBe(0);
+  });
+
+  it("omits the RRIF minimum detail before age 71", () => {
+    const p = plan((x) => {
+      x.profile.currentAge = 70;
+      x.profile.endAge = 71;
+      x.accounts = [{ id: "rrsp", type: "rrsp", balance: 400_000, assetMix: { equity: 0, bond: 0, cash: 1 } }];
+      x.assets = [];
+      x.debts = [];
+      x.incomes = [];
+      x.expenses = [{ id: "life", name: "Life", annualAmount: 12_000, startAge: 70, inflationRate: 0 }];
+      x.savingsPolicy = [];
+    });
+
+    expect(run(p, detScenario(70)).years[0]!.rrifMinimumWithdrawal).toBeUndefined();
   });
 });
 
@@ -544,9 +609,9 @@ describe("simulate — per-year reconciliation property (money cannot leak)", ()
     const returns = detReturns(45, 95, MIXED_RETURNS);
     const out = simulate(p, strat, returns);
 
-    const rrspMix = p.accounts[0]!.assetMix;
-    const tfSaMix = p.accounts[1]!.assetMix;
-    const nrMix = p.accounts[2]!.assetMix;
+    const rrspMix = p.accounts[0]!.assetMix!;
+    const tfSaMix = p.accounts[1]!.assetMix!;
+    const nrMix = p.accounts[2]!.assetMix!;
     const debt = p.debts[0]!;
     const home = p.assets[0]!;
 
@@ -558,7 +623,7 @@ describe("simulate — per-year reconciliation property (money cannot leak)", ()
     for (let i = 0; i < out.years.length; i++) {
       const y = out.years[i]!;
       const r = returns.years[i]!;
-      const b = (mix: AccountPlan["assetMix"]) => blended(mix, r);
+      const b = (mix: NonNullable<AccountPlan["assetMix"]>) => blended(mix, r);
 
       const growthTfSa = (prevBalances.tfsa - y.withdrawals.tfsa + y.contributions.tfsa) * b(tfSaMix);
       const growthRrsp = (prevBalances.rrsp - y.withdrawals.rrsp + y.contributions.rrsp) * b(rrspMix);

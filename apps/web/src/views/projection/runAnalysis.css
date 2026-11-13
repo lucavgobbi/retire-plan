@@ -1,0 +1,16 @@
+.run-analysis {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1e3a5f;
+}
+.run-analysis h3 { margin: 0 0 6px; font-size: 1rem; }
+.run-analysis p { margin: 6px 0; }
+.run-analysis dl { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; margin: 8px 0; }
+.run-analysis dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 480px) {
+  .run-analysis dl { grid-template-columns: 1fr; gap: 2px; }
+  .run-analysis dd { text-align: left; margin-bottom: 5px; }
+}

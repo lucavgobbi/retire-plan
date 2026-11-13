@@ -200,7 +200,7 @@ describe("allocateSurplus", () => {
 
 describe("fundDeficit", () => {
   it("covers the deficit in the default order TFSA -> nonreg -> RRSP, never overdrawing", () => {
-    const balances: Record<AccountType, number> = {
+    const balances: Partial<Record<AccountType, number>> = {
       tfsa: 10_000,
       rrsp: 50_000,
       nonreg: 5_000,
@@ -212,7 +212,7 @@ describe("fundDeficit", () => {
   });
 
   it("the forced RRIF minimum is withdrawn first and always, counted in rrsp withdrawals", () => {
-    const balances: Record<AccountType, number> = {
+    const balances: Partial<Record<AccountType, number>> = {
       tfsa: 0,
       rrsp: 400_000,
       nonreg: 0,
@@ -225,7 +225,7 @@ describe("fundDeficit", () => {
   });
 
   it("draws the extra RRSP amount only after the minimum (order respected)", () => {
-    const balances: Record<AccountType, number> = { tfsa: 3_000, rrsp: 100_000, nonreg: 0 };
+    const balances: Partial<Record<AccountType, number>> = { tfsa: 3_000, rrsp: 100_000, nonreg: 0 };
     // Deficit 20,000 + a 10,000 minimum: tfsa covers 3k; rrsp supplies 7k beyond minimum.
     const out = fundDeficit(20_000, ["tfsa", "nonreg", "rrsp"], balances, 10_000);
     expect(out.withdrawals).toEqual({ tfsa: 3_000, rrsp: 17_000, nonreg: 0 });
@@ -233,7 +233,7 @@ describe("fundDeficit", () => {
   });
 
   it("records a shortfall when accounts run dry — and floors the mandatory minimum", () => {
-    const balances: Record<AccountType, number> = { tfsa: 1_000, rrsp: 500, nonreg: 0 };
+    const balances: Partial<Record<AccountType, number>> = { tfsa: 1_000, rrsp: 500, nonreg: 0 };
     // Minimum 2,000 > rrsp 500: only 500 can be taken; it does not create shortfall
     // cash itself, and the deficit (1,000 with tfsa) is still covered first.
     const out = fundDeficit(1_000, ["tfsa", "nonreg", "rrsp"], balances, 2_000);
@@ -242,14 +242,14 @@ describe("fundDeficit", () => {
     expect(out.remainingShortfall).toBe(0);
 
     // A larger deficit than everything available shortfalls the rest.
-    const broke: Record<AccountType, number> = { tfsa: 0, rrsp: 0, nonreg: 0 };
+    const broke: Partial<Record<AccountType, number>> = { tfsa: 0, rrsp: 0, nonreg: 0 };
     const dry = fundDeficit(30_000, ["tfsa", "nonreg", "rrsp"], broke, 0);
     expect(dry.remainingShortfall).toBe(30_000);
     expect(dry.withdrawals).toEqual({ tfsa: 0, rrsp: 0, nonreg: 0 });
   });
 
   it("follows a custom withdrawal order without overdrawing", () => {
-    const balances: Record<AccountType, number> = { tfsa: 4_000, rrsp: 0, nonreg: 2_000 };
+    const balances: Partial<Record<AccountType, number>> = { tfsa: 4_000, rrsp: 0, nonreg: 2_000 };
     const out = fundDeficit(10_000, ["nonreg", "tfsa", "rrsp"], balances, 0);
     expect(out.withdrawals).toEqual({ tfsa: 4_000, nonreg: 2_000, rrsp: 0 });
     expect(out.remainingShortfall).toBe(4_000);

@@ -25,7 +25,8 @@ export interface AllocateSurplusResult {
 export interface FundDeficitInput {
   deficit: number;
   order: AccountType[];
-  balances: Record<AccountType, number>;
+  /** Opening balances per type; types without balances (e.g. cash) are simply absent. */
+  balances: Partial<Record<AccountType, number>>;
   rrifMinimumDue: number;
 }
 
@@ -74,6 +75,14 @@ export function allocateSurplus(
   mortgage?: DebtPlan,
   age?: number,
   availableAccounts: AvailableSavingsAccounts = { tfsa: true, rrsp: true, nonreg: true },
+  /**
+   * Tax-minimizing circularity guard: when the year executed a proactive RRSP
+   * draw, EMPLOYEE `rrsp` steps are suppressed (that same cash must not be
+   * re-contributed — withdrawing does not recreate contribution room, so the
+   * re-deposit would be artificial). ONLY employee rrsp steps stop: employer
+   * `rrsp-match` compensation and every tfsa/nonreg/cash/mortgage step continue.
+   */
+  suppressEmployeeRrsp = false,
 ): AllocateSurplusResult {
   const contributions = zeroContributions();
   const amountsOut = zeroAmounts();
@@ -105,6 +114,7 @@ export function allocateSurplus(
         break;
       }
       case "rrsp": {
+        if (suppressEmployeeRrsp) break;
         const take = Math.min(remaining, capFor(step), Math.max(0, newRooms.rrsp));
         contributions.rrsp += take;
         amountsOut.rrsp += take;
@@ -128,6 +138,15 @@ export function allocateSurplus(
         const take = Math.min(remaining, capFor(step));
         contributions.nonreg += take;
         amountsOut.nonreg += take;
+        remaining -= take;
+        break;
+      }
+      case "cash": {
+        // Deliberately NOT gated on a named cash account existing: with none, the
+        // caller retains the deposit as the floating idle-cash pool instead.
+        const take = Math.min(remaining, capFor(step));
+        contributions.cash = (contributions.cash ?? 0) + take;
+        amountsOut.cash = (amountsOut.cash ?? 0) + take;
         remaining -= take;
         break;
       }
@@ -179,7 +198,7 @@ export function allocateSurplus(
 export function fundDeficit(
   deficit: number,
   order: AccountType[],
-  balances: Record<AccountType, number>,
+  balances: Partial<Record<AccountType, number>>,
   rrifMinimumDue: number,
 ): FundDeficitResult {
   const withdrawals = zeroWithdrawals();
@@ -190,13 +209,13 @@ export function fundDeficit(
   let cash = deficit;
 
   // 1) Mandatory minimum first — it is owed regardless of the deficit.
-  const rrifMinimumTaken = Math.min(Math.max(0, rrifMinimumDue), Math.max(0, balances.rrsp));
+  const rrifMinimumTaken = Math.min(Math.max(0, rrifMinimumDue), Math.max(0, balances.rrsp ?? 0));
   withdrawals.rrsp += rrifMinimumTaken;
   cash = Math.max(0, deficit - rrifMinimumTaken);
 
   // 2) Walk the order for the remainder, skipping what the minimum
   //    already took out of the RRSP.
-  const taken: Record<AccountType, number> = {
+  const taken: Partial<Record<AccountType, number>> = {
     tfsa: withdrawals.tfsa,
     nonreg: withdrawals.nonreg,
     rrsp: withdrawals.rrsp,
@@ -204,11 +223,11 @@ export function fundDeficit(
   let remainingShortfall = cash;
   for (const type of order) {
     if (remainingShortfall <= 0) break;
-    const available = Math.max(0, (balances[type] ?? 0) - taken[type]);
+    const available = Math.max(0, (balances[type] ?? 0) - (taken[type] ?? 0));
     const take = Math.min(remainingShortfall, available);
     if (take > 0) {
-      taken[type] += take;
-      withdrawals[type] += take;
+      taken[type] = (taken[type] ?? 0) + take;
+      withdrawals[type] = (withdrawals[type] ?? 0) + take;
       remainingShortfall -= take;
     }
   }

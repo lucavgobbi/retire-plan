@@ -63,6 +63,23 @@ describe("validatePlan", () => {
     expect(errors.some((e) => e.includes("monthlyPayment") && e.includes("mortgage-1"))).toBe(true);
   });
 
+  it("accepts biweekly and weekly mortgage payment frequencies", () => {
+    const plan = makePlan();
+    plan.debts[0]!.paymentFrequency = "biweekly";
+    const biweekly = makePlan();
+    biweekly.debts[0]!.paymentFrequency = "weekly";
+    expect(validatePlan(plan)).toEqual([]);
+    expect(validatePlan(biweekly)).toEqual([]);
+  });
+
+  it("rejects an unknown mortgage payment frequency", () => {
+    const plan = makePlan();
+    plan.debts[0]!.paymentFrequency = "daily" as never;
+    const errors = validatePlan(plan);
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors.some((e) => e.includes("paymentFrequency") && e.includes("mortgage-1"))).toBe(true);
+  });
+
   it("rejects an income that ends before it starts", () => {
     const plan = makePlan();
     plan.incomes[0]!.endAge = plan.incomes[0]!.startAge - 1;

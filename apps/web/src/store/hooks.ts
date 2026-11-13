@@ -22,6 +22,9 @@ export function useProjectionRun(activePlanId?: string | null, scenarioId?: stri
   return {
     run,
     stale,
+    isRunning: store.isRunning,
+    runCancelled: store.runCancelled,
+    cancelRun: store.cancelRun,
     runProjection: () => {
       const delta = selectedScenarioId === null ? null : store.workspace.scenarios.find(item => item.id === selectedScenarioId);
       if (selectedScenarioId !== null && !delta) return null;

@@ -2,9 +2,12 @@ import type { Plan } from "@retire-plan/engine";
 import type { ScenarioBase, Workspace } from "./types";
 
 export const DEFAULT_SCENARIO_BASE: ScenarioBase = {
+  simMode: "deterministic",
   retirementAge: 65,
   returnAssumptions: { equity: 0.05, bond: 0.02, cash: 0 },
   withdrawalOrder: ["tfsa", "nonreg", "rrsp"],
+  benefits: { cpp: true, oas: true, gis: true },
+  withdrawalStrategy: "manual",
 };
 
 /** Empty editing state, distinct from the golden sample loaded at first launch. */

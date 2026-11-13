@@ -1,11 +1,14 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ScenarioDelta } from "../../domain/types";
+import type { SimulationRunner } from "../../store/simulationWorkerProtocol";
 import { useWorkspace } from "../../store/api";
 import { StoreProvider } from "../../store/StoreProvider";
 import { DEFAULT_SCENARIO_BASE } from "../../domain/defaults";
 import { makeSamplePlan, makeWorkspace } from "../projection/testFixtures";
 import { ScenariosView } from "./ScenariosView";
+import { duplicateScenario } from "./ScenarioList";
+import { BaseScenarioSettings } from "../../components/BaseScenarioSettings";
 
 const delta: ScenarioDelta = {
   id: "delta-1",
@@ -15,26 +18,109 @@ const delta: ScenarioDelta = {
   overrides: { retirementAge: 62 },
 };
 
-function renderView(workspace = makeWorkspace()) {
+function renderView(workspace = makeWorkspace(), simulationRunner?: SimulationRunner) {
   return render(
-    <StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+    <StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={simulationRunner}>
       <ScenariosView />
     </StoreProvider>,
   );
 }
 
+function ScenariosProbe() {
+  const { workspace } = useWorkspace();
+  return <output data-testid="scenario-state">{JSON.stringify(workspace.scenarios)}</output>;
+}
+
 describe("ScenariosView", () => {
+  it("creates a deep copy with a new ID and collision-safe name", () => {
+    const source: ScenarioDelta = {
+      ...delta,
+      simMode: "montecarlo",
+      mcConfig: { runs: 37, seed: 91, stdDev: { equity: 0.2, bond: 0.08, cash: 0.03 } },
+      historicalConfig: { startYear: 1900 },
+      benefits: { cpp: false, oas: true, gis: true },
+      withdrawalStrategy: "tax-minimizing",
+      overrides: {
+        retirementAge: 61,
+        returnAssumptions: { equity: 0.055, bond: 0.025, cash: 0.01 },
+        withdrawalOrder: ["nonreg", "tfsa", "rrsp"],
+      },
+    };
+    const copy = duplicateScenario(source, [source.name, "Copy of Retire 3 years earlier"]);
+    expect(copy.id).not.toBe(source.id);
+    expect(copy.name).toBe("Copy of Retire 3 years earlier (2)");
+    expect(copy).toMatchObject({ simMode: "montecarlo", mcConfig: source.mcConfig, historicalConfig: source.historicalConfig, benefits: source.benefits, withdrawalStrategy: "tax-minimizing", overrides: source.overrides });
+    expect(copy.mcConfig).not.toBe(source.mcConfig);
+    expect(copy.mcConfig!.stdDev).not.toBe(source.mcConfig!.stdDev);
+    expect(copy.overrides.withdrawalOrder).not.toBe(source.overrides.withdrawalOrder);
+  });
+
+  it("disables scenario run buttons while the shared run is active and offers cancellation", () => {
+    const ws = makeWorkspace();
+    ws.scenarios.push(delta);
+    const simulationRunner: SimulationRunner = () => new Promise(() => {});
+    renderView(ws, simulationRunner);
+    const runButton = screen.getByRole("button", { name: /run retire 3 years earlier/i }) as HTMLButtonElement;
+    fireEvent.click(runButton);
+    expect(runButton.disabled).toBe(true);
+    expect(screen.getByRole("button", { name: "Cancel projection" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel projection" }));
+  });
+
   it("empty state offers creating the first scenario", () => {
     renderView();
     expect(screen.getByText(/no scenarios yet/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: /new scenario/i })).toBeTruthy();
   });
 
+  it("duplicates a scenario into a uniquely named independent editable copy", () => {
+    const ws = makeWorkspace();
+    const source: ScenarioDelta = {
+      ...delta,
+      simMode: "historical",
+      mcConfig: { runs: 37, seed: 91, stdDev: { equity: 0.2, bond: 0.08, cash: 0.03 } },
+      historicalConfig: { startYear: 1900 },
+      benefits: { cpp: false, oas: true, gis: true },
+      withdrawalStrategy: "tax-minimizing",
+      overrides: {
+        retirementAge: 61,
+        returnAssumptions: { equity: 0.055, bond: 0.025, cash: 0.01 },
+        withdrawalOrder: ["nonreg", "tfsa", "rrsp"],
+      },
+    };
+    ws.scenarios.push(source, { ...delta, id: "existing-copy", name: "Copy of Retire 3 years earlier" });
+    render(<StoreProvider initialWorkspace={ws} initialBaseScenario={DEFAULT_SCENARIO_BASE}><ScenariosView /><ScenariosProbe /></StoreProvider>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate Retire 3 years earlier" }));
+    const copiedName = screen.getByLabelText("Name") as HTMLInputElement;
+    expect(copiedName.value).toBe("Copy of Retire 3 years earlier (2)");
+    expect((screen.getByLabelText("Simulation mode") as HTMLSelectElement).value).toBe("historical");
+    expect((screen.getByLabelText("Historical start year") as HTMLInputElement).value).toBe("1,900");
+
+    fireEvent.change(screen.getByLabelText("Retirement age override"), { target: { value: "63" } });
+    const updated = screen.getByText(/retirement age 63/i);
+    expect(updated.closest("li")!.textContent).toContain("Copy of Retire 3 years earlier (2)");
+    const originalItem = screen.getByText("Retire 3 years earlier").closest("li")!;
+    expect(originalItem.textContent).toContain("retirement age 61");
+    expect(originalItem.textContent).toContain("1900");
+    const persistedScenarios = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
+    const copiedDelta = persistedScenarios.find(item => item.name === copiedName.value);
+    expect(copiedDelta).toMatchObject({
+      simMode: "historical", mcConfig: source.mcConfig, historicalConfig: { startYear: 1900 },
+      benefits: source.benefits, withdrawalStrategy: "tax-minimizing",
+      overrides: { retirementAge: 63, returnAssumptions: source.overrides.returnAssumptions, withdrawalOrder: source.overrides.withdrawalOrder },
+    });
+    expect(persistedScenarios.find(item => item.id === source.id)).toMatchObject({
+      name: source.name, simMode: "historical", historicalConfig: { startYear: 1900 }, benefits: source.benefits, withdrawalStrategy: "tax-minimizing", overrides: source.overrides,
+    });
+
+  });
+
   it("create saves on edit, without a Save button, and later edits update the same delta", () => {
     renderView();
     fireEvent.click(screen.getByRole("button", { name: /new scenario/i }));
     expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
-    const nameBox = screen.getByLabelText(/name/i);
+    const nameBox = screen.getByLabelText(/^name$/i);
     fireEvent.change(nameBox, { target: { value: "Retire 3y earlier" } });
     const item = screen.getByText(/retire 3y earlier/i);
     expect(item.closest("li")!.textContent).toMatch(/retirement age 65/i);
@@ -44,36 +130,110 @@ describe("ScenariosView", () => {
     expect(screen.getAllByText(/retire 3y earlier/i)[0]!.closest("li")!.textContent).toMatch(/retirement age 62/i);
   });
 
-  it("existing delta lists its overrides and can run, showing a summary strip", () => {
+  it("existing delta lists its overrides and can run, showing a summary strip", async () => {
     const ws = makeWorkspace(makeSamplePlan());
     ws.scenarios.push(delta);
     renderView(ws);
     fireEvent.click(screen.getByRole("button", { name: /run retire 3 years earlier/i }));
     const item = screen.getByText(/retire 3 years earlier/i);
-    const strip = within(item.closest("li")!).getByText(/final net worth/i);
-    expect(strip).toBeTruthy();
+    await waitFor(() => expect(within(item.closest("li")!).getByText(/final net worth/i)).toBeTruthy());
   });
 
-  it("edit loads overrides into the form; withdrawal order duplicate gets an inline error", () => {
+  it("lets TFSA move across scenario priorities without a duplicate intermediate and keeps cash placement", () => {
     const ws = makeWorkspace();
     ws.scenarios.push(delta);
     renderView(ws);
     fireEvent.click(screen.getByRole("button", { name: /edit/i }));
     const first = screen.getByLabelText(/1st drawn/i) as HTMLSelectElement;
     expect(first.value).toBe("tfsa");
-    fireEvent.change(first, { target: { value: "tfsa" } });
-    fireEvent.change(screen.getByLabelText(/2nd drawn/i), { target: { value: "tfsa" } });
-    expect(screen.getByText(/choose each withdrawal account exactly once/i)).toBeTruthy();
+    expect(Array.from(first.options).map(option => option.textContent)).toEqual(["TFSA", "Non-registered", "RRSP/RRIF"]);
+    const second = screen.getByLabelText(/2nd drawn/i) as HTMLSelectElement;
+    fireEvent.change(second, { target: { value: "tfsa" } });
+    expect(first.value).toBe("nonreg");
+    expect(second.value).toBe("tfsa");
+    expect((screen.getByLabelText(/3rd drawn/i) as HTMLSelectElement).value).toBe("rrsp");
+    expect(screen.queryByText(/choose each investment withdrawal account exactly once/i)).toBeNull();
+    expect(screen.getByText(/withdrawal order Non-registered → TFSA → RRSP\/RRIF/)).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Cash withdrawal order"), { target: { value: "2" } });
+    expect(screen.getByText(/withdrawal order Non-registered → TFSA → Cash account → RRSP\/RRIF/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Cash withdrawal order"), { target: { value: "automatic" } });
+    expect(screen.getByText(/withdrawal order Non-registered → TFSA → RRSP\/RRIF/)).toBeTruthy();
   });
 
-  it("montecarlo and historical sim modes are visible but disabled with a Phase-3 hint", () => {
+  it("Monte Carlo mode exposes seed and ensemble settings", async () => {
     renderView();
     fireEvent.click(screen.getByRole("button", { name: /new scenario/i }));
-    for (const mode of ["montecarlo", "historical"]) {
-      const option = screen.getByRole("option", { name: new RegExp(mode, "i") });
-      expect(option).toBeTruthy();
-    }
-    expect(screen.getByText(/coming in phase 3/i)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Simulation mode"), { target: { value: "montecarlo" } });
+    expect(screen.getByLabelText("Monte Carlo runs")).toBeTruthy();
+    expect(screen.getByLabelText("Monte Carlo seed")).toBeTruthy();
+    expect(screen.getByLabelText("Equity standard deviation (%)")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Monte Carlo runs"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "MC forecast" } });
+    fireEvent.click(screen.getByRole("button", { name: /run mc forecast/i }));
+    expect(await screen.findByText(/% success/i)).toBeTruthy();
+    expect(screen.getByText(/final net worth p10/i)).toBeTruthy();
+  });
+
+  it("enables historical scenarios with a validated earliest rolling-window year", () => {
+    renderView();
+    fireEvent.click(screen.getByRole("button", { name: /new scenario/i }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "JST historical" } });
+    fireEvent.change(screen.getByLabelText("Simulation mode"), { target: { value: "historical" } });
+    expect(screen.getByLabelText("Historical start year")).toBeTruthy();
+    expect(document.body.textContent).toContain("Jordà-Schularick-Taylor Macrohistory Database");
+    const item = screen.getByText("JST historical").closest("li")!;
+    expect(item.textContent).toContain("Historical");
+    expect(item.textContent).toContain("JST historical windows from 1872");
+    expect(screen.queryByLabelText("Equity %")).toBeNull();
+  });
+
+  it("saves benefit and tax strategy overrides with clear configured-stream and GIS dependency copy", () => {
+    const workspace = makeWorkspace();
+    workspace.plan.incomes = workspace.plan.incomes.filter(income => income.kind !== "cpp" && income.kind !== "oas");
+    render(<StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE}><ScenariosView /><ScenariosProbe /></StoreProvider>);
+    fireEvent.click(screen.getByRole("button", { name: /new scenario/i }));
+    expect(screen.getByText(/no CPP income stream is configured/i)).toBeTruthy();
+    expect(screen.getByText(/no OAS income stream is configured/i)).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Scenario include CPP"));
+    fireEvent.click(screen.getByLabelText("Scenario include OAS"));
+    expect((screen.getByLabelText("Scenario include GIS") as HTMLInputElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Withdrawal strategy"), { target: { value: "tax-minimizing" } });
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Tax plan" } });
+    const saved = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
+    expect(saved[0]).toMatchObject({
+      benefits: { cpp: false, oas: false, gis: false }, withdrawalStrategy: "tax-minimizing",
+    });
+  });
+
+  it("keeps scenario benefit and strategy choices inherited when only the name changes, and refreshes them from base", () => {
+    const workspace = makeWorkspace();
+    workspace.scenarios.push({ ...delta, overrides: {} });
+    render(<StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE}><BaseScenarioSettings /><ScenariosView /><ScenariosProbe /></StoreProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Renamed inherited scenario" } });
+    let stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
+    expect(stored[0]).not.toHaveProperty("benefits");
+    expect(stored[0]).not.toHaveProperty("withdrawalStrategy");
+
+    fireEvent.click(screen.getByLabelText("Scenario include CPP"));
+    expect(screen.getByRole("button", { name: "Use base benefit choices" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Use base benefit choices" }));
+    stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
+    expect(stored[0]).not.toHaveProperty("benefits");
+
+    fireEvent.click(screen.getByLabelText("Base include CPP"));
+    expect((screen.getByLabelText("Scenario include CPP") as HTMLInputElement).checked).toBe(false);
+    fireEvent.change(screen.getByLabelText("Base withdrawal strategy"), { target: { value: "tax-minimizing" } });
+    expect((screen.getByLabelText("Withdrawal strategy") as HTMLSelectElement).value).toBe("tax-minimizing");
+    stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
+    expect(stored[0]).not.toHaveProperty("withdrawalStrategy");
+    fireEvent.change(screen.getByLabelText("Withdrawal strategy"), { target: { value: "manual" } });
+    stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
+    expect(stored[0]).toHaveProperty("withdrawalStrategy", "manual");
+    fireEvent.click(screen.getByRole("button", { name: "Use base withdrawal strategy" }));
+    stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
+    expect(stored[0]).not.toHaveProperty("withdrawalStrategy");
   });
 
   it("delete removes the scenario after the plain confirm dialog", () => {
@@ -130,7 +290,7 @@ describe("ScenariosView", () => {
     // An invalid draft blocks any name-only dispatch edge case: even a valid name
     // cannot apply while the age is fractional.
     fireEvent.change(screen.getByLabelText(/retirement age override/i), { target: { value: "65.5" } });
-    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Fractional" } });
+    fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Fractional" } });
     expect(screen.getByText(/retirement age must be a whole number of years/i)).toBeTruthy();
     expect(screen.queryByText(/fractional/i)).toBeNull();
   });

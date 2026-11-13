@@ -73,4 +73,15 @@ describe("computeComparison", () => {
     const rows = computeComparison([baseRun], null);
     expect(rows[0]?.netWorthAtAges).toEqual([{ x: 45, y: 390_000 }]);
   });
+
+  it("keeps ensemble metrics distinct from the representative result path", () => {
+    const monteCarlo: RunRecord = {
+      ...baseRun,
+      scenario: scenario("mc", { simMode: "montecarlo", mcConfig: { runs: 1_000, seed: 1, stdDev: { equity: 0.18, bond: 0.06, cash: 0.02 } } }),
+      analysis: { mode: "montecarlo", successRate: 0.72, percentileNetWorth: { p10: 10, p50: 20, p90: 30 }, representativeRun: 500 },
+    };
+    const row = computeComparison([monteCarlo], null)[0]!;
+    expect(row.finalNetWorth).toBe(660_000); // the coherent representative path's result
+    expect(row.monteCarlo).toEqual(monteCarlo.analysis); // ensemble summaries remain separate
+  });
 });

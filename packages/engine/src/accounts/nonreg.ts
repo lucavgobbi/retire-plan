@@ -16,7 +16,7 @@ export interface NonregState {
 }
 
 export type YearReturn = { equity: number; bond: number; cash: number };
-export type AssetMix = AccountPlan["assetMix"];
+export type AssetMix = NonNullable<AccountPlan["assetMix"]>;
 
 /** The year's asset-class return weighted by the account's mix. */
 export function blendedReturn(yearReturn: YearReturn, assetMix: AssetMix): number {

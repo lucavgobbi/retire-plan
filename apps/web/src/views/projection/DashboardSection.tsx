@@ -15,16 +15,18 @@ import { TaxStackChart } from "./charts/TaxStackChart";
 
 /** Dashboard charts above the year table; each chart reads its data via an adapter. */
 export function DashboardSection({ result }: { result?: SimulationResult }) {
-  const { run, runProjection, error } = useProjectionRun();
+  const { run, runProjection, error, isRunning, cancelRun, runCancelled } = useProjectionRun();
   if (!result) {
     // Standalone use (charts tests / direct tab state): run on demand here.
     if (!run) {
       return (
         <section aria-label="Dashboard" className="dashboard empty-state">
           <p className="hint">Run the projection to populate the dashboard charts.</p>
-          <button type="button" onClick={() => runProjection()}>
+          <button type="button" disabled={isRunning} onClick={() => { void runProjection(); }}>
             Run projection
           </button>
+          {isRunning && <><p role="status">Projection running in the background…</p><button type="button" onClick={cancelRun}>Cancel projection</button></>}
+          {runCancelled && <p role="status">Projection cancelled.</p>}
           {error && <p role="alert">The projection could not run: {error}</p>}
         </section>
       );
@@ -57,9 +59,9 @@ export function DashboardSection({ result }: { result?: SimulationResult }) {
     },
     {
       title: "Account drawdown",
-      subtitle: "TFSA · RRSP · Non-registered · cash reserve balances",
+      subtitle: "TFSA · RRSP · Non-registered · cash accounts + reserve balances",
       ariaLabel: "Account drawdown chart",
-      legend: ["TFSA", "RRSP", "Non-registered", "Cash reserve", "Other assets"].map((label, i) => ({ label, color: STACK_COLORS[i]! })),
+      legend: ["TFSA", "RRSP", "Non-registered", "Cash accounts + reserve", "Other assets"].map((label, i) => ({ label, color: STACK_COLORS[i]! })),
       body: <DrawDownChart points={drawdownSeries(result.years)} />,
     },
   ];

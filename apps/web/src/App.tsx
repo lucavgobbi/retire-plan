@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ROUTES, RouteContent, type Route } from "./routes";
 import { StoreProvider, useWorkspace, type Workspace } from "./store/api";
 import { storage, useAutosave, type StorageProvider, type RecoveryOutcome } from "./storage";
@@ -41,9 +41,31 @@ function AutosaveStatus({ provider }: { provider: StorageProvider }) {
   return <p className="save-status" aria-label="Workspace save status" role="status" aria-live="polite">{autosave.error ? `Could not save locally: ${autosave.error}` : autosave.isCurrentSaved ? "Saved on this device" : autosave.status === "saving" ? "Saving locally…" : "Workspace changes waiting for local save…"}</p>;
 }
 
+/** Modal settings dialog: plan file controls plus base projection settings. */
+function SettingsDialog({ provider, onClose }: { provider?: StorageProvider; onClose: () => void }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    panelRef.current?.focus();
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return <div className="dialog-overlay" onClick={onClose}>
+    <div ref={panelRef} role="dialog" aria-modal="true" aria-label="Settings" tabIndex={-1} className="dialog-panel" onClick={event => event.stopPropagation()}>
+      <div className="dialog-header">
+        <h2>Settings</h2>
+        <button type="button" aria-label="Close settings" onClick={onClose}>✕</button>
+      </div>
+      {provider && <FileControls provider={provider} />}
+      <BaseScenarioSettings />
+    </div>
+  </div>;
+}
+
 export function AppShell({ provider, sample = false }: { provider?: StorageProvider; sample?: boolean }) {
   const { workspace, activeRunId, editNotice } = useWorkspace();
   const [route, setRoute] = useState<Route>("Plan");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   useEffect(() => { if (activeRunId !== null) setRoute("Projection"); }, [activeRunId]);
   useEffect(() => {
     if (route !== "Projection" || activeRunId === null) return;
@@ -55,16 +77,17 @@ export function AppShell({ provider, sample = false }: { provider?: StorageProvi
     <a className="skip-link" href="#main">Skip to content</a>
     <header className="app-header">
       <div><span className="eyebrow">PRIVATE · ONTARIO · CAD</span><div className="brand">RetirePlan</div></div>
-      <p>Plan today. See the years ahead.</p>
       <span className="local-badge">Local data only</span>
+      <button type="button" className="settings-button" aria-label="Settings" title="Settings" onClick={() => setSettingsOpen(true)}>
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3.2" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+      </button>
     </header>
+    {settingsOpen && <SettingsDialog provider={provider} onClose={() => setSettingsOpen(false)} />}
     <nav className="main-nav" aria-label="Main views">{ROUTES.map(name => <button key={name} type="button" aria-current={name === route ? "page" : undefined} onClick={() => setRoute(name)}>{name}</button>)}</nav>
     <main id="main">
       {sample && workspace.meta?.name === "Sample plan" && <div className="banner">Sample plan — edit the example or import your own JSON workspace.</div>}
       {editNotice && <p className="edit-notice" role="status">{editNotice}</p>}
       {provider && <AutosaveStatus provider={provider} />}
-      {route === "Plan" && provider && <FileControls provider={provider} />}
-      {route === "Plan" && <BaseScenarioSettings />}
       <RouteContent route={route} />
     </main>
     <footer className="app-footer">Ontario planning assumptions · 2026 tax tables · Deterministic projections</footer>

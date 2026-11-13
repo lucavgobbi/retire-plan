@@ -40,10 +40,11 @@ describe("buildPlanFile / export text", () => {
 describe("parsePlanFile", () => {
   it("is a full round-trip incl. optional non-reg bookValue", () => {
     const ws = makeSampleWorkspace();
-    ws.baseScenario = { retirementAge: 61, returnAssumptions: { equity: 0.04, bond: 0.015, cash: 0.01 }, withdrawalOrder: ["rrsp", "nonreg", "tfsa"] };
+    ws.baseScenario = { retirementAge: 61, returnAssumptions: { equity: 0.04, bond: 0.015, cash: 0.01 }, withdrawalOrder: ["cash", "rrsp", "nonreg", "tfsa"] };
     const withAcb = JSON.parse(JSON.stringify(ws)) as Workspace;
     const nonreg = withAcb.plan.accounts.find((a) => a.type === "nonreg");
     if (nonreg) (nonreg as { bookValue?: number }).bookValue = 21_500;
+    withAcb.plan.accounts.push({ id: "savings", name: "Savings", type: "cash", balance: 12_000, interestRate: 0.035 });
     const text = workspaceToText(withAcb);
     const parsed = parsePlanFile(JSON.parse(text));
     expect(parsed.ok).toBe(true);
@@ -51,6 +52,25 @@ describe("parsePlanFile", () => {
       const rebuilt = buildPlanFile(parsed.workspace);
       expect(rebuilt).toEqual(buildPlanFile(withAcb));
       expect((parsed.workspace.plan.accounts.find((a) => a.type === "nonreg") as { bookValue?: number }).bookValue).toBe(21_500);
+      expect(parsed.workspace.plan.accounts.find((a) => a.type === "cash")).toMatchObject({ id: "savings", name: "Savings", balance: 12_000, interestRate: 0.035 });
+      expect(parsed.workspace.plan.accounts.find((a) => a.type === "cash")?.assetMix).toBeUndefined();
+    }
+  });
+
+  it("round-trips scenario benefit choices and withdrawal strategy", () => {
+    const ws = makeSampleWorkspace();
+    ws.baseScenario = {
+      retirementAge: 65, returnAssumptions: { equity: 0.05, bond: 0.02, cash: 0 }, withdrawalOrder: ["tfsa", "nonreg", "rrsp"],
+      benefits: { cpp: true, oas: true, gis: false }, withdrawalStrategy: "tax-minimizing",
+    };
+    const scenario = ws.scenarios[0]!;
+    scenario.benefits = { cpp: false, oas: true, gis: true };
+    scenario.withdrawalStrategy = "tax-minimizing";
+    const parsed = parsePlanFile(JSON.parse(workspaceToText(ws)));
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.workspace.scenarios[0]).toMatchObject({ benefits: scenario.benefits, withdrawalStrategy: "tax-minimizing" });
+      expect(parsed.workspace.baseScenario).toMatchObject({ benefits: ws.baseScenario.benefits, withdrawalStrategy: "tax-minimizing" });
     }
   });
 

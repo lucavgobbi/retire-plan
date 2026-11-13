@@ -14,6 +14,9 @@ export interface AssumptionEntry {
   body: string;
 }
 
+export const TAX_MINIMIZING_STRATEGY_HELP =
+  "A bounded planning heuristic requires full funding in every modeled year, then prioritizes total income tax through your end age; it is not a global optimum. In years with a planned draw, employee RRSP savings-policy steps are skipped to avoid draw-and-redeposit circularity. Employer-match RRSP deposits and other savings rules remain available; remaining surplus follows those rules or is retained as cash. Stochastic outcomes can differ from the planning comparison.";
+
 export const ASSUMPTIONS: AssumptionEntry[] = [
   {
     id: "mortgage-rate-convention",

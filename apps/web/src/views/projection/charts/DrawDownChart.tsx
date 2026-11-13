@@ -12,7 +12,7 @@ interface Point {
   otherAssets?: number;
 }
 
-const SERIES = ["TFSA", "RRSP", "Non-registered", "Cash reserve", "Other assets"] as const;
+const SERIES = ["TFSA", "RRSP", "Non-registered", "Cash accounts + reserve", "Other assets"] as const;
 
 export function DrawDownChart({ points }: { points: Point[] }) {
   const xs = points.map((p) => p.x);
@@ -41,9 +41,9 @@ export function DrawDownChart({ points }: { points: Point[] }) {
   );
 
   return (
-    <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="Stacked account balances by age: TFSA, RRSP, non-registered, cash reserve and other assets" role="img">
+    <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="Stacked account balances by age: TFSA, RRSP, non-registered, cash accounts plus reserve, and other assets" role="img">
       <title>Account drawdown over age</title>
-      <desc>Stacked areas for TFSA, RRSP, non-registered, cash reserve and other asset balances at each age.</desc>
+      <desc>Stacked areas for TFSA, RRSP, non-registered, total cash across named accounts and reserve, and other asset balances at each age.</desc>
       {yTicks.map((t) => (
         <g key={t}>
           <line x1={PAD.left} x2={W - PAD.right} y1={yScale(t, yDomain)} y2={yScale(t, yDomain)} className="chart-gridline" />

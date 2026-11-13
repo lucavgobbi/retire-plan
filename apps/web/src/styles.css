@@ -3,6 +3,16 @@
 @media(max-width:650px){.app-shell{padding:0 12px}.app-header{gap:10px;flex-wrap:wrap}.app-header p{display:none}.main-nav{overflow:auto}.main-nav button{padding:10px 13px}.panel,.card,.item-card{padding:14px}.section-header,.view-header{flex-direction:column}.chart-grid,.dashboard-grid{grid-template-columns:1fr}}
 @media print{.app-header,.main-nav,.app-footer,button,.no-print{display:none!important}.app-shell{max-width:none;padding:0}body{background:white;color:black}.panel,.card{border:0;padding:0}.table-scroll,.table-container{overflow:visible}}
 html,body,#root,.app-shell,main{min-width:0;max-width:100%}
+.app-header{position:sticky;top:0;z-index:40;background:#f2f4f1;box-shadow:0 1px 0 #cdd8cf;padding:14px 0}
+.settings-button{margin-left:.75rem;display:inline-flex;align-items:center;justify-content:center;padding:.55rem;color:#3c4f4a;background:transparent;border-color:transparent}
+.settings-button:hover{background:#e0ebe2;color:#173e34}
+.dialog-overlay{position:fixed;inset:0;z-index:100;background:rgba(23,43,38,.45);display:flex;align-items:flex-start;justify-content:center;padding:3rem 1rem;overflow:auto}
+.dialog-panel{background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 12px 40px rgba(23,43,38,.25);max-width:680px;width:100%;padding:20px 22px;outline:none}
+.dialog-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem}
+.dialog-header h2{margin:0}
+.dialog-header button{border:0;background:transparent;font-size:1.1rem;color:var(--muted);padding:.35rem .55rem}
+.dialog-header button:hover{background:#edf3ef;color:#233b3a}
+@media print{.settings-button,.dialog-overlay{display:none!important}}
 .panel,.card,.item-card,.form-grid,.fields-grid,.field,.form-field{min-width:0}
 .form-grid,.fields-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));align-items:end}
 .field,.form-field{justify-content:flex-end}

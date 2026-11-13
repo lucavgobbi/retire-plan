@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useProjectionRun, useWorkspace } from "../../store/api";
 import { DashboardSection } from "./DashboardSection";
 import { ProjectionTable } from "./ProjectionTable";
 import { FailBanner } from "./FailBanner";
+import { RunAnalysisSummary } from "./RunAnalysisSummary";
 import "./projection.css";
 
 /**
@@ -12,12 +14,15 @@ import "./projection.css";
  * `birthYear` stamp fall back to the plan's profile birth year only for the table axis.
  */
 export function ProjectionView() {
+  const [jumpAge, setJumpAge] = useState<number | null>(null);
+  const [jumpKey, setJumpKey] = useState(0);
   const workspace = useWorkspace();
   const { validationErrors, runError } = workspace;
-  const { run, runProjection, stale } = useProjectionRun();
+  const { run, runProjection, stale, isRunning, runCancelled, cancelRun } = useProjectionRun();
 
   const failureAge = run && !run.result.summary.success ? (run.result.summary.failureAge ?? null) : null;
   const birthYear = run?.birthYear ?? workspace.workspace.plan.profile.birthYear;
+  const historicalSourceStartYear = run?.analysis?.mode === "historical" ? run.analysis.representativeStartYear : undefined;
 
   return (
     <section id="projection-results" tabIndex={-1} aria-label="Projection" className="projection-view">
@@ -29,9 +34,14 @@ export function ProjectionView() {
             Plan tab before running.
           </p>
         )}
-        <button type="button" onClick={() => runProjection()} disabled={validationErrors.length > 0}>
+        <button type="button" onClick={() => { void runProjection(); }} disabled={validationErrors.length > 0 || isRunning}>
           Run projection
         </button>
+        {isRunning && <>
+          <p role="status" aria-live="polite">Projection running in the background…</p>
+          <button type="button" onClick={cancelRun}>Cancel projection</button>
+        </>}
+        {runCancelled && <p role="status">Projection cancelled.</p>}
         {runError && (
           <p role="alert" className="run-error">
             The projection could not run: {runError}
@@ -54,9 +64,11 @@ export function ProjectionView() {
               </>
             )}
           </p>
-          {failureAge !== null && <FailBanner summary={run.result.summary} />}
+          {failureAge !== null && <FailBanner summary={run.result.summary} onJump={(age) => { setJumpAge(age); setJumpKey((key) => key + 1); }} />}
+          <RunAnalysisSummary run={run} />
+          {run.analysis && <p className="hint">Year table audit counts and failures describe the representative path shown below.</p>}
           <DashboardSection result={run.result} />
-          <ProjectionTable result={run.result} birthYear={birthYear} />
+          <ProjectionTable result={run.result} birthYear={birthYear} historicalSourceStartYear={historicalSourceStartYear} jumpAge={jumpAge} jumpKey={jumpKey} />
         </>
       )}
     </section>

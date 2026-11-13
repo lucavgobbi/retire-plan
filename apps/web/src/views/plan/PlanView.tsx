@@ -9,6 +9,7 @@ import type {
   SavingsTarget,
 } from "@retire-plan/engine";
 import { calculateCurrentAge, useWorkspace } from "../../store/api";
+import { NumberTextInput } from "../../components/NumberTextInput";
 import "./planView.css";
 
 type Tab = "Profile" | "Accounts" | "Assets & debts" | "Income" | "Expenses" | "Savings";
@@ -20,12 +21,12 @@ function makeId(prefix: string): string {
     : `${prefix}-${Date.now()}`;
 }
 
-function TextInput({ label, value, onChange, step, min, optional = false }: {
-  label: string; value: string; onChange: (value: string) => void; step?: string; min?: string; optional?: boolean;
+function TextInput({ label, value, onChange, step, min, optional = false, group = true }: {
+  label: string; value: string; onChange: (value: string) => void; step?: string; min?: string; optional?: boolean; group?: boolean;
 }) {
   return <label className="plan-field"><span className="field-label">{label}{optional && <span className="plan-optional"> · optional</span>}</span>
-    <input type="number" inputMode="decimal" step={step ?? "any"} min={min} value={value}
-      onChange={event => onChange(event.currentTarget.value)} />
+    <NumberTextInput step={step ?? "any"} min={min} group={group} allowNegative={min === undefined || Number(min) < 0}
+      value={value} onChange={onChange} />
   </label>;
 }
 
@@ -133,53 +134,62 @@ function ApplyNotice({ errors, applied }: { errors: string[]; applied: boolean }
     : <p className="plan-help">Valid edits apply automatically.</p>;
 }
 
-interface AccountDraft { id: string; type: AccountPlan["type"]; balance: string; bookValue: string; equity: string; bond: string; cash: string }
-const ACCOUNT_LABELS: Record<AccountPlan["type"], string> = { tfsa: "TFSA", rrsp: "RRSP", nonreg: "Non-registered" };
+interface AccountDraft { id: string; name: string; type: AccountPlan["type"]; balance: string; bookValue: string; equity: string; bond: string; cash: string; interestRate: string }
+const ACCOUNT_LABELS: Record<AccountPlan["type"], string> = { tfsa: "TFSA", rrsp: "RRSP", nonreg: "Non-registered", cash: "Cash account" };
 function accountDraft(account: AccountPlan): AccountDraft {
-  return { id: account.id, type: account.type, balance: String(account.balance), bookValue: account.bookValue === undefined ? "" : String(account.bookValue), equity: String(account.assetMix.equity * 100), bond: String(account.assetMix.bond * 100), cash: String(account.assetMix.cash * 100) };
+  if (account.type === "cash") return { id: account.id, name: account.name ?? "", type: "cash", balance: String(account.balance), bookValue: "", equity: "", bond: "", cash: "", interestRate: String((account.interestRate ?? 0) * 100) };
+  const mix = account.assetMix ?? { equity: 0.6, bond: 0.3, cash: 0.1 };
+  return { id: account.id, name: account.name ?? "", type: account.type, balance: String(account.balance), bookValue: account.bookValue === undefined ? "" : String(account.bookValue), equity: String(mix.equity * 100), bond: String(mix.bond * 100), cash: String(mix.cash * 100), interestRate: "0" };
 }
 function readAccountDraft(draft: AccountDraft): { errors: string[]; item: AccountPlan } {
   const errors: string[] = [];
   const balance = requiredNumber(draft.balance, "Balance", errors, 0);
+  if (draft.type === "cash") {
+    const interestRate = requiredNumber(draft.interestRate, "Annual interest rate", errors, 0) / 100;
+    return { errors, item: { id: draft.id, name: draft.name.trim() === "" ? undefined : draft.name.trim(), type: "cash", balance, bookValue: undefined, assetMix: undefined, interestRate } };
+  }
   const bookValue = draft.type === "nonreg" ? optionalNumber(draft.bookValue, "ACB / book value", errors, 0) : undefined;
   const equity = requiredNumber(draft.equity, "Equity allocation", errors, 0);
   const bond = requiredNumber(draft.bond, "Bond allocation", errors, 0);
   const cash = requiredNumber(draft.cash, "Cash allocation", errors, 0);
   if (Math.abs(equity + bond + cash - 100) > 0.1) errors.push("Asset mix must total 100%.");
-  return { errors, item: { id: draft.id, type: draft.type, balance, bookValue, assetMix: { equity: equity / 100, bond: bond / 100, cash: cash / 100 } } };
+  return { errors, item: { id: draft.id, name: draft.name.trim() === "" ? undefined : draft.name.trim(), type: draft.type, balance, bookValue, assetMix: { equity: equity / 100, bond: bond / 100, cash: cash / 100 }, interestRate: undefined } };
 }
 function newAccountDraft(): AccountDraft {
-  return { id: makeId("account"), type: "tfsa", balance: "0", bookValue: "", equity: "60", bond: "30", cash: "10" };
+  return { id: makeId("account"), name: "", type: "tfsa", balance: "0", bookValue: "", equity: "60", bond: "30", cash: "10", interestRate: "0" };
 }
 
 function AccountForm({ account, onApply, onRemove }: { account: AccountPlan; onApply: (item: AccountPlan) => void; onRemove: () => void }) {
   const { draft, change, applied, errors } = useAutoApplyForm(account, accountDraft, readAccountDraft, onApply);
-  return <ItemForm title={`${ACCOUNT_LABELS[draft.type]} account`} errors={errors} onRemove={onRemove}>
-    <SelectField label="Account type" value={draft.type} choices={["tfsa", "rrsp", "nonreg"] as const} labels={ACCOUNT_LABELS} onChange={type => change({ type, ...(type !== "nonreg" ? { bookValue: "" } : {}) })} />
+  return <ItemForm title={draft.name.trim() || (draft.type === "cash" ? "Cash account" : `${ACCOUNT_LABELS[draft.type]} account`)} errors={errors} onRemove={onRemove}>
+    <TextField label="Name" value={draft.name} onChange={name => change({ name })} optional />
+    <SelectField label="Account type" value={draft.type} choices={["tfsa", "rrsp", "nonreg", "cash"] as const} labels={ACCOUNT_LABELS} onChange={type => change({ type, ...(type !== "nonreg" ? { bookValue: "" } : {}), ...(type === "cash" ? { equity: "", bond: "", cash: "", interestRate: "0" } : { equity: "60", bond: "30", cash: "10" }) })} />
     <TextInput label="Current balance ($)" value={draft.balance} min="0" onChange={balance => change({ balance })} />
+    {draft.type === "cash" ? <TextInput label="Annual interest rate (%)" value={draft.interestRate} min="0" onChange={interestRate => change({ interestRate })} /> : <>
     {draft.type === "nonreg" && <TextInput label="ACB / book value ($)" value={draft.bookValue} min="0" optional onChange={bookValue => change({ bookValue })} />}
     <TextInput label="Equity (%)" value={draft.equity} min="0" onChange={equity => change({ equity })} />
     <TextInput label="Bonds (%)" value={draft.bond} min="0" onChange={bond => change({ bond })} />
     <TextInput label="Cash (%)" value={draft.cash} min="0" onChange={cash => change({ cash })} />
+    </>}
     <ApplyNotice errors={errors} applied={applied} />
   </ItemForm>;
 }
 
 const ASSET_KIND_LABELS: Record<AssetPlan["kind"], string> = { "primary-home": "Primary home", other: "Other" };
-const SAVINGS_TARGET_LABELS: Record<SavingsTarget, string> = { tfsa: "TFSA", "rrsp-match": "RRSP (employer match)", rrsp: "RRSP", nonreg: "Non-registered", "mortgage-prepay": "Mortgage prepayment" };
+const SAVINGS_TARGET_LABELS: Record<SavingsTarget, string> = { tfsa: "TFSA", "rrsp-match": "RRSP (employer match)", rrsp: "RRSP", nonreg: "Non-registered", cash: "Cash accounts", "mortgage-prepay": "Mortgage prepayment" };
 interface AssetDraft { id: string; kind: AssetPlan["kind"]; name: string; value: string; appreciationRate: string; hasSale: boolean; saleAge: string; saleCosts: string }
-function assetDraft(asset: AssetPlan): AssetDraft { return { id: asset.id, kind: asset.kind, name: asset.name, value: String(asset.value), appreciationRate: String(asset.appreciationRate * 100), hasSale: !!asset.sellEvent, saleAge: asset.sellEvent ? String(asset.sellEvent.age) : "", saleCosts: asset.sellEvent ? String(asset.sellEvent.costsPct * 100) : "" }; }
+function assetDraft(asset: AssetPlan): AssetDraft { return { id: asset.id, kind: asset.kind, name: asset.name ?? "", value: String(asset.value), appreciationRate: String(asset.appreciationRate * 100), hasSale: !!asset.sellEvent, saleAge: asset.sellEvent ? String(asset.sellEvent.age) : "", saleCosts: asset.sellEvent ? String(asset.sellEvent.costsPct * 100) : "" }; }
 function newAssetDraft(): AssetDraft { return { id: makeId("asset"), kind: "primary-home", name: "", value: "0", appreciationRate: "2", hasSale: false, saleAge: "", saleCosts: "5" }; }
 function readAssetDraft(draft: AssetDraft): { errors: string[]; item: AssetPlan } {
   const errors: string[] = [];
-  // Name is now optional - removed required validation
+  // Name is optional: a blank name is simply not stored.
   const value = requiredNumber(draft.value, "Value", errors, 0);
   const appreciationRate = requiredNumber(draft.appreciationRate, "Appreciation rate", errors) / 100;
   const saleAge = draft.hasSale ? requiredInteger(draft.saleAge, "Sale age", errors, 1) : undefined;
   const saleCostsPct = draft.hasSale ? requiredNumber(draft.saleCosts, "Sale costs", errors, 0) : undefined;
   if (saleCostsPct !== undefined && saleCostsPct > 100) errors.push("Sale costs cannot exceed 100%.");
   const saleCosts = saleCostsPct === undefined ? undefined : saleCostsPct / 100;
-  return { errors, item: { id: draft.id, kind: draft.kind, name: draft.name, value, appreciationRate, ...(saleAge === undefined ? {} : { sellEvent: { age: saleAge, costsPct: saleCosts ?? 0 } }) } };
+  return { errors, item: { id: draft.id, kind: draft.kind, name: draft.name.trim() === "" ? undefined : draft.name.trim(), value, appreciationRate, ...(saleAge === undefined ? {} : { sellEvent: { age: saleAge, costsPct: saleCosts ?? 0 } }) } };
 }
 function AssetForm({ asset, onApply, onRemove }: { asset: AssetPlan; onApply: (item: AssetPlan) => void; onRemove: () => void }) {
   const { draft, change, applied, errors } = useAutoApplyForm(asset, assetDraft, readAssetDraft, onApply);
@@ -196,35 +206,37 @@ function AssetForm({ asset, onApply, onRemove }: { asset: AssetPlan; onApply: (i
     <ApplyNotice errors={errors} applied={applied} />
   </ItemForm>;
 }
-interface DebtDraft { id: string; rate: string; termYears: string; amortizationYears: string; balance: string; monthlyPayment: string }
-function debtDraft(debt: DebtPlan): DebtDraft { return { id: debt.id, rate: String(debt.rate * 100), termYears: String(debt.termYears), amortizationYears: String(debt.amortizationYears), balance: String(debt.balance), monthlyPayment: String(debt.monthlyPayment) }; }
-function newDebtDraft(): DebtDraft { return { id: makeId("mortgage"), rate: "4.5", termYears: "5", amortizationYears: "25", balance: "1", monthlyPayment: "1" }; }
+interface DebtDraft { id: string; paymentFrequency: DebtPlan["paymentFrequency"]; rate: string; termYears: string; amortizationYears: string; balance: string; monthlyPayment: string }
+const FREQUENCY_LABELS: Record<NonNullable<DebtPlan["paymentFrequency"]>, string> = { monthly: "Monthly (12×)", biweekly: "Biweekly (26×)", weekly: "Weekly (52×)" };
+function debtDraft(debt: DebtPlan): DebtDraft { return { id: debt.id, paymentFrequency: debt.paymentFrequency ?? "monthly", rate: String(debt.rate * 100), termYears: String(debt.termYears), amortizationYears: String(debt.amortizationYears), balance: String(debt.balance), monthlyPayment: String(debt.monthlyPayment) }; }
+function newDebtDraft(): DebtDraft { return { id: makeId("mortgage"), paymentFrequency: "monthly", rate: "4.5", termYears: "5", amortizationYears: "25", balance: "1", monthlyPayment: "1" }; }
 function readDebtDraft(draft: DebtDraft): { errors: string[]; item: DebtPlan } {
   const errors: string[] = [];
   const rate = requiredNumber(draft.rate, "Interest rate", errors, 0) / 100;
   const termYears = requiredInteger(draft.termYears, "Term", errors, 1);
   const amortizationYears = requiredInteger(draft.amortizationYears, "Amortization", errors, 1);
   const balance = requiredNumber(draft.balance, "Balance", errors, 0);
-  const monthlyPayment = requiredNumber(draft.monthlyPayment, "Monthly payment", errors, 0);
+  const monthlyPayment = requiredNumber(draft.monthlyPayment, "Payment", errors, 0);
   if (balance <= 0) errors.push("Mortgage balance must be greater than $0.");
-  if (monthlyPayment <= 0) errors.push("Monthly payment must be greater than $0.");
-  return { errors, item: { id: draft.id, kind: "mortgage", rate, termYears, amortizationYears, balance, monthlyPayment } };
+  if (monthlyPayment <= 0) errors.push("Payment must be greater than $0.");
+  return { errors, item: { id: draft.id, kind: "mortgage", rate, termYears, amortizationYears, balance, monthlyPayment, paymentFrequency: draft.paymentFrequency === "monthly" ? undefined : draft.paymentFrequency } };
 }
 function DebtForm({ debt, onApply, onRemove }: { debt: DebtPlan; onApply: (item: DebtPlan) => void; onRemove: () => void }) {
   const { draft, change, applied, errors } = useAutoApplyForm(debt, debtDraft, readDebtDraft, onApply);
   return <ItemForm title="Mortgage" errors={errors} onRemove={onRemove}>
     <TextInput label="Annual interest rate (%)" value={draft.rate} min="0" onChange={rate => change({ rate })} />
     <TextInput label="Mortgage balance ($)" value={draft.balance} min="0" onChange={balance => change({ balance })} />
-    <TextInput label="Monthly payment ($)" value={draft.monthlyPayment} min="0" onChange={monthlyPayment => change({ monthlyPayment })} />
+    <TextInput label="Payment ($)" value={draft.monthlyPayment} min="0" onChange={monthlyPayment => change({ monthlyPayment })} />
+    <SelectField label="Payment frequency" value={draft.paymentFrequency ?? "monthly"} choices={["monthly", "biweekly", "weekly"] as const} labels={FREQUENCY_LABELS} onChange={paymentFrequency => change({ paymentFrequency })} />
     <TextInput label="Term (years)" value={draft.termYears} min="1" step="1" onChange={termYears => change({ termYears })} />
     <TextInput label="Amortization (years)" value={draft.amortizationYears} min="1" step="1" onChange={amortizationYears => change({ amortizationYears })} />
     <ApplyNotice errors={errors} applied={applied} />
   </ItemForm>;
 }
 
-interface IncomeDraft { id: string; kind: IncomePlan["kind"]; annualAmount: string; startAge: string; endAge: string; raiseRate: string }
-function incomeDraft(income: IncomePlan): IncomeDraft { return { id: income.id, kind: income.kind, annualAmount: String(income.annualAmount), startAge: String(income.startAge), endAge: income.endAge === undefined ? "" : String(income.endAge), raiseRate: String(income.raiseRate * 100) }; }
-function newIncomeDraft(kind: IncomePlan["kind"], currentAge: number, retirementAge: number): IncomeDraft { return { id: makeId("income"), kind, annualAmount: "0", startAge: String(currentAge), endAge: kind === "employment" ? String(Math.max(currentAge, retirementAge - 1)) : "", raiseRate: kind === "employment" ? "2" : "0" }; }
+interface IncomeDraft { id: string; name: string; kind: IncomePlan["kind"]; annualAmount: string; startAge: string; endAge: string; raiseRate: string }
+function incomeDraft(income: IncomePlan): IncomeDraft { return { id: income.id, name: income.name ?? "", kind: income.kind, annualAmount: String(income.annualAmount), startAge: String(income.startAge), endAge: income.endAge === undefined ? "" : String(income.endAge), raiseRate: String(income.raiseRate * 100) }; }
+function newIncomeDraft(kind: IncomePlan["kind"], currentAge: number, retirementAge: number): IncomeDraft { return { id: makeId("income"), name: "", kind, annualAmount: "0", startAge: String(currentAge), endAge: kind === "employment" ? String(Math.max(currentAge, retirementAge - 1)) : "", raiseRate: kind === "employment" ? "2" : "0" }; }
 const INCOME_LABELS: Record<IncomePlan["kind"], string> = { employment: "Employment", cpp: "CPP", oas: "OAS", other: "Other" };
 function readIncomeDraft(draft: IncomeDraft): { errors: string[]; item: IncomePlan } {
   const errors: string[] = [];
@@ -233,11 +245,12 @@ function readIncomeDraft(draft: IncomeDraft): { errors: string[]; item: IncomePl
   const endAge = optionalInteger(draft.endAge, "End age", errors, 1);
   const raiseRate = requiredNumber(draft.raiseRate, "Annual raise (%)", errors) / 100;
   if (endAge !== undefined && endAge < startAge) errors.push("End age must be on or after start age.");
-  return { errors, item: { id: draft.id, kind: draft.kind, annualAmount, startAge, ...(endAge === undefined ? {} : { endAge }), raiseRate } };
+  return { errors, item: { id: draft.id, name: draft.name.trim() === "" ? undefined : draft.name.trim(), kind: draft.kind, annualAmount, startAge, ...(endAge === undefined ? {} : { endAge }), raiseRate } };
 }
 function IncomeForm({ income, onApply, onRemove }: { income: IncomePlan; onApply: (item: IncomePlan) => void; onRemove: () => void }) {
   const { draft, change, applied, errors } = useAutoApplyForm(income, incomeDraft, readIncomeDraft, onApply);
-  return <ItemForm title={draft.kind} errors={errors} onRemove={onRemove}>
+  return <ItemForm title={draft.name.trim() || INCOME_LABELS[draft.kind]} errors={errors} onRemove={onRemove}>
+    <TextField label="Name" value={draft.name} onChange={name => change({ name })} optional />
     <SelectField label="Income type" value={draft.kind} choices={["employment", "cpp", "oas", "other"] as const} labels={INCOME_LABELS} onChange={kind => change({ kind, ...(kind === "employment" ? {} : { endAge: "" }) })} />
     <TextInput label="Annual amount ($)" value={draft.annualAmount} min="0" onChange={annualAmount => change({ annualAmount })} />
     <TextInput label="Start age" value={draft.startAge} min="1" step="1" onChange={startAge => change({ startAge })} />
@@ -247,17 +260,17 @@ function IncomeForm({ income, onApply, onRemove }: { income: IncomePlan; onApply
   </ItemForm>;
 }
 interface ExpenseDraft { id: string; name: string; annualAmount: string; startAge: string; endAge: string; inflationRate: string }
-function expenseDraft(expense: ExpensePlan): ExpenseDraft { return { id: expense.id, name: expense.name, annualAmount: String(expense.annualAmount), startAge: String(expense.startAge), endAge: expense.endAge === undefined ? "" : String(expense.endAge), inflationRate: String(expense.inflationRate * 100) }; }
+function expenseDraft(expense: ExpensePlan): ExpenseDraft { return { id: expense.id, name: expense.name ?? "", annualAmount: String(expense.annualAmount), startAge: String(expense.startAge), endAge: expense.endAge === undefined ? "" : String(expense.endAge), inflationRate: String(expense.inflationRate * 100) }; }
 function newExpenseDraft(currentAge: number): ExpenseDraft { return { id: makeId("expense"), name: "", annualAmount: "0", startAge: String(currentAge), endAge: "", inflationRate: "2" }; }
 function readExpenseDraft(draft: ExpenseDraft): { errors: string[]; item: ExpensePlan } {
   const errors: string[] = [];
-  // Name is now optional - removed required validation
+  // Name is optional: a blank name is simply not stored.
   const annualAmount = requiredNumber(draft.annualAmount, "Annual amount", errors, 0);
   const startAge = requiredInteger(draft.startAge, "Start age", errors, 1);
   const endAge = optionalInteger(draft.endAge, "End age", errors, 1);
   const inflationRate = requiredNumber(draft.inflationRate, "Annual inflation (%)", errors) / 100;
   if (endAge !== undefined && endAge < startAge) errors.push("End age must be on or after start age.");
-  return { errors, item: { id: draft.id, name: draft.name, annualAmount, startAge, ...(endAge === undefined ? {} : { endAge }), inflationRate } };
+  return { errors, item: { id: draft.id, name: draft.name.trim() === "" ? undefined : draft.name.trim(), annualAmount, startAge, ...(endAge === undefined ? {} : { endAge }), inflationRate } };
 }
 function ExpenseForm({ expense, onApply, onRemove }: { expense: ExpensePlan; onApply: (item: ExpensePlan) => void; onRemove: () => void }) {
   const { draft, change, applied, errors } = useAutoApplyForm(expense, expenseDraft, readExpenseDraft, onApply);
@@ -286,7 +299,7 @@ function SavingsForm({ step, onApply, onRemove }: { step: SavingsPolicyStep; onA
   const { draft, change, applied, errors } = useAutoApplyForm(step, savingsDraft, readSavingsDraft, onApply);
   return <ItemForm title={`Priority ${draft.priority}`} errors={errors} onRemove={onRemove}>
     <TextInput label="Priority" value={draft.priority} min="1" onChange={priority => change({ priority })} />
-    <SelectField label="Savings target" value={draft.target} choices={["tfsa", "rrsp-match", "rrsp", "nonreg", "mortgage-prepay"] as const} labels={SAVINGS_TARGET_LABELS} onChange={target => change({ target })} />
+    <SelectField label="Savings target" value={draft.target} choices={["tfsa", "rrsp-match", "rrsp", "nonreg", "cash", "mortgage-prepay"] as const} labels={SAVINGS_TARGET_LABELS} onChange={target => change({ target })} />
     <TextInput label="Annual cap ($)" value={draft.perYearCap} min="0" optional onChange={perYearCap => change({ perYearCap })} />
     <TextInput label="Active through age" value={draft.untilAge} min="1" step="1" optional onChange={untilAge => change({ untilAge })} />
     {draft.target === "rrsp-match" && <TextInput label="Employer match (%)" value={draft.matchRate} min="0" onChange={matchRate => change({ matchRate })} />}
@@ -310,7 +323,7 @@ function addFromDraft<TDraft extends object, TItem extends { id: string }>(
 }
 
 function ProfileEditor() {
-  const { workspace, dispatch, baseScenario, validationErrors, runProjection, runError, calendarYear } = useWorkspace();
+  const { workspace, dispatch, baseScenario, validationErrors, runProjection, runError, isRunning, runCancelled, cancelRun, calendarYear } = useWorkspace();
   const profile = workspace.plan.profile;
   const { draft, change, applied, errors } = useAutoApplyForm(
     profile,
@@ -332,7 +345,7 @@ function ProfileEditor() {
     <p className="plan-help">Set the starting point and the last age to project. Valid edits apply automatically. Province is Ontario in this version.</p>
     <div>
       <div className="plan-fields">
-        <TextInput label="Birth year" value={draft.birthYear} min="1" step="1" onChange={birthYear => change({ birthYear })} />
+        <TextInput label="Birth year" value={draft.birthYear} min="1" step="1" onChange={birthYear => change({ birthYear })} group={false} />
         <label className="plan-field"><span className="field-label">Current age</span><input type="number" aria-label="Current age" readOnly value={previewAge !== null && previewAge > 0 ? previewAge : ""} aria-describedby="current-age-help" /><small id="current-age-help">Age reached in {calendarYear}, calculated from birth year.</small></label>
         <TextInput label="Projection end age" value={draft.endAge} min="1" step="1" onChange={endAge => change({ endAge })} />
         <label className="plan-field"><span className="field-label">Province</span><select value="ON" disabled><option value="ON">Ontario (ON)</option></select></label>
@@ -340,7 +353,11 @@ function ProfileEditor() {
       </div>
       <ErrorList errors={errors} />
       <ApplyNotice errors={errors} applied={applied} />
-      <div className="plan-actions"><button type="button" disabled={validationErrors.length > 0} onClick={() => runProjection()}>Run projection</button></div>
+      <div className="plan-actions">
+        <button type="button" disabled={validationErrors.length > 0 || isRunning} onClick={() => { void runProjection(); }}>Run projection</button>
+        {isRunning && <><span role="status">Projection running in the background…</span><button type="button" onClick={cancelRun}>Cancel projection</button></>}
+        {runCancelled && <span role="status">Projection cancelled.</span>}
+      </div>
     </div>
     {validationErrors.length > 0 && <div className="plan-errors" role="alert" aria-label="Plan validation errors"><strong>Plan needs attention</strong>{validationErrors.map(error => <p key={error}>{error}</p>)}</div>}
     {runError && <p role="alert" className="plan-errors">{runError}</p>}
@@ -350,9 +367,9 @@ function ProfileEditor() {
 function AccountsEditor() {
   const { workspace, dispatch } = useWorkspace(); const items = workspace.plan.accounts;
   const add = () => addFromDraft(dispatch, "accounts", newAccountDraft(), readAccountDraft);
-  return <section className="plan-panel"><div className="plan-section-heading"><div><h2>Accounts</h2><p>Balances, registered account type, and investment mix. Valid edits apply automatically.</p></div><button type="button" onClick={add}>Add account</button></div>
+  return <section className="plan-panel"><div className="plan-section-heading"><div><h2>Accounts</h2><p>Balances, account type, and investments. Cash accounts earn their own fixed interest rate.</p></div><button type="button" onClick={add}>Add account</button></div>
     {items.map(item => <AccountForm key={item.id} account={item} onApply={value => dispatch({ type: "plan/updateItem", section: "accounts", id: item.id, patch: value })} onRemove={() => dispatch({ type: "plan/removeItem", section: "accounts", id: item.id })} />)}
-    {!items.length && <p className="plan-empty">No accounts yet. Add a TFSA, RRSP, or non-registered account.</p>}
+    {!items.length && <p className="plan-empty">No accounts yet. Add a TFSA, RRSP, non-registered, or cash account.</p>}
   </section>;
 }
 

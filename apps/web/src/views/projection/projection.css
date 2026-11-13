@@ -51,18 +51,34 @@
 table.projection-table {
   width: max-content;
   min-width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+
+table.projection-table thead {
+  position: relative;
+  z-index: 5;
 }
 
 table.projection-table th {
   position: sticky;
   background: #eef2f5;
-  border-bottom: 1px solid #9aa7b0;
+  box-shadow: inset 0 -1px #9aa7b0;
   padding: 4px 6px;
   text-align: right;
   white-space: nowrap;
+}
+
+table.projection-table thead tr:first-child th {
+  top: 0;
+  z-index: 4;
+}
+
+table.projection-table thead tr:last-child th {
+  top: var(--projection-group-header-height, 0px);
+  z-index: 3;
 }
 
 table.projection-table th.group-th {
@@ -77,14 +93,13 @@ table.projection-table th.col-age-year {
   text-align: left;
 }
 
-table.projection-table thead tr:last-child th {
-  top: 22px;
-  z-index: 2;
-}
-
 table.projection-table tbody tr:nth-child(4n + 3) {
   background: #f7fafc;
 }
+
+.yearly-row[data-group-collapsed="true"],
+.detail-row[data-group-collapsed="true"],
+.detail-row[data-expanded="false"] { display: none; }
 
 table.projection-table td {
   padding: 2px 6px;
@@ -119,23 +134,87 @@ tr.failed-row {
 
 .detail-row td {
   text-align: left !important;
-  background: #fbfdfd;
+  white-space: normal;
+  background: #f5f8fa;
 }
 
-.detail-list {
+.detail-grid {
   display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 4px 10px;
-  margin: 6px 8px;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 8px;
 }
 
-.detail-list dt {
-  font-weight: 600;
+.detail-section {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #dbe3e8;
+  border-radius: 6px;
+  background: white;
+  overflow-wrap: anywhere;
+}
+
+.detail-section h4 { margin: 0 0 7px; font-size: .85rem; }
+.detail-section ul { margin: 0; padding-left: 18px; }
+.detail-section li + li { margin-top: 3px; }
+.detail-section > .hint { margin: 0; }
+.detail-notices {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid #dbe3e8;
+  color: #334155;
+  font-size: .8rem;
+}
+.detail-notices p { margin: 0 0 5px; }
+.detail-notices p:last-child { margin-bottom: 0; }
+.expense-list { list-style: none; padding: 0 !important; }
+.expense-list li,
+.detail-expense-total { display: flex; justify-content: space-between; gap: 12px; font-variant-numeric: tabular-nums; }
+.expense-list li span:last-child,
+.detail-expense-total strong:last-child { text-align: right; white-space: nowrap; }
+.detail-expense-total { margin: 8px 0 0; padding-top: 6px; border-top: 1px solid #dbe3e8; }
+.expense-rounding-note { margin-top: 6px !important; }
+
+.detail-values {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) auto;
+  gap: 3px 12px;
+  margin: 0;
+}
+.detail-values dt { color: #52606d; }
+.detail-values dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.detail-values .detail-total-label,
+.detail-values .detail-total { padding-top: 5px; border-top: 1px solid #dbe3e8; font-weight: 700; color: #17212b; }
+.cash-account-balances { margin-top: 9px !important; padding-top: 7px !important; border-top: 1px solid #dbe3e8; font-size: .84rem; }
+
+.group-toggle {
+  font: inherit;
+  font-weight: 650;
+  color: #174f86;
+  background: none;
+  border: 0;
+  border-radius: 3px;
+  padding: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.group-toggle:focus-visible,
+.col-age-year button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.decade-row { background: #edf3f6; font-weight: 600; }
+.decade-row td { border-bottom-color: #cbd7de; padding-top: 5px; padding-bottom: 5px; }
+.yearly-row .col-age-year:first-child { padding-left: 20px; }
+.decade-years { font-size: 11px; color: #52606d; }
+
+@media (max-width: 620px) {
+  .detail-grid { grid-template-columns: minmax(0, 1fr); margin: 6px 2px; }
+  .detail-section { padding: 9px 10px; }
 }
 
 .events-cell {
   text-align: left;
 }
+
+.return-source-label { display: block; color: #52606d; font-size: 10px; font-weight: 400; white-space: nowrap; }
 
 .projection-view .dashboard,
 .projection-view .chart-grid,
@@ -247,10 +326,10 @@ tr.failed-row {
     position: static;
   }
 
-  /* All audit-trail rows expand on print regardless of on-screen expansion state. */
-  .projection-table > tbody > tr:not(.detail-row) + tr.detail-row {
-    display: table-row !important;
-  }
+  /* Print every year and its detail rows, including groups collapsed on screen. */
+  .projection-table > tbody > tr.decade-row { display: none !important; }
+  .projection-table > tbody > tr.yearly-row,
+  .projection-table > tbody > tr.detail-row { display: table-row !important; }
 
   .projection-view .chart-grid {
     grid-template-columns: 1fr 1fr;

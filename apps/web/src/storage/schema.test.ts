@@ -63,6 +63,7 @@ describe("structural schema checks", () => {
         e.includes("withdrawalOrder"),
       ),
     ).toBe(true);
+    expect(validateScenarioDelta({ ...good, overrides: { withdrawalOrder: ["cash", "tfsa", "nonreg", "rrsp"] } })).toEqual([]);
     expect(
       validateScenarioDelta({ ...good, overrides: { retirementAge: -1 } }).some((e) =>
         e.includes("retirementAge"),
@@ -73,6 +74,34 @@ describe("structural schema checks", () => {
     ).toBe(true);
   });
 
+  it("accepts benefit and withdrawal strategy fields while rejecting malformed imported options", () => {
+    const scenario = { id: "s", name: "S", basePlanId: "p", simMode: "deterministic", overrides: {} };
+    expect(validateScenarioDelta({ ...scenario, benefits: { cpp: true, oas: false, gis: false }, withdrawalStrategy: "tax-minimizing" })).toEqual([]);
+    expect(validateScenarioDelta({ ...scenario, benefits: { cpp: true, oas: false, gis: true } }).join(" ")).toMatch(/cannot enable GIS when OAS is disabled/);
+    expect(validateScenarioDelta({ ...scenario, benefits: { cpp: true, oas: "no", gis: true } }).join(" ")).toMatch(/benefits must contain boolean/);
+    expect(validateScenarioDelta({ ...scenario, withdrawalStrategy: "maximize-net-worth" }).join(" ")).toMatch(/withdrawalStrategy must be manual or tax-minimizing/);
+    // Optional fields preserve pre-feature saved scenarios.
+    expect(validateScenarioDelta(scenario)).toEqual([]);
+  });
+
+  it("accepts persisted Monte Carlo settings and rejects invalid seeds/deviations", () => {
+    const monteCarlo = {
+      id: "mc", name: "MC", basePlanId: "p", simMode: "montecarlo", overrides: {},
+      mcConfig: { runs: 1000, seed: 12, stdDev: { equity: 0.18, bond: 0.06, cash: 0.02 } },
+    };
+    expect(validateScenarioDelta(monteCarlo)).toEqual([]);
+    expect(validateScenarioDelta({ ...monteCarlo, mcConfig: { ...monteCarlo.mcConfig, seed: -1 } }).some((e) => e.includes("seed"))).toBe(true);
+    expect(validateScenarioDelta({ ...monteCarlo, mcConfig: { ...monteCarlo.mcConfig, stdDev: { equity: 1.1, bond: 0.06, cash: 0.02 } } }).some((e) => e.includes("stdDev"))).toBe(true);
+    expect(validateScenarioDelta({ ...monteCarlo, mcConfig: { ...monteCarlo.mcConfig, runs: 10_001 } }).some((e) => e.includes("runs"))).toBe(true);
+  });
+
+  it("accepts historical earliest-window years only within the JST proxy source span", () => {
+    const historical = { id: "hist", name: "Historical", basePlanId: "p", simMode: "historical", overrides: {}, historicalConfig: { startYear: 1872 } };
+    expect(validateScenarioDelta(historical)).toEqual([]);
+    expect(validateScenarioDelta({ ...historical, historicalConfig: { startYear: 1871 } }).some((error) => error.includes("1872 through 2020"))).toBe(true);
+    expect(validateScenarioDelta({ ...historical, historicalConfig: { startYear: 2021 } }).some((error) => error.includes("1872 through 2020"))).toBe(true);
+  });
+
   it("validates the workspace envelope (meta null allowed, undefined rejected)", () => {
     expect(
       validateWorkspace({ meta: null, plan: makeSamplePlan(), scenarios: [] }),
@@ -80,6 +109,10 @@ describe("structural schema checks", () => {
     expect(
       validateWorkspace({ plan: makeSamplePlan(), scenarios: [] }).some((e) => e.includes("meta")),
     ).toBe(true);
+    expect(validateWorkspace({ meta: null, plan: makeSamplePlan(), scenarios: [], baseScenario: {
+      retirementAge: 65, returnAssumptions: { equity: 0.05, bond: 0.02, cash: 0 }, withdrawalOrder: ["tfsa", "nonreg", "rrsp"],
+      benefits: { cpp: true, oas: false, gis: true },
+    } }).join(" ")).toMatch(/cannot enable GIS when OAS is disabled/);
   });
 
   it("validates the whole PlanFile envelope", () => {
@@ -98,6 +131,38 @@ describe("structural schema checks", () => {
     expect(isFiniteNumber("1")).toBe(false);
     expect(isIsoDateString("2026-01-02T03:04:05.000Z")).toBe(true);
     expect(isIsoDateString("next tuesday")).toBe(false);
+  });
+
+  it("accepts named cash accounts without market allocations and validates their fixed rate", () => {
+    const plan = sample() as any;
+    plan.accounts[0] = { id: "savings", name: "Savings", type: "cash", balance: 12_000, interestRate: 0.035 };
+    expect(validatePlanShape(plan)).toEqual([]);
+    plan.accounts[0].interestRate = "3.5%";
+    expect(validatePlanShape(plan).some(error => error.includes("interestRate"))).toBe(true);
+    plan.accounts[0].interestRate = 0.035;
+    plan.accounts[0].assetMix = { equity: 0, bond: 0, cash: 1 };
+    expect(validatePlanShape(plan).some(error => error.includes("do not use an assetMix"))).toBe(true);
+  });
+
+  it("accepts optional names on accounts and incomes", () => {
+    const plan = sample() as { accounts: Record<string, unknown>[]; incomes: Record<string, unknown>[] };
+    plan.accounts[0]!.name = "Main TFSA";
+    plan.incomes[0]!.name = "Day-job salary";
+    expect(validatePlanShape(plan)).toEqual([]);
+  });
+
+  it("no longer requires an asset name", () => {
+    const plan = sample() as { assets: Record<string, unknown>[] };
+    plan.assets[0]!.name = "";
+    expect(validatePlanShape(plan)).toEqual([]);
+  });
+
+  it("validates the mortgage payment frequency", () => {
+    const plan = sample() as { debts: Record<string, unknown>[] };
+    plan.debts[0]!.paymentFrequency = "weekly";
+    expect(validatePlanShape(plan)).toEqual([]);
+    plan.debts[0]!.paymentFrequency = "daily";
+    expect(validatePlanShape(plan).some((e) => e.includes("paymentFrequency"))).toBe(true);
   });
 });
 

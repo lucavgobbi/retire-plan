@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { createEmptyWorkspace, DEFAULT_SCENARIO_BASE } from "../../domain/defaults";
+import type { SimulationRunner } from "../../store/simulationWorkerProtocol";
 import { useWorkspace, StoreProvider } from "../../store/api";
 import { PlanView } from "./PlanView";
 
@@ -9,8 +10,8 @@ function WorkspaceProbe() {
   return <output data-testid="workspace-json">{JSON.stringify(workspace.plan)}</output>;
 }
 
-function renderPlan() {
-  return render(<StoreProvider now={() => "2026-11-10T12:00:00Z"} initialWorkspace={createEmptyWorkspace()} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+function renderPlan(simulationRunner?: SimulationRunner) {
+  return render(<StoreProvider now={() => "2026-11-10T12:00:00Z"} initialWorkspace={createEmptyWorkspace()} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={simulationRunner}>
     <PlanView /><WorkspaceProbe />
   </StoreProvider>);
 }
@@ -20,6 +21,16 @@ function planState() {
 }
 
 describe("PlanView", () => {
+  it("disables its run control and exposes cancellation while a shared run is active", () => {
+    const simulationRunner: SimulationRunner = () => new Promise(() => {});
+    renderPlan(simulationRunner);
+    fireEvent.click(screen.getByRole("button", { name: "Run projection" }));
+    expect(screen.getByText("Projection running in the background…")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Run projection" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel projection" }));
+    expect(screen.getByText("Projection cancelled.")).toBeTruthy();
+  });
+
   it("derives a read-only current age and applies valid profile edits without a save button", () => {
     renderPlan();
     expect((screen.getByLabelText("Current age") as HTMLInputElement).readOnly).toBe(true);
@@ -77,12 +88,32 @@ describe("PlanView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add account" }));
     const select = screen.getByLabelText("Account type");
     expect(within(select).getAllByRole("option").map(option => [option.textContent, (option as HTMLOptionElement).value])).toEqual([
-      ["TFSA", "tfsa"], ["RRSP", "rrsp"], ["Non-registered", "nonreg"],
+      ["TFSA", "tfsa"], ["RRSP", "rrsp"], ["Non-registered", "nonreg"], ["Cash account", "cash"],
     ]);
     fireEvent.change(select, { target: { value: "rrsp" } });
     expect(planState().accounts[0]?.type).toBe("rrsp");
     fireEvent.change(select, { target: { value: "nonreg" } });
     expect(planState().accounts[0]?.type).toBe("nonreg");
+  });
+
+  it("edits named cash accounts with a grouped balance and fixed rate, without a market mix or ACB", () => {
+    renderPlan();
+    fireEvent.click(screen.getByRole("tab", { name: "Accounts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+    fireEvent.change(screen.getByLabelText("Account type"), { target: { value: "nonreg" } });
+    fireEvent.change(screen.getByLabelText(/ACB \/ book value/), { target: { value: "8000" } });
+    fireEvent.change(screen.getByLabelText("Account type"), { target: { value: "cash" } });
+    expect(screen.getByLabelText("Annual interest rate (%)")).toBeTruthy();
+    expect(screen.queryByLabelText("Equity (%)")).toBeNull();
+    expect(screen.queryByLabelText("Bonds (%)")).toBeNull();
+    expect(screen.queryByLabelText(/ACB \/ book value/)).toBeNull();
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: "Emergency savings" } });
+    fireEvent.change(screen.getByLabelText("Current balance ($)"), { target: { value: "12500" } });
+    fireEvent.change(screen.getByLabelText("Annual interest rate (%)"), { target: { value: "-1" } });
+    expect(screen.getByRole("alert").textContent).toContain("Annual interest rate must be at least 0.");
+    expect(planState().accounts[0]?.interestRate).toBe(0);
+    fireEvent.change(screen.getByLabelText("Annual interest rate (%)"), { target: { value: "4.25" } });
+    expect(planState().accounts[0]).toEqual({ id: expect.any(String), name: "Emergency savings", type: "cash", balance: 12_500, interestRate: 0.0425 });
   });
 
   it("creates plan items immediately on add and applies edits while typing", () => {
@@ -100,7 +131,7 @@ describe("PlanView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add mortgage" }));
     expect(planState().debts).toHaveLength(1);
     fireEvent.change(screen.getByLabelText("Mortgage balance ($)"), { target: { value: "250000" } });
-    fireEvent.change(screen.getByLabelText("Monthly payment ($)"), { target: { value: "1600" } });
+    fireEvent.change(screen.getByLabelText("Payment ($)"), { target: { value: "1600" } });
     expect(planState().debts[0]).toMatchObject({ kind: "mortgage", balance: 250_000, monthlyPayment: 1_600 });
 
     fireEvent.click(screen.getByRole("tab", { name: "Income" }));
@@ -128,10 +159,46 @@ describe("PlanView", () => {
     renderPlan();
     fireEvent.click(screen.getByRole("tab", { name: "Accounts" }));
     fireEvent.click(screen.getByRole("button", { name: "Add account" }));
-    fireEvent.change(screen.getByLabelText("Current balance ($)"), { target: { value: "-1" } });
+    fireEvent.change(screen.getByLabelText("Current balance ($)"), { target: { value: "-1,000" } });
     // The editor catches the invalid value before dispatching, so no invalid plan leaks into the workspace.
     expect(within(screen.getByRole("alert")).getByText(/balance must be at least 0/i)).toBeTruthy();
     expect(screen.getByText(/These edits are not applied/)).toBeTruthy();
     expect(planState().accounts[0]?.balance).toBe(0);
+  });
+
+  it("gives accounts and incomes an optional name used as the form title", () => {
+    renderPlan();
+    fireEvent.click(screen.getByRole("tab", { name: "Accounts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "Cottage fund" } });
+    expect(planState().accounts[0]).toMatchObject({ name: "Cottage fund" });
+    expect(screen.getByRole("region", { name: "Cottage fund" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Income" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add employment" }));
+    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "Side gig" } });
+    expect(planState().incomes[0]).toMatchObject({ name: "Side gig" });
+    expect(screen.getByRole("region", { name: "Side gig" })).toBeTruthy();
+  });
+
+  it("leaves an empty name off the stored item", () => {
+    renderPlan();
+    fireEvent.click(screen.getByRole("tab", { name: "Income" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add cpp" }));
+    expect(planState().incomes[0]?.name).toBeUndefined();
+  });
+
+  it("supports weekly and biweekly mortgage payment frequencies", () => {
+    renderPlan();
+    fireEvent.click(screen.getByRole("tab", { name: "Assets & debts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add mortgage" }));
+    // Defaults to monthly with no stored frequency.
+    expect(planState().debts[0]?.paymentFrequency).toBeUndefined();
+    fireEvent.change(screen.getByLabelText("Payment frequency"), { target: { value: "biweekly" } });
+    expect(planState().debts[0]).toMatchObject({ paymentFrequency: "biweekly" });
+    fireEvent.change(screen.getByLabelText("Payment frequency"), { target: { value: "weekly" } });
+    expect(planState().debts[0]).toMatchObject({ paymentFrequency: "weekly" });
+    fireEvent.change(screen.getByLabelText("Payment frequency"), { target: { value: "monthly" } });
+    expect(planState().debts[0]?.paymentFrequency).toBeUndefined();
   });
 });

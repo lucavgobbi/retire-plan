@@ -13,7 +13,10 @@ export interface ComparisonRow {
   retirementAge: number | null;
   returnAssumptions: { equity: number; bond: number; cash: number } | null;
   withdrawalOrder: string[] | null;
+  withdrawalStrategy: string;
+  benefits: string;
   netWorthAtAges: XyPoint[];
+  monteCarlo: RunRecord["analysis"];
   absDelta: number | null;
   pctDelta: number | null;
 }
@@ -44,7 +47,13 @@ export function computeComparison(runs: RunRecord[], baselineId: string | null):
         cash: scenario.returnAssumptions.cash,
       },
       withdrawalOrder: [...scenario.withdrawalOrder],
+      withdrawalStrategy: scenario.withdrawalStrategy ?? "manual",
+      benefits: (() => {
+        const benefits = scenario.benefits ?? { cpp: true, oas: true, gis: true };
+        return [benefits.cpp && "CPP", benefits.oas && "OAS", benefits.oas && benefits.gis && "GIS"].filter(Boolean).join(", ") || "None";
+      })(),
       netWorthAtAges: netWorthSeries(run.result.years),
+      monteCarlo: run.analysis,
       absDelta: null,
       pctDelta: null,
     };

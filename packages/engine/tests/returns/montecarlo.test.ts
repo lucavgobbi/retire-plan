@@ -32,6 +32,17 @@ describe("generateMonteCarloRun", () => {
     expect(equities.size).toBeGreaterThan(1);
   });
 
+  it("treats standard deviations as absolute returns and never permits losses below -100%", () => {
+    const stable = generateMonteCarloRun(seededRandom(5), assumptions, { equity: 0, bond: 0, cash: 0 }, 60, 60);
+    expect(stable.years[0]).toMatchObject(assumptions);
+    const volatile = generateMonteCarloRun(seededRandom(1), { equity: 0.01, bond: 0.01, cash: 0.01 }, { equity: 1, bond: 1, cash: 1 }, 60, 100);
+    for (const year of volatile.years) {
+      expect(year.equity).toBeGreaterThanOrEqual(-1);
+      expect(year.bond).toBeGreaterThanOrEqual(-1);
+      expect(year.cash).toBeGreaterThanOrEqual(-1);
+    }
+  });
+
   it("across 200 seeded runs the mean equity recovers the assumption", () => {
     let total = 0;
     let count = 0;
@@ -92,6 +103,8 @@ describe("runMonteCarlo — aggregation over an injected (stub) simulate", () =>
     expect(out.percentileNetWorth.p50).toBe(500_000);
     expect(out.percentileNetWorth.p90).toBe(500_000);
     expect(out.sampleFailureAge).toBe(80);
+    expect(out.representativeRun).toBe(3); // exact middle order statistic; stable for ties
+    expect(out.representativeResult.summary.finalNetWorth).toBe(500_000);
   });
 
   it("an all-success portfolio yields successRate 1 and sampleFailureAge null", () => {
@@ -115,5 +128,11 @@ describe("runMonteCarlo — aggregation over an injected (stub) simulate", () =>
     expect(captured[0]!.years.map((y) => y.age)).toEqual(captured[1]!.years.map((y) => y.age));
     // Runs are seeded seed+runIndex, so distinct runs must differ in draw values.
     expect(captured[0]!.years[0]!.equity).not.toBe(captured[1]!.years[0]!.equity);
+  });
+
+  it("rejects invalid run counts and deviations instead of returning empty statistics", () => {
+    const { fn } = stubSimulate([true]);
+    expect(() => runMonteCarlo(makePlan(), mcScenario(0), stubTables(), fn)).toThrow(/runs must be/);
+    expect(() => runMonteCarlo(makePlan(), { ...mcScenario(1), mcConfig: { ...mcScenario(1).mcConfig!, stdDev: { ...stdDev, equity: -0.1 } } }, stubTables(), fn)).toThrow(/stdDev/);
   });
 });

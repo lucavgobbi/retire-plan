@@ -95,3 +95,57 @@ describe("mortgageYear — negative amortization (Review Focus #5)", () => {
     expect(r.paymentsMade).toBe(0);
   });
 });
+
+describe("mortgageYear — non-monthly payment frequencies", () => {
+  it("biweekly (26 payments) matches a hand-rolled 26-period loop", () => {
+    // Independent 26-period hand loop: interest_p = balance x rate/26.
+    let b = 300_000;
+    let interest = 0;
+    for (let p = 0; p < 26; p++) {
+      const i = b * (0.06 / 26);
+      interest += i;
+      b = Math.max(0, b + i - 750);
+    }
+    const r = mortgageYear({ balance: 300_000, annualRate: 0.06, monthlyPayment: 750, paymentsPerYear: 26 });
+    expect(r.paymentsMade).toBe(26);
+    expect(r.endBalance).toBeCloseTo(b, 8);
+    expect(r.interest).toBeCloseTo(interest, 8);
+    expect(r.principalPaid).toBeCloseTo(300_000 - b, 8);
+  });
+
+  it("weekly (52 payments) matches a hand-rolled 52-period loop", () => {
+    let b = 180_000;
+    let interest = 0;
+    for (let p = 0; p < 52; p++) {
+      const i = b * (0.05 / 52);
+      interest += i;
+      b = Math.max(0, b + i - 450);
+    }
+    const r = mortgageYear({ balance: 180_000, annualRate: 0.05, monthlyPayment: 450, paymentsPerYear: 52 });
+    expect(r.paymentsMade).toBe(52);
+    expect(r.endBalance).toBeCloseTo(b, 8);
+    expect(r.interest).toBeCloseTo(interest, 8);
+    expect(r.principalPaid).toBeCloseTo(180_000 - b, 8);
+  });
+
+  it("a weekly payment pays off a small balance mid-year with fewer than 52 payments", () => {
+    // $300 @ 12% weekly cannot survive long on a $100 balance.
+    const r = mortgageYear({ balance: 100, annualRate: 0.12, monthlyPayment: 10, paymentsPerYear: 52 });
+    expect(r.endBalance).toBe(0);
+    expect(r.paymentsMade).toBeLessThan(52);
+    expect(r.paymentsMade).toBeGreaterThan(0);
+    expect(r.principalPaid).toBeCloseTo(100, 8);
+  });
+
+  it("omitting paymentsPerYear keeps the monthly default (12)", () => {
+    const r = mortgageYear({ balance: 300_000, annualRate: 0.06, monthlyPayment: 1_500 });
+    expect(r.paymentsMade).toBe(12);
+  });
+
+  it("weekly amortization retires the balance faster than monthly for the same annual cash", () => {
+    // 26 biweekly payments of 1500 = 39,000/yr vs 12 monthly payments of 3250 = 39,000/yr.
+    const biweekly = mortgageYear({ balance: 300_000, annualRate: 0.06, monthlyPayment: 1_500, paymentsPerYear: 26 });
+    const monthly = mortgageYear({ balance: 300_000, annualRate: 0.06, monthlyPayment: 3_250, paymentsPerYear: 12 });
+    expect(biweekly.endBalance).toBeLessThan(monthly.endBalance);
+  });
+});

@@ -71,4 +71,21 @@ describe("chart adapters", () => {
     ]);
     expect(legacy).toEqual({ x: 70, tfsa: 1, rrsp: 2, nonreg: 3, cash: 4, otherAssets: 0 });
   });
+
+  it("drawdownSeries aggregates investment types; cash is pool + named accounts (chart shows categories, not per-named accounts)", () => {
+    // A plan with two tfsa accounts and two named cash accounts: results carry
+    // per-type aggregates plus the cashAccounts breakdown; the adapter maps
+    // balances.cash (pool + Σnamed, counted once) to the single cash category.
+    const [p] = drawdownSeries([
+      year(70, {
+        balances: { tfsa: 3000, rrsp: 0, nonreg: 500, cash: 1600, home: 0, debt: 0 },
+        cashAccounts: [
+          { id: "cash-1", name: "Chequing", balance: 1000 },
+          { id: "cash-2", balance: 600 },
+        ],
+      }),
+    ]);
+    expect(p).toEqual({ x: 70, tfsa: 3000, rrsp: 0, nonreg: 500, cash: 1600, otherAssets: 0 });
+    expect(p!.cash).toBe(1000 + 600); // named balances included once, no double count
+  });
 });

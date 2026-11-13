@@ -1,4 +1,5 @@
 import { fmtMoney, fmtMoneyDetail, fmtPercent } from "../projection/fmt";
+import { formatAccountOrder } from "../../domain/accountOrder";
 import type { ComparisonRow } from "./compare";
 
 /**
@@ -15,11 +16,16 @@ export function CompareTable({ rows }: { rows: ComparisonRow[] }) {
       text: (row) => row.label,
     },
     {
-      label: "Outcome",
+      label: "Representative path outcome",
       text: (row) => (row.success ? "Success" : `Fails at age ${row.failureAge ?? "unknown"}`),
     },
     { label: "Worst shortfall", text: (row) => (row.worstShortfallAge !== null ? `age ${row.worstShortfallAge}` : "—") },
-    { label: "Final net worth", text: (row) => fmtMoney(row.finalNetWorth) },
+    { label: "Final net worth (representative path)", text: (row) => fmtMoney(row.finalNetWorth) },
+    { label: "Ensemble success probability", text: (row) => row.monteCarlo ? fmtPercent(row.monteCarlo.successRate) : "—" },
+    { label: "Ensemble final net worth p10 / p50 / p90", text: (row) => row.monteCarlo
+      ? `${fmtMoney(row.monteCarlo.percentileNetWorth.p10)} / ${fmtMoney(row.monteCarlo.percentileNetWorth.p50)} / ${fmtMoney(row.monteCarlo.percentileNetWorth.p90)}` : "—" },
+    { label: "Historical representative source window", text: (row) => row.monteCarlo?.mode === "historical"
+      ? `${row.monteCarlo.representativeStartYear}–${row.monteCarlo.representativeEndYear} (${row.monteCarlo.windowCount} windows)` : "—" },
     {
       label: "Δ net worth (abs)",
       delta: true,
@@ -35,13 +41,15 @@ export function CompareTable({ rows }: { rows: ComparisonRow[] }) {
       label: "Return assumptions",
       text: (row) =>
         row.returnAssumptions
-          ? `${(row.returnAssumptions.equity * 100).toFixed(0)}%/${(row.returnAssumptions.bond * 100).toFixed(0)}%/${(row.returnAssumptions.cash * 100).toFixed(0)}% (e/b/c)`
+          ? `${fmtPercent(row.returnAssumptions.equity)} equity · ${fmtPercent(row.returnAssumptions.bond)} bonds · ${fmtPercent(row.returnAssumptions.cash)} cash`
           : "—",
     },
     {
       label: "Withdrawal order",
-      text: (row) => (row.withdrawalOrder ? row.withdrawalOrder.join(" → ") : "—"),
+      text: (row) => (row.withdrawalOrder ? formatAccountOrder(row.withdrawalOrder as Parameters<typeof formatAccountOrder>[0]) : "—"),
     },
+    { label: "Benefits modeled", text: row => row.benefits },
+    { label: "Withdrawal strategy", text: row => row.withdrawalStrategy === "tax-minimizing" ? "Tax-minimizing planning" : "Manual account order" },
   ];
 
   return (
