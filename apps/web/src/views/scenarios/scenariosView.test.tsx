@@ -225,15 +225,36 @@ describe("ScenariosView", () => {
     fireEvent.click(screen.getByLabelText("Base include CPP"));
     expect((screen.getByLabelText("Scenario include CPP") as HTMLInputElement).checked).toBe(false);
     fireEvent.change(screen.getByLabelText("Base withdrawal strategy"), { target: { value: "tax-minimizing" } });
-    expect((screen.getByLabelText("Withdrawal strategy") as HTMLSelectElement).value).toBe("tax-minimizing");
+    expect((screen.getByLabelText("Withdrawal strategy") as HTMLSelectElement).value).toBe("inherit");
     stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
     expect(stored[0]).not.toHaveProperty("withdrawalStrategy");
     fireEvent.change(screen.getByLabelText("Withdrawal strategy"), { target: { value: "manual" } });
     stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
     expect(stored[0]).toHaveProperty("withdrawalStrategy", "manual");
-    fireEvent.click(screen.getByRole("button", { name: "Use base withdrawal strategy" }));
+    fireEvent.change(screen.getByLabelText("Withdrawal strategy"), { target: { value: "inherit" } });
     stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
     expect(stored[0]).not.toHaveProperty("withdrawalStrategy");
+  });
+
+  it("tax-minimizing strategy hides order controls, keeps the saved order, and restores it when manual returns", () => {
+    const ws = makeWorkspace();
+    ws.scenarios.push({ ...delta, overrides: { retirementAge: 62, withdrawalOrder: ["nonreg", "tfsa", "rrsp"] } });
+    render(<StoreProvider initialWorkspace={ws} initialBaseScenario={DEFAULT_SCENARIO_BASE}><ScenariosView /><ScenariosProbe /></StoreProvider>);
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    expect(screen.getByLabelText(/1st drawn/i)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Withdrawal strategy"), { target: { value: "tax-minimizing" } });
+    expect(screen.queryByLabelText(/1st drawn/i)).toBeNull();
+    expect(screen.queryByLabelText("Cash withdrawal order")).toBeNull();
+    expect(screen.getByText("Your saved order is retained as the optimizer fallback.")).toBeTruthy();
+    // Edits made while the controls are hidden must not lose the stored order override.
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Renamed under optimizer" } });
+    let stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
+    expect(stored[0]!.overrides.withdrawalOrder).toEqual(["nonreg", "tfsa", "rrsp"]);
+    expect(stored[0]!.withdrawalStrategy).toBe("tax-minimizing");
+    // Switching back to manual shows the unchanged order again.
+    fireEvent.change(screen.getByLabelText("Withdrawal strategy"), { target: { value: "manual" } });
+    expect((screen.getByLabelText(/1st drawn/i) as HTMLSelectElement).value).toBe("nonreg");
+    expect((screen.getByLabelText("Cash withdrawal order") as HTMLSelectElement).value).toBe("automatic");
   });
 
   it("delete removes the scenario after the plain confirm dialog", () => {

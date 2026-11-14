@@ -130,9 +130,22 @@ export function BaseScenarioSettings() {
         <label><input type="checkbox" aria-label="Base include GIS" checked={draft.benefits.gis && draft.benefits.oas} disabled={!draft.benefits.oas} onChange={e => change({ benefits: { ...draft.benefits, gis: e.currentTarget.checked } })} /> Include modeled GIS</label>
         <p className="hint">CPP and OAS amounts and start/end ages come from the income streams in Plan. No benefit amount is created by these switches. GIS requires OAS in this model; <a href="https://www.canada.ca/en/services/benefits/publicpensions/old-age-security/guaranteed-income-supplement/eligibility.html" target="_blank" rel="noreferrer">Service Canada eligibility</a>.</p>
       </fieldset>
+      <label className="field">Base retirement age<NumberTextInput name="retirementAge" step="1" min="1" allowNegative={false} required value={draft.retirementAge} onChange={retirementAge => change({ retirementAge })} /></label>
+      {draft.simMode !== "historical" && (["equity", "bond", "cash"] as const).map(key => <label className="field" key={key}>Base {key === "bond" ? "bonds" : key} return (%)<NumberTextInput name={key} step="any" required value={draft[key]} onChange={value => change({ [key]: value })} /></label>)}
       <label className="field">Withdrawal strategy<select aria-label="Base withdrawal strategy" value={draft.withdrawalStrategy} onChange={e => change({ withdrawalStrategy: e.currentTarget.value as WithdrawalStrategy })}><option value="manual">Manual account order</option><option value="tax-minimizing">Tax-minimizing planning</option></select>
         {draft.withdrawalStrategy === "tax-minimizing" && <span className="hint">{TAX_MINIMIZING_STRATEGY_HELP}</span>}
       </label>
+      {draft.withdrawalStrategy === "manual" && <>
+        <p className="hint">Choose an account to swap it with the account at that priority.</p>
+        {draft.order.map((type, index) => <label className="field" key={index}>Base withdrawal priority {index + 1}<select name={`order${index}`} value={type} aria-label={`Base withdrawal priority ${index + 1}`} onChange={event => {
+          change({ order: swapOrderPosition(draft.order, index, event.currentTarget.value as AccountType) });
+        }}>{INVESTMENT_ACCOUNT_TYPES.map(account => <option key={account} value={account}>{ACCOUNT_TYPE_LABELS[account]}</option>)}</select></label>)}
+        <label className="field">Named cash withdrawal order<select aria-label="Base cash withdrawal order" value={draft.cashPosition} onChange={event => change({ cashPosition: event.currentTarget.value as CashOrderPosition })}>
+          <option value="automatic">Automatic (cash first when named cash accounts exist)</option>
+          {["First", "Second", "Third", "Fourth"].map((label, index) => <option key={label} value={String(index)}>{label}</option>)}
+        </select></label>
+      </>}
+      {draft.withdrawalStrategy === "tax-minimizing" && <p className="hint">Your saved order is retained as the optimizer fallback.</p>}
       {draft.simMode === "montecarlo" && <>
         <label className="field">Monte Carlo runs<NumberTextInput aria-label="Base Monte Carlo runs" min={1} max={10_000} step={1} allowNegative={false} value={draft.runs} onChange={runs => change({ runs })} /></label>
         <label className="field">Monte Carlo seed<NumberTextInput aria-label="Base Monte Carlo seed" min={0} max={4_294_967_295} step={1} allowNegative={false} value={draft.seed} onChange={seed => change({ seed })} /></label>
@@ -145,16 +158,6 @@ export function BaseScenarioSettings() {
         <p className="hint">Uses complete rolling windows starting in this source year through {latestWindowStart}. Source years map to your ages; household calendar years still use birth year.</p>
         <p className="hint">{HISTORICAL_DATASET.country} annual nominal USD returns · non-Canadian proxy · no FX conversion · {HISTORICAL_DATASET.license} (noncommercial).</p>
       </>}
-      <label className="field">Base retirement age<NumberTextInput name="retirementAge" step="1" min="1" allowNegative={false} required value={draft.retirementAge} onChange={retirementAge => change({ retirementAge })} /></label>
-      {draft.simMode !== "historical" && (["equity", "bond", "cash"] as const).map(key => <label className="field" key={key}>Base {key === "bond" ? "bonds" : key} return (%)<NumberTextInput name={key} step="any" required value={draft[key]} onChange={value => change({ [key]: value })} /></label>)}
-      <p className="hint">Choose an account to swap it with the account at that priority.</p>
-      {draft.order.map((type, index) => <label className="field" key={index}>Base withdrawal priority {index + 1}<select name={`order${index}`} value={type} aria-label={`Base withdrawal priority ${index + 1}`} onChange={event => {
-        change({ order: swapOrderPosition(draft.order, index, event.currentTarget.value as AccountType) });
-      }}>{INVESTMENT_ACCOUNT_TYPES.map(account => <option key={account} value={account}>{ACCOUNT_TYPE_LABELS[account]}</option>)}</select></label>)}
-      <label className="field">Named cash withdrawal order<select aria-label="Base cash withdrawal order" value={draft.cashPosition} onChange={event => change({ cashPosition: event.currentTarget.value as CashOrderPosition })}>
-        <option value="automatic">Automatic (cash first when named cash accounts exist)</option>
-        {["First", "Second", "Third", "Fourth"].map((label, index) => <option key={label} value={String(index)}>{label}</option>)}
-      </select></label>
     </div>
     {errors.length > 0 && <div role="alert">{errors.map(error => <p key={error}>{error}</p>)}</div>}
   </section>;

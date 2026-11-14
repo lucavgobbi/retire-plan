@@ -130,6 +130,11 @@ export function ScenarioEditorForm({ delta, onDone }: { delta: ScenarioDelta | n
 
   const duplicateOrder = useMemo(() => new Set(draft.order).size !== draft.order.length, [draft.order]);
 
+  // Effective strategy follows override > base > legacy manual. The select's
+  // "Base scenario strategy" option keeps the scenario following later base
+  // changes (no strategy written to the delta); an explicit choice overrides.
+  const effectiveStrategy = draft.withdrawalStrategyOverridden ? draft.withdrawalStrategy : (base.withdrawalStrategy ?? "manual");
+
   const validate = (draftState: EditorDraft): string[] => {
     const validationErrors: string[] = [];
     const age = Number(draftState.retirementAge);
@@ -221,16 +226,6 @@ export function ScenarioEditorForm({ delta, onDone }: { delta: ScenarioDelta | n
         <p className="hint">CPP and OAS amounts and start/end ages come from the income streams in Plan; these switches do not create amounts. GIS requires OAS in this model; <a href="https://www.canada.ca/en/services/benefits/publicpensions/old-age-security/guaranteed-income-supplement/eligibility.html" target="_blank" rel="noreferrer">Service Canada eligibility</a>. Starting age and other eligibility assumptions are simplified.</p>
       </fieldset>
 
-      <div className="field">
-        <label htmlFor="scenario-withdrawal-strategy">Withdrawal strategy</label>
-        {!draft.withdrawalStrategyOverridden ? <span className="hint">Using the base scenario strategy.</span> : <button type="button" onClick={() => change({ withdrawalStrategy: base.withdrawalStrategy ?? "manual", withdrawalStrategyOverridden: false })}>Use base withdrawal strategy</button>}
-        <select id="scenario-withdrawal-strategy" aria-label="Withdrawal strategy" value={draft.withdrawalStrategy} onChange={e => change({ withdrawalStrategy: e.currentTarget.value as WithdrawalStrategy, withdrawalStrategyOverridden: true })}>
-          <option value="manual">Manual account order</option>
-          <option value="tax-minimizing">Tax-minimizing planning</option>
-        </select>
-        {draft.withdrawalStrategy === "tax-minimizing" && <span className="hint">{TAX_MINIMIZING_STRATEGY_HELP}</span>}
-      </div>
-
       <label>
         <span>Simulation mode</span>
         <select value={draft.simMode} onChange={(event) => change({ simMode: event.currentTarget.value as ScenarioDelta["simMode"] })} aria-label="Simulation mode">
@@ -300,32 +295,53 @@ export function ScenarioEditorForm({ delta, onDone }: { delta: ScenarioDelta | n
 
       <fieldset>
         <legend>Withdrawal order (order in which accounts fund deficits)</legend>
-        <p className="hint">Choose an account to swap it with the account at that priority.</p>
-        {[0, 1, 2].map((index) => (
-          <label key={index}>
-            <span>{`${index + 1}${["st", "nd", "rd"][index]} drawn`}</span>
-            <select
-              aria-label={`${index + 1}${["st", "nd", "rd"][index]} drawn`}
-              value={draft.order[index]}
-              onChange={(e) => {
-                change({ order: swapOrderPosition(draft.order, index, e.target.value as AccountType) });
-              }}
-            >
-              {ACCOUNT_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {ACCOUNT_TYPE_LABELS[type]}
-                </option>
-              ))}
-            </select>
-          </label>
-        ))}
         <label>
-          <span>Named cash withdrawal order</span>
-          <select aria-label="Cash withdrawal order" value={draft.cashPosition} onChange={e => change({ cashPosition: e.target.value as CashOrderPosition })}>
-            <option value="automatic">Automatic (cash first when named cash accounts exist)</option>
-            {["First", "Second", "Third", "Fourth"].map((label, index) => <option key={label} value={String(index)}>{label}</option>)}
+          <span>Withdrawal strategy</span>
+          <select
+            aria-label="Withdrawal strategy"
+            value={draft.withdrawalStrategyOverridden ? draft.withdrawalStrategy : "inherit"}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value === "inherit") change({ withdrawalStrategy: base.withdrawalStrategy ?? "manual", withdrawalStrategyOverridden: false });
+              else change({ withdrawalStrategy: value as WithdrawalStrategy, withdrawalStrategyOverridden: true });
+            }}
+          >
+            <option value="inherit">Base scenario strategy</option>
+            <option value="manual">Manual account order</option>
+            <option value="tax-minimizing">Tax-minimizing planning</option>
           </select>
         </label>
+        {!draft.withdrawalStrategyOverridden && <p className="hint">Following the base scenario strategy.</p>}
+        {effectiveStrategy === "tax-minimizing" && <p className="hint">{TAX_MINIMIZING_STRATEGY_HELP}</p>}
+        {effectiveStrategy === "tax-minimizing" && <p className="hint">Your saved order is retained as the optimizer fallback.</p>}
+        {effectiveStrategy === "manual" && <>
+          <p className="hint">Choose an account to swap it with the account at that priority.</p>
+          {[0, 1, 2].map((index) => (
+            <label key={index}>
+              <span>{`${index + 1}${["st", "nd", "rd"][index]} drawn`}</span>
+              <select
+                aria-label={`${index + 1}${["st", "nd", "rd"][index]} drawn`}
+                value={draft.order[index]}
+                onChange={(e) => {
+                  change({ order: swapOrderPosition(draft.order, index, e.target.value as AccountType) });
+                }}
+              >
+                {ACCOUNT_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {ACCOUNT_TYPE_LABELS[type]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+          <label>
+            <span>Named cash withdrawal order</span>
+            <select aria-label="Cash withdrawal order" value={draft.cashPosition} onChange={e => change({ cashPosition: e.target.value as CashOrderPosition })}>
+              <option value="automatic">Automatic (cash first when named cash accounts exist)</option>
+              {["First", "Second", "Third", "Fourth"].map((label, index) => <option key={label} value={String(index)}>{label}</option>)}
+            </select>
+          </label>
+        </>}
       </fieldset>
 
       {errors.length > 0 && (
