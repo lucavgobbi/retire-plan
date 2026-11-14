@@ -5,6 +5,8 @@ import { EventsCell, YearDetailRow } from "./YearDetailRow";
 
 type SummaryKind = "flow" | "stock" | "rate" | "year";
 interface Column {
+  /** Stable identifier persisted in workspace.projectionColumns / exported JSON. */
+  id: string;
   group: string | null;
   label: string;
   value: (year: YearResult) => number;
@@ -12,29 +14,46 @@ interface Column {
   percent?: boolean;
 }
 
+/** First column: always visible, never selectable (like the Audit column). */
+export const CALENDAR_YEAR_COLUMN_ID = "calendarYear";
+
 /** Columns mirror YearResult; flow summaries sum while stocks show period end. */
-function columns(): Column[] {
-  const flow = (group: string | null, label: string, value: (y: YearResult) => number): Column => ({ group, label, value, summary: "flow" });
-  const stock = (group: string | null, label: string, value: (y: YearResult) => number): Column => ({ group, label, value, summary: "stock" });
+export function columns(): Column[] {
+  const flow = (id: string, group: string | null, label: string, value: (y: YearResult) => number): Column => ({ id, group, label, value, summary: "flow" });
+  const stock = (id: string, group: string | null, label: string, value: (y: YearResult) => number): Column => ({ id, group, label, value, summary: "stock" });
   return [
-    { group: null, label: "Household calendar year", value: (y) => y.age, summary: "year" },
-    flow("Income", "Employment", (y) => y.income.employment), flow("Income", "CPP", (y) => y.income.cpp),
-    flow("Income", "OAS", (y) => y.income.oas), flow("Income", "GIS", (y) => y.income.gis), flow("Income", "Other", (y) => y.income.other),
-    flow("Cash accounts", "Interest", (y) => y.cashInterest ?? 0),
-    flow(null, "Taxable", (y) => y.taxableIncome), flow("Tax", "Federal", (y) => y.tax.federal),
-    flow("Tax", "Provincial", (y) => y.tax.provincial), flow("Tax", "Surtax", (y) => y.tax.surtax),
-    flow("Tax", "OAS claw", (y) => y.tax.oasClawback), flow("Tax", "Total", (y) => y.tax.total),
-    { group: "Tax", label: "Marginal", value: (y) => y.tax.marginalRate, summary: "rate", percent: true },
-    flow("Withdrawals", "TFSA", (y) => y.withdrawals.tfsa), flow("Withdrawals", "RRSP", (y) => y.withdrawals.rrsp),
-    flow("Withdrawals", "Non-reg", (y) => y.withdrawals.nonreg), flow("Withdrawals", "Cash", (y) => y.withdrawals.cash ?? 0), flow("Contributions", "TFSA", (y) => y.contributions.tfsa),
-    flow("Contributions", "RRSP", (y) => y.contributions.rrsp), flow("Contributions", "Non-reg", (y) => y.contributions.nonreg), flow("Contributions", "Cash", (y) => y.contributions.cash ?? 0),
-    flow(null, "Expenses", (y) => y.expenses), flow(null, "Shortfall", (y) => y.shortfall),
-    stock("Balances", "TFSA", (y) => y.balances.tfsa), stock("Balances", "RRSP", (y) => y.balances.rrsp),
-    stock("Balances", "Non-reg", (y) => y.balances.nonreg), stock("Balances", "Cash", (y) => y.balances.cash),
-    stock("Balances", "Other assets", (y) => y.balances.otherAssets ?? 0), stock("Balances", "Home", (y) => y.balances.home),
-    stock("Balances", "Debt", (y) => y.balances.debt), stock(null, "Net worth", (y) => y.netWorth),
-    stock(null, "TFSA room", (y) => y.tfsaRoom), stock(null, "RRSP room", (y) => y.rrspRoom),
+    { id: CALENDAR_YEAR_COLUMN_ID, group: null, label: "Household calendar year", value: (y) => y.age, summary: "year" },
+    flow("income.employment", "Income", "Employment", (y) => y.income.employment), flow("income.cpp", "Income", "CPP", (y) => y.income.cpp),
+    flow("income.oas", "Income", "OAS", (y) => y.income.oas), flow("income.gis", "Income", "GIS", (y) => y.income.gis), flow("income.other", "Income", "Other", (y) => y.income.other),
+    flow("cash.interest", "Cash accounts", "Interest", (y) => y.cashInterest ?? 0),
+    flow("tax.taxableIncome", null, "Taxable", (y) => y.taxableIncome), flow("tax.federal", "Tax", "Federal", (y) => y.tax.federal),
+    flow("tax.provincial", "Tax", "Provincial", (y) => y.tax.provincial), flow("tax.surtax", "Tax", "Surtax", (y) => y.tax.surtax),
+    flow("tax.oasClawback", "Tax", "OAS claw", (y) => y.tax.oasClawback), flow("tax.total", "Tax", "Total", (y) => y.tax.total),
+    { id: "tax.marginalRate", group: "Tax", label: "Marginal", value: (y) => y.tax.marginalRate, summary: "rate", percent: true },
+    flow("withdrawals.tfsa", "Withdrawals", "TFSA", (y) => y.withdrawals.tfsa), flow("withdrawals.rrsp", "Withdrawals", "RRSP", (y) => y.withdrawals.rrsp),
+    flow("withdrawals.nonreg", "Withdrawals", "Non-reg", (y) => y.withdrawals.nonreg), flow("withdrawals.cash", "Withdrawals", "Cash", (y) => y.withdrawals.cash ?? 0), flow("contributions.tfsa", "Contributions", "TFSA", (y) => y.contributions.tfsa),
+    flow("contributions.rrsp", "Contributions", "RRSP", (y) => y.contributions.rrsp), flow("contributions.nonreg", "Contributions", "Non-reg", (y) => y.contributions.nonreg), flow("contributions.cash", "Contributions", "Cash", (y) => y.contributions.cash ?? 0),
+    flow("expenses", null, "Expenses", (y) => y.expenses), flow("shortfall", null, "Shortfall", (y) => y.shortfall),
+    stock("balances.tfsa", "Balances", "TFSA", (y) => y.balances.tfsa), stock("balances.rrsp", "Balances", "RRSP", (y) => y.balances.rrsp),
+    stock("balances.nonreg", "Balances", "Non-reg", (y) => y.balances.nonreg), stock("balances.cash", "Balances", "Cash", (y) => y.balances.cash),
+    stock("balances.otherAssets", "Balances", "Other assets", (y) => y.balances.otherAssets ?? 0), stock("balances.home", "Balances", "Home", (y) => y.balances.home),
+    stock("balances.debt", "Balances", "Debt", (y) => y.balances.debt), stock("netWorth", null, "Net worth", (y) => y.netWorth),
+    stock("tfsaRoom", null, "TFSA room", (y) => y.tfsaRoom), stock("rrspRoom", null, "RRSP room", (y) => y.rrspRoom),
   ];
+}
+
+/**
+ * Normalizes a stored hidden-column selection against the selectable column
+ * ids: unknown or stale ids are dropped, duplicates removed, canonical column
+ * order enforced. Returns null when the value is absent/invalid — meaning the
+ * default "all columns visible" (also the backward-compatible default for old
+ * saved/exported JSON). An empty result means every selectable column is
+ * hidden; the pinned Age/calendar-year/Audit columns still render.
+ */
+export function sanitizeHiddenColumns(value: unknown, selectableIds: readonly string[]): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const wanted = new Set(value.filter((id): id is string => typeof id === "string" && selectableIds.includes(id)));
+  return selectableIds.filter(id => wanted.has(id));
 }
 
 function summarize(col: Column, years: YearResult[]): number {
@@ -48,8 +67,12 @@ function summarize(col: Column, years: YearResult[]): number {
 }
 
 /** Ten consecutive result years per collapsed row; each can reveal its yearly audit trail. */
-export function ProjectionTable({ result, birthYear, jumpAge, jumpKey, historicalSourceStartYear }: { result: SimulationResult; birthYear: number; jumpAge?: number | null; jumpKey?: number; historicalSourceStartYear?: number }) {
-  const cols = columns();
+export function ProjectionTable({ result, birthYear, jumpAge, jumpKey, historicalSourceStartYear, hiddenColumnIds }: { result: SimulationResult; birthYear: number; jumpAge?: number | null; jumpKey?: number; historicalSourceStartYear?: number; hiddenColumnIds?: ReadonlySet<string> }) {
+  // Visible columns only — the filter runs BEFORE group spans, colgroups, header
+  // cells, body cells and detail-row colSpan are derived, so grouping metadata,
+  // colspan mapping and column-group band parity all follow the visible set.
+  // The Age-toggle and calendar-year columns are pinned; Audit is outside cols.
+  const cols = columns().filter(col => col.id === CALENDAR_YEAR_COLUMN_ID || !hiddenColumnIds?.has(col.id));
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(() => new Set());
   const [expandedYears, setExpandedYears] = useState<Set<number>>(() => new Set());
   const tableRef = useRef<HTMLTableElement>(null);

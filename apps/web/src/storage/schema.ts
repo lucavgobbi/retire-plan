@@ -439,6 +439,12 @@ export function validateWorkspace(value: unknown): string[] {
   if (value.meta === undefined) {
     errors.push("Workspace meta must be an object or null (undefined is not valid).");
   }
+  if (value.hiddenProjectionColumns !== undefined) {
+    const hidden = value.hiddenProjectionColumns;
+    if (!Array.isArray(hidden) || !hidden.every((id) => isNonEmptyString(id))) {
+      errors.push("Workspace hiddenProjectionColumns must be a list of column identifiers when present.");
+    }
+  }
   if (value.baseScenario !== undefined) errors.push(...validateBaseScenario(value.baseScenario));
   errors.push(...validatePlanShape(value.plan).map((e) => `Workspace plan: ${e}`));
   if (!Array.isArray(value.scenarios)) {
@@ -461,6 +467,12 @@ export function validatePlanFile(value: unknown): string[] {
   if (!Array.isArray(value.scenarios)) return ['The file is missing its "scenarios" list.'];
   const errors: string[] = [];
   if (value.baseScenario !== undefined) errors.push(...validateBaseScenario(value.baseScenario));
+  if (value.hiddenProjectionColumns !== undefined) {
+    const hidden = value.hiddenProjectionColumns;
+    if (!Array.isArray(hidden) || !hidden.every((id) => isNonEmptyString(id))) {
+      errors.push(`File hiddenProjectionColumns must be a list of column identifiers when present.`);
+    }
+  }
   value.plans.forEach((p, i) => {
     if (!isRecord(p) || p.meta === undefined || p.plan === undefined) {
       errors.push(`File plan entry ${i + 1} needs both "meta" and "plan".`);

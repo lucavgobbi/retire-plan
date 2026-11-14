@@ -343,3 +343,56 @@ describe("ProjectionView", () => {
     expect(screen.getByText(/fix \d+ plan validation error/i)).toBeTruthy();
   });
 });
+
+function HiddenColumnsProbe() {
+  const { workspace } = useWorkspace();
+  return <output data-testid="hidden-columns-state">{JSON.stringify(workspace.hiddenProjectionColumns ?? null)}</output>;
+}
+
+describe("projection table column selector", () => {
+  it("restores persisted hidden columns on load: an entire hidden group drops its header, member headers and body cells; pinned columns stay", async () => {
+    const ws = makeWorkspace();
+    ws.hiddenProjectionColumns = ["income.employment", "income.cpp", "income.oas", "income.gis", "income.other", "stale.column"];
+    render(
+      <StoreProvider initialWorkspace={ws} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+        <ProjectionView />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(document.querySelector(".projection-table")).toBeTruthy());
+    // The whole Income group is hidden → its group header and member headers vanish;
+    // a stale id from an older version is ignored without breaking anything.
+    expect(screen.queryByRole("columnheader", { name: "Income" })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "Employment" })).toBeNull();
+    expect(screen.getByRole("columnheader", { name: "Tax" })).toBeTruthy();
+    // Pinned Age/calendar-year and the Audit column always remain.
+    expect(screen.getByRole("columnheader", { name: "Household calendar year" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Audit" })).toBeTruthy();
+    // Every decade summary row drops exactly the five hidden cells (36 → 31 each).
+    const decadeRows = document.querySelectorAll(".projection-table tbody tr.decade-row");
+    expect(decadeRows.length).toBeGreaterThan(0);
+    for (const row of decadeRows) expect(row.querySelectorAll("td").length).toBe(31);
+  });
+
+  it("picker toggles persist in workspace state across re-renders; All columns restores the default", async () => {
+    render(
+      <StoreProvider initialWorkspace={makeWorkspace()} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+        <ProjectionView />
+        <HiddenColumnsProbe />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(document.querySelector(".projection-table")).toBeTruthy());
+    // Default (no stored preference): every column visible, nothing persisted.
+    expect(screen.getByRole("columnheader", { name: "Interest" })).toBeTruthy();
+    expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toBeNull();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Interest" }));
+    expect(screen.queryByRole("columnheader", { name: "Interest" })).toBeNull();
+    expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toEqual(["cash.interest"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "All columns" }));
+    expect(screen.getByRole("columnheader", { name: "Interest" })).toBeTruthy();
+    expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toBeNull();
+  });
+});

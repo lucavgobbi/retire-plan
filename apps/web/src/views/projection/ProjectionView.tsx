@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useProjectionRun, useRuns, useWorkspace } from "../../store/api";
 import { DashboardSection } from "./DashboardSection";
-import { ProjectionTable } from "./ProjectionTable";
+import { ProjectionTable, columns, sanitizeHiddenColumns } from "./ProjectionTable";
 import { FailBanner } from "./FailBanner";
 import { RunAnalysisSummary } from "./RunAnalysisSummary";
 import "./projection.css";
@@ -63,6 +63,31 @@ export function ProjectionView() {
   const effectiveScenarioId = selectedScenario?.id ?? null;
   const { run, runProjection, stale, isRunning, runCancelled, cancelRun } = useProjectionRun(planId, effectiveScenarioId);
 
+  // Column visibility: the workspace persists HIDDEN data-column ids (absent or
+  // empty = all visible, so columns added later default visible; stale ids are
+  // dropped by the sanitizer). Age/calendar-year and Audit stay pinned.
+  const allColumns = columns();
+  const selectableIds = allColumns.slice(1).map((col) => col.id);
+  const hiddenList = sanitizeHiddenColumns(workspace.workspace.hiddenProjectionColumns, selectableIds);
+  const hiddenIds = hiddenList === null ? undefined : new Set(hiddenList);
+  const columnPickerGroups: { group: string; items: { id: string; label: string }[] }[] = [];
+  const pickerByName = new Map<string, { group: string; items: { id: string; label: string }[] }>();
+  for (const col of allColumns.slice(1)) {
+    const name = col.group ?? "Other";
+    let entry = pickerByName.get(name);
+    if (!entry) {
+      entry = { group: name, items: [] };
+      pickerByName.set(name, entry);
+      columnPickerGroups.push(entry);
+    }
+    entry.items.push({ id: col.id, label: col.label });
+  }
+  const toggleColumn = (id: string) => {
+    const current = hiddenList ?? [];
+    const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+    workspace.dispatch({ type: "projection/setHiddenColumns", hiddenColumnIds: next });
+  };
+
   const failureAge = run && !run.result.summary.success ? (run.result.summary.failureAge ?? null) : null;
   const birthYear = run?.birthYear ?? workspace.workspace.plan.profile.birthYear;
   const historicalSourceStartYear = run?.analysis?.mode === "historical" ? run.analysis.representativeStartYear : undefined;
@@ -97,6 +122,29 @@ export function ProjectionView() {
         <button type="button" onClick={() => { void runProjection(); }} disabled={validationErrors.length > 0 || isRunning}>
           Run projection
         </button>
+        <details className="column-picker">
+          <summary>Columns</summary>
+          <div className="column-picker-menu">
+            <button type="button" onClick={() => workspace.dispatch({ type: "projection/setHiddenColumns", hiddenColumnIds: null })}>
+              All columns
+            </button>
+            {columnPickerGroups.map(({ group, items }) => (
+              <fieldset key={group}>
+                <legend>{group}</legend>
+                {items.map((col) => (
+                  <label key={col.id}>
+                    <input
+                      type="checkbox"
+                      checked={!(hiddenIds ?? new Set<string>()).has(col.id)}
+                      onChange={() => toggleColumn(col.id)}
+                    />{" "}
+                    {col.label}
+                  </label>
+                ))}
+              </fieldset>
+            ))}
+          </div>
+        </details>
         {isRunning && <>
           <p role="status" aria-live="polite">Projection running in the background…</p>
           <button type="button" onClick={cancelRun}>Cancel projection</button>
@@ -131,7 +179,7 @@ export function ProjectionView() {
           <RunAnalysisSummary run={run} />
           {run.analysis && <p className="hint">Year table audit counts and failures describe the representative path shown below.</p>}
           <DashboardSection result={run.result} />
-          <ProjectionTable result={run.result} birthYear={birthYear} historicalSourceStartYear={historicalSourceStartYear} jumpAge={jumpAge} jumpKey={jumpKey} />
+          <ProjectionTable result={run.result} birthYear={birthYear} historicalSourceStartYear={historicalSourceStartYear} jumpAge={jumpAge} jumpKey={jumpKey} hiddenColumnIds={hiddenIds} />
         </>
       )}
     </section>

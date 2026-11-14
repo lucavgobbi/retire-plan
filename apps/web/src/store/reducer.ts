@@ -50,6 +50,14 @@ export function reducer(state: StoreState, action: Action): StoreState {
     case "scenario/remove": return { ...state, workspace: { ...workspace, scenarios: workspace.scenarios.filter(delta => delta.id !== action.delta.id) } };
     case "scenario/setBase": return { ...state, workspace: { ...workspace, baseScenario: { ...(workspace.baseScenario ?? DEFAULT_SCENARIO_BASE), ...structuredClone(action.patch) } } };
     case "workspace/loaded": return { workspace: structuredClone(action.workspace), runs: [] };
+    case "projection/setHiddenColumns": {
+      if (action.hiddenColumnIds === null) {
+        // Default = the field's absence; strip the key so autosave/export stop carrying it.
+        const { hiddenProjectionColumns: _removed, ...rest } = workspace;
+        return { ...state, workspace: rest };
+      }
+      return { ...state, workspace: { ...workspace, hiddenProjectionColumns: [...action.hiddenColumnIds] } };
+    }
     case "run/store": return { ...state, runs: [...state.runs.filter(run => run.id !== action.record.id), deepFreeze(structuredClone(action.record))].slice(-20) };
     default: return assertNever(action);
   }

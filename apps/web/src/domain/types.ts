@@ -25,12 +25,13 @@ export interface ScenarioDelta {
   withdrawalStrategy?: WithdrawalStrategy;
   overrides: Partial<Pick<ScenarioBase, "retirementAge" | "returnAssumptions" | "withdrawalOrder">>;
 }
-export interface Workspace { meta: PlanMeta | null; plan: Plan; scenarios: ScenarioDelta[]; baseScenario?: ScenarioBase }
+export interface Workspace { meta: PlanMeta | null; plan: Plan; scenarios: ScenarioDelta[]; baseScenario?: ScenarioBase; /** Hidden projection-table data-column ids (stable); absent or empty = all visible, so columns added later default visible. */ hiddenProjectionColumns?: string[] }
 export interface PlanFile {
   schemaVersion: number;
   plans: { meta: PlanMeta; plan: Plan }[];
   scenarios: ScenarioDelta[];
   baseScenario?: ScenarioBase;
+  hiddenProjectionColumns?: string[];
 }
 export type RunId = string;
 export interface RunRecord {

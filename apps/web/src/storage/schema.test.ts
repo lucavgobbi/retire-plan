@@ -115,6 +115,27 @@ describe("structural schema checks", () => {
     } }).join(" ")).toMatch(/cannot enable GIS when OAS is disabled/);
   });
 
+  it("accepts optional hiddenProjectionColumns (absent = all columns) and rejects malformed values", () => {
+    const base = { meta: null, plan: makeSamplePlan(), scenarios: [] };
+    expect(validateWorkspace({ ...base, hiddenProjectionColumns: [] })).toEqual([]);
+    expect(validateWorkspace({ ...base, hiddenProjectionColumns: ["income.employment", "stale.id"] })).toEqual([]);
+    expect(
+      validateWorkspace({ ...base, hiddenProjectionColumns: "all" }).some((e) => e.includes("hiddenProjectionColumns")),
+    ).toBe(true);
+    expect(
+      validateWorkspace({ ...base, hiddenProjectionColumns: [42] }).some((e) => e.includes("hiddenProjectionColumns")),
+    ).toBe(true);
+    const file = {
+      schemaVersion: 1,
+      plans: [{ meta: { id: "p", name: "P", updatedAt: new Date().toISOString() }, plan: makeSamplePlan() }],
+      scenarios: [],
+    };
+    expect(validatePlanFile({ ...file, hiddenProjectionColumns: ["balances.debt"] })).toEqual([]);
+    expect(
+      validatePlanFile({ ...file, hiddenProjectionColumns: { hidden: true } }).some((e) => e.includes("hiddenProjectionColumns")),
+    ).toBe(true);
+  });
+
   it("validates the whole PlanFile envelope", () => {
     const file = {
       schemaVersion: 1,

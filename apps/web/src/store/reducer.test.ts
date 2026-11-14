@@ -32,8 +32,15 @@ describe("workspace reducer", () => {
     state = reducer(state, { type: "plan/updateItem", section: "accounts", id: "item", patch: { bookValue: undefined } });
     expect(state.workspace.plan.accounts[0]?.bookValue).toBeUndefined();
   });
-  it("keeps the newest twenty immutable run snapshots and clears runs on workspace replacement", () => {
+  it("stores and clears hidden projection columns on the workspace", () => {
     let state: StoreState = { workspace: createEmptyWorkspace(), runs: [] };
+    state = reducer(state, { type: "projection/setHiddenColumns", hiddenColumnIds: ["income.employment", "tax.total"] });
+    expect(state.workspace.hiddenProjectionColumns).toEqual(["income.employment", "tax.total"]);
+    // Clearing restores the DEFAULT: the field's absence (all columns visible).
+    state = reducer(state, { type: "projection/setHiddenColumns", hiddenColumnIds: null });
+    expect("hiddenProjectionColumns" in state.workspace).toBe(false);
+  });
+  it("keeps the newest twenty immutable run snapshots and clears runs on workspace replacement", () => {    let state: StoreState = { workspace: createEmptyWorkspace(), runs: [] };
     let last!: RunRecord;
     for (let i = 0; i < 22; i++) {
       last = { id: String(i), planId: "p", scenarioId: null, scenario: resolveScenario(null, DEFAULT_SCENARIO_BASE), result: { years: [], summary: { success: true, finalNetWorth: i } }, createdAt: String(i) };
