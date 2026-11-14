@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { BaseScenarioSettings } from "./BaseScenarioSettings";
 import { DEFAULT_SCENARIO_BASE, StoreProvider, useWorkspace, type ScenarioBase } from "../store/api";
@@ -20,6 +20,7 @@ describe("base projection return inputs", () => {
   it("removes binary display noise while preserving untouched stored precision", () => {
     const base: ScenarioBase = { ...DEFAULT_SCENARIO_BASE, returnAssumptions: { equity: 0.07, bond: 0.123456789012345, cash: 0 } };
     renderSettings(base);
+    fireEvent.click(screen.getByText("Return assumptions"));
     expect((screen.getByLabelText("Base equity return (%)") as HTMLInputElement).value).toBe("7");
     // No save button: valid changes apply on edit.
     expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
@@ -40,6 +41,7 @@ describe("base projection return inputs", () => {
     expect(storedBase().returnAssumptions).toEqual(base.returnAssumptions);
     // Correcting the other valid field still leaves an invalid order untouched only until an account is chosen.
     fireEvent.change(screen.getByLabelText("Base retirement age"), { target: { value: "61" } });
+    fireEvent.click(screen.getByText("Account withdrawal order"));
     const first = screen.getAllByLabelText(/Base withdrawal priority/)[0]!;
     expect(within(first).getAllByRole("option").map(option => option.textContent)).toEqual(["TFSA", "Non-registered", "RRSP/RRIF"]);
     fireEvent.change(first, { target: { value: "rrsp" } });
@@ -53,6 +55,7 @@ describe("base projection return inputs", () => {
 
   it("stores base Monte Carlo mode and reproducible run settings", () => {
     renderSettings(DEFAULT_SCENARIO_BASE);
+    fireEvent.click(screen.getByText("Return assumptions"));
     fireEvent.change(screen.getByLabelText("Base simulation mode"), { target: { value: "montecarlo" } });
     fireEvent.change(screen.getByLabelText("Base Monte Carlo runs"), { target: { value: "250" } });
     fireEvent.change(screen.getByLabelText("Base Monte Carlo seed"), { target: { value: "42" } });
@@ -73,7 +76,7 @@ describe("base projection return inputs", () => {
 
   it("saves benefit choices and the withdrawal strategy, disabling GIS when OAS is off", () => {
     renderSettings(DEFAULT_SCENARIO_BASE);
-    expect(screen.getByRole("group", { name: "Benefits in this projection" }).className).toContain("base-benefits-fieldset");
+    expect(screen.getByRole("region", { name: "Benefits" })).toBeTruthy();
     expect(screen.getByText(/no CPP income stream is configured/i)).toBeTruthy();
     expect(screen.getByText(/no OAS income stream is configured/i)).toBeTruthy();
     fireEvent.click(screen.getByLabelText("Base include CPP"));
@@ -84,5 +87,21 @@ describe("base projection return inputs", () => {
     fireEvent.change(screen.getByLabelText("Base withdrawal strategy"), { target: { value: "tax-minimizing" } });
     expect(storedBase().withdrawalStrategy).toBe("tax-minimizing");
     expect(screen.getByText(/bounded planning heuristic/i)).toBeTruthy();
+  });
+
+  it("groups base controls into clear sections and keeps hidden invalid return fields discoverable", async () => {
+    const invalid: ScenarioBase = { ...DEFAULT_SCENARIO_BASE, returnAssumptions: { equity: 0.07, bond: 0.05, cash: 0.02 } };
+    renderSettings(invalid);
+    for (const name of ["Basics", "Benefits", "Simulation", "Withdrawals"]) {
+      expect(screen.getByRole("region", { name })).toBeTruthy();
+    }
+    const returns = screen.getByText("Return assumptions").closest("details")!;
+    expect(returns.open).toBe(false);
+    fireEvent.click(screen.getByText("Return assumptions"));
+    fireEvent.change(screen.getByLabelText("Base equity return (%)"), { target: { value: "-" } });
+    expect((await screen.findByRole("alert")).textContent).toMatch(/Base equity return.*must be a number/i);
+    expect(returns.open).toBe(true);
+    fireEvent.click(screen.getByText("Return assumptions"));
+    await waitFor(() => expect(returns.open).toBe(true));
   });
 });

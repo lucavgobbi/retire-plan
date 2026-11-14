@@ -2,11 +2,16 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it } from "vitest";
 import type { RunOutcome } from "../../domain/run";
 import type { SimulationRunner } from "../../store/simulationWorkerProtocol";
-import type { Scenario } from "@retire-plan/engine";
+import type { Scenario, SimulationResult, YearResult } from "@retire-plan/engine";
 import { StoreProvider, useWorkspace } from "../../store/api";
 import { DEFAULT_SCENARIO_BASE } from "../../domain/defaults";
 import { makeRunOutPlan, makeSamplePlan, makeWorkspace } from "./testFixtures";
+import { ProjectionTable, columns } from "./ProjectionTable";
+import { fmtMoney } from "./fmt";
 import { ProjectionView } from "./ProjectionView";
+
+const selectableColumnIds = () => columns().slice(1).map((col) => col.id);
+const selectableColumnCount = () => selectableColumnIds().length;
 
 function renderView(workspace = makeWorkspace(), simulationRunner?: SimulationRunner, baseScenario = DEFAULT_SCENARIO_BASE) {
   return render(
@@ -242,7 +247,7 @@ describe("ProjectionView", () => {
     const results = screen.getByRole("region", { name: "Year-by-year projection results" });
     expect(results.id).toBe("projection-year-table");
     expect(results.querySelectorAll("thead > tr")).toHaveLength(2);
-    expect(results.querySelectorAll('thead th[scope="col"]')).toHaveLength(36);
+    expect(results.querySelectorAll('thead th[scope="col"]')).toHaveLength(41);
     expect(Array.from(results.querySelectorAll("thead tr:last-child th")).filter((cell) => cell.textContent === "Expenses")).toHaveLength(1);
     expect(results.querySelector('thead tr:first-child th[rowspan="2"]')?.textContent).toBe("Audit");
     results.focus();
@@ -378,7 +383,7 @@ function HiddenColumnsProbe() {
 describe("projection table column selector", () => {
   it("restores persisted hidden columns on load: an entire hidden group drops its header, member headers and body cells; pinned columns stay", async () => {
     const ws = makeWorkspace();
-    ws.hiddenProjectionColumns = ["income.employment", "income.cpp", "income.oas", "income.gis", "income.other", "stale.column"];
+    ws.hiddenProjectionColumns = ["income.employment", "income.cpp", "income.oas", "income.gis", "income.other", "income.total", "stale.column"];
     render(
       <StoreProvider initialWorkspace={ws} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
         <ProjectionView />
@@ -386,18 +391,19 @@ describe("projection table column selector", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
     await waitFor(() => expect(document.querySelector(".projection-table")).toBeTruthy());
-    // The whole Income group is hidden → its group header and member headers vanish;
-    // a stale id from an older version is ignored without breaking anything.
+    // The whole Income group (members AND its total) is hidden → its group header
+    // and member headers vanish; a stale id from an older version is ignored
+    // without breaking anything.
     expect(screen.queryByRole("columnheader", { name: "Income" })).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "Employment" })).toBeNull();
     expect(screen.getByRole("columnheader", { name: "Tax" })).toBeTruthy();
     // Pinned Age/calendar-year and the Audit column always remain.
     expect(screen.getByRole("columnheader", { name: "Household calendar year" })).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "Audit" })).toBeTruthy();
-    // Every decade summary row drops exactly the five hidden cells (36 → 31 each).
+    // Every decade summary row drops exactly the six hidden cells (41 → 35 each).
     const decadeRows = document.querySelectorAll(".projection-table tbody tr.decade-row");
     expect(decadeRows.length).toBeGreaterThan(0);
-    for (const row of decadeRows) expect(row.querySelectorAll("td").length).toBe(31);
+    for (const row of decadeRows) expect(row.querySelectorAll("td").length).toBe(35);
   });
 
   it("picker toggles persist in workspace state across re-renders; Show everything restores the default", async () => {
@@ -474,5 +480,222 @@ describe("projection table column selector", () => {
     expect(screen.getAllByRole("figure").length).toBe(6);
     expect(screen.queryByRole("figure", { name: "Income versus spending chart" })).toBeNull();
     expect(screen.getByRole("figure", { name: "Tax by component chart" })).toBeTruthy();
+  });
+});
+
+describe("projection table group totals", () => {
+  // Custom two-year fixture with KNOWN flows + debt: the decade row must SUM the
+  // two years for flow totals, take the period END for stock totals, and keep
+  // totals correct even when member columns are hidden (full-group computation,
+  // not a re-sum of whatever members happen to be visible).
+  const tax = (total: number, fed: number) => ({ federal: fed, provincial: total - fed - 6, surtax: 2, oasClawback: 4, total, marginalRate: 0.2 });
+  const balances = (tfsa: number, debt: number) => ({ tfsa, rrsp: 200, nonreg: 50, cash: 75, home: 400, otherAssets: 45, debt });
+  const makeYear = (age: number, opts: {
+    income?: Partial<{ employment: number; cpp: number; oas: number; gis: number; other: number }>;
+    cashInterest?: number; taxTotal?: number; fed?: number;
+    withdrawals?: Partial<{ tfsa: number; rrsp: number; nonreg: number; cash: number }>;
+    contributions?: Partial<{ tfsa: number; rrsp: number; nonreg: number; cash: number }>;
+    balances?: { tfsa: number; debt: number }; netWorth?: number;
+  }): YearResult => ({
+    age,
+    income: { employment: opts.income?.employment ?? 0, cpp: opts.income?.cpp ?? 20, oas: opts.income?.oas ?? 10, gis: opts.income?.gis ?? 5, other: opts.income?.other ?? 15 },
+    cashInterest: opts.cashInterest,
+    taxableIncome: 0,
+    tax: tax(opts.taxTotal ?? 15, opts.fed ?? 7),
+    withdrawals: { tfsa: opts.withdrawals?.tfsa ?? 10, rrsp: opts.withdrawals?.rrsp ?? 20, nonreg: opts.withdrawals?.nonreg ?? 30, cash: opts.withdrawals?.cash ?? 40 },
+    contributions: { tfsa: opts.contributions?.tfsa ?? 1, rrsp: opts.contributions?.rrsp ?? 2, nonreg: opts.contributions?.nonreg ?? 3, cash: opts.contributions?.cash ?? 4 },
+    savings: { tfsa: 0, rrsp: 0, nonreg: 0, mortgage: 0 },
+    expenses: 0, shortfall: 0,
+    balances: opts.balances ? balances(opts.balances.tfsa, opts.balances.debt) : balances(100, 120),
+    netWorth: opts.netWorth ?? 750,
+    tfsaRoom: 0, rrspRoom: 0,
+    events: [], warnings: [],
+  });
+
+  // Year 60: income parts 100/20/10/5/15 (total 150), interest 4, tax total 15
+  // (components sum 13 — the engine total is authoritative), withdrawals 100,
+  // contributions 10, assets 870 (debt 120 excluded), netWorth 750.
+  // Year 61: income employment 200 (total 250), interest 6, tax total 25
+  // (components 20), withdrawals 125, contributions 14, assets 880 (debt 110), netWorth 770.
+  const years = [
+    makeYear(60, { income: { employment: 100 }, cashInterest: 4, balances: { tfsa: 100, debt: 120 }, netWorth: 750 }),
+    makeYear(61, { income: { employment: 200 }, cashInterest: 6, taxTotal: 25, fed: 10,
+      withdrawals: { tfsa: 20, rrsp: 25, nonreg: 35, cash: 45 }, contributions: { tfsa: 2, rrsp: 3, nonreg: 4, cash: 5 },
+      balances: { tfsa: 110, debt: 110 }, netWorth: 770 }),
+  ];
+  const result = { years, summary: { success: true, finalNetWorth: 770 } } as unknown as SimulationResult;
+
+  function renderTable(hiddenColumnIds?: ReadonlySet<string>) {
+    return render(<ProjectionTable result={result} birthYear={1980} hiddenColumnIds={hiddenColumnIds} />);
+  }
+
+  it("decade row: flow totals sum both years; stock totals take the endpoint; tax total is authoritative; debt is excluded", () => {
+    const { container } = renderTable();
+    const decade = container.querySelector(".decade-row")!;
+    const totals = Array.from(decade.querySelectorAll("td[data-total]"));
+    expect(totals.map((td) => td.textContent)).toEqual([
+      fmtMoney(150 + 250),   // Total income (income parts only — cash interest NOT included)
+      fmtMoney(4 + 6),       // Total interest (cash-account interest, not a balance)
+      fmtMoney(15 + 25),     // Tax total: engine total, NOT the component sum (33)
+      fmtMoney(100 + 125),   // Total withdrawn
+      fmtMoney(10 + 14),     // Total contributed
+      fmtMoney(880),         // Total assets: ENDPOINT of year 61, not the sum 1750, debt excluded
+    ]);
+    // Standalone engine Net worth keeps its meaning (endpoint 770 = 880 − 110).
+    const netWorthIndex = Array.from(container.querySelectorAll("thead tr:last-child th"))
+      .findIndex((th) => th.getAttribute("aria-describedby") === "col-note-netWorth");
+    expect(decade.children[netWorthIndex]!.textContent).toBe(fmtMoney(770));
+  });
+
+  it("totals cover the FULL group even when every member column is hidden", () => {
+    const hidden = new Set([
+      "income.employment", "income.cpp", "income.oas", "income.gis", "income.other",
+      "withdrawals.tfsa", "withdrawals.rrsp", "withdrawals.nonreg", "withdrawals.cash",
+      "contributions.tfsa", "contributions.rrsp", "contributions.nonreg", "contributions.cash",
+    ]);
+    const { container } = renderTable(hidden);
+    const decade = container.querySelector(".decade-row")!;
+    const totals = Array.from(decade.querySelectorAll("td[data-total]"));
+    expect(totals.map((td) => td.textContent)).toEqual([
+      fmtMoney(400), fmtMoney(10), fmtMoney(40), fmtMoney(225), fmtMoney(24), fmtMoney(880),
+    ]);
+    // Member headers are really gone; the total headers remain.
+    expect(container.querySelector('thead th[aria-describedby="col-note-income.total"]')).toBeTruthy();
+    expect(screen.queryByRole("columnheader", { name: "Employment" })).toBeNull();
+  });
+
+  it("total headers keep a short accessible name and expose composition via described-by", () => {
+    const { container } = renderTable();
+    const th = container.querySelector('thead th[aria-describedby="col-note-balances.total"]')!;
+    expect(th.textContent).toContain("Total assets");
+    expect(document.getElementById("col-note-balances.total")!.textContent).toContain("debt is not included");
+  });
+});
+
+describe("bulk table-column toggle (Select all / Unselect all)", () => {
+  function gearBulk() {
+    fireEvent.click(document.querySelector(".projection-settings summary")!);
+    const button = screen.getByRole("button", { name: /select all|unselect all/i });
+    fireEvent.click(button);
+    return button;
+  }
+
+  it("Unselect all hides every selectable column but keeps pinned Age/year and Audit; Select all restores", async () => {
+    render(
+      <StoreProvider initialWorkspace={makeWorkspace()} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+        <ProjectionView />
+        <HiddenColumnsProbe />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(document.querySelector(".projection-table")).toBeTruthy());
+    expect(screen.getByRole("button", { name: `Unselect all (${selectableColumnCount()} selected)` })).toBeTruthy();
+
+    gearBulk();
+    // Every selectable id is hidden; pinned calendar-year, Age and Audit remain.
+    expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toEqual(selectableColumnIds());
+    expect(screen.queryByRole("columnheader", { name: "Interest" })).toBeNull();
+    expect(screen.getByRole("columnheader", { name: "Age" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Household calendar year" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Audit" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: `Select all (0 of ${selectableColumnCount()} shown)` })).toBeTruthy();
+
+    gearBulk();
+    expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toBeNull();
+    expect(screen.getByRole("columnheader", { name: "Interest" })).toBeTruthy();
+  });
+
+  it("partial state: the bulk button selects all and clears the partial hidden set", async () => {
+    render(
+      <StoreProvider initialWorkspace={makeWorkspace()} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+        <ProjectionView />
+        <HiddenColumnsProbe />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(document.querySelector(".projection-table")).toBeTruthy());
+    fireEvent.click(document.querySelector(".projection-settings summary")!);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Interest" }));
+    expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toEqual(["cash.interest"]);
+    fireEvent.click(screen.getByRole("button", { name: `Select all (${selectableColumnCount() - 1} of ${selectableColumnCount()} shown)` }));
+    expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toBeNull();
+  });
+});
+
+describe("run analysis collapsible", () => {
+  it("plain deterministic run with no analysis content renders NO empty collapsible", async () => {
+    renderView();
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(document.querySelector(".run-stamp")).toBeTruthy());
+    expect(document.querySelector("details.run-summary-collapse")).toBeNull();
+    expect(document.querySelector(".run-stamp")).toBeTruthy();
+    expect(document.querySelector(".chart-grid")).toBeTruthy();
+  });
+
+  it("native details, expanded by default, wraps the WHOLE RunAnalysisSummary box (all modes); stamp/charts stay outside; state not persisted", async () => {
+    const plan = makeSamplePlan();
+    plan.profile.endAge = plan.profile.currentAge + 1;
+    const base = { ...DEFAULT_SCENARIO_BASE, simMode: "historical" as const, historicalConfig: { startYear: 1872 } };
+    renderView(makeWorkspace(plan), undefined, base);
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    const analysis = await screen.findByRole("complementary", { name: "Historical results" });
+    const details = document.querySelector("details.run-summary-collapse") as HTMLDetailsElement;
+    expect(details).toBeTruthy();
+    expect(details.open).toBe(true);
+    expect(details.querySelector("summary")!.textContent).toBe("Run analysis");
+    // The entire analysis box lives INSIDE the collapsible — not only the MC metrics.
+    expect(details.contains(analysis)).toBe(true);
+    // Context stamp and charts live OUTSIDE it.
+    expect(details.querySelector(".run-stamp")).toBeNull();
+    expect(details.querySelector(".chart-grid")).toBeNull();
+    expect(document.querySelector(".run-stamp")).toBeTruthy();
+    fireEvent.click(details.querySelector("summary")!);
+    expect(details.open).toBe(false);
+  });
+
+  it("monte carlo mode: the ensemble box is inside the collapsible; charts stay outside", async () => {
+    const mcOutcome = {
+      result: { years: [], summary: { success: true, finalNetWorth: 20_000 } },
+      analysis: { mode: "montecarlo", successRate: 0.73, percentileNetWorth: { p10: 10_000, p50: 20_000, p90: 30_000 }, representativeRun: 411 },
+    } as unknown as RunOutcome;
+    renderView(makeWorkspace(), () => Promise.resolve(mcOutcome));
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    const analysis = await screen.findByRole("complementary", { name: "Monte Carlo results" });
+    const details = document.querySelector("details.run-summary-collapse") as HTMLDetailsElement;
+    expect(details).toBeTruthy();
+    expect(details.open).toBe(true);
+    expect(details.contains(analysis)).toBe(true);
+    expect(details.querySelector(".chart-grid")).toBeNull();
+    expect(document.querySelector(".chart-grid")).toBeTruthy();
+  });
+
+  it("deterministic run with a tax-minimizing plan: the planning comparison box is inside the collapsible", async () => {
+    const plannedOutcome = {
+      result: {
+        years: [],
+        summary: { success: true, finalNetWorth: 790_000 },
+        withdrawalPlan: {
+          strategy: "tax-minimizing",
+          status: "optimized",
+          planningBasis: "One deterministic evaluation using the selected return assumptions.",
+          plannedWithdrawals: [{ age: 66, netRrspDraw: 12_500 }],
+          comparison: {
+            manualTotalTax: 40_000, optimizedTotalTax: 35_000,
+            manualFinalNetWorth: 800_000, optimizedFinalNetWorth: 790_000,
+            manualSuccess: false, optimizedSuccess: true, manualGisTotal: 20_000, optimizedGisTotal: 24_000,
+            selectionRule: "Feasibility first, then lower total tax; bounded heuristic.",
+          },
+        },
+      },
+    } as unknown as RunOutcome;
+    renderView(makeWorkspace(), () => Promise.resolve(plannedOutcome));
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    const analysis = await screen.findByRole("complementary", { name: "Tax strategy planning comparison" });
+    const details = document.querySelector("details.run-summary-collapse") as HTMLDetailsElement;
+    expect(details).toBeTruthy();
+    expect(details.open).toBe(true);
+    expect(details.contains(analysis)).toBe(true);
+    expect(details.querySelector(".chart-grid")).toBeNull();
+    expect(document.querySelector(".chart-grid")).toBeTruthy();
   });
 });

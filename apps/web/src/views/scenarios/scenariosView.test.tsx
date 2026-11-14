@@ -165,7 +165,7 @@ describe("ScenariosView", () => {
     ws.scenarios.push(delta);
     renderView(ws);
     fireEvent.click(screen.getByRole("button", { name: /edit/i }));
-    fireEvent.click(screen.getByText("Withdrawal strategy and order"));
+    fireEvent.click(screen.getByText("Account withdrawal order"));
     const first = screen.getByLabelText(/1st drawn/i) as HTMLSelectElement;
     expect(first.value).toBe("tfsa");
     expect(Array.from(first.options).map(option => option.textContent)).toEqual(["TFSA", "Non-registered", "RRSP/RRIF"]);
@@ -217,7 +217,6 @@ describe("ScenariosView", () => {
     fireEvent.click(screen.getByRole("button", { name: /new scenario/i }));
     expect(screen.getByText(/no CPP income stream is configured/i)).toBeTruthy();
     expect(screen.getByText(/no OAS income stream is configured/i)).toBeTruthy();
-    fireEvent.click(screen.getByText("Withdrawal strategy and order"));
     fireEvent.click(screen.getByLabelText("Scenario include CPP"));
     fireEvent.click(screen.getByLabelText("Scenario include OAS"));
     expect((screen.getByLabelText("Scenario include GIS") as HTMLInputElement).disabled).toBe(true);
@@ -248,14 +247,14 @@ describe("ScenariosView", () => {
     fireEvent.click(screen.getByLabelText("Base include CPP"));
     expect((screen.getByLabelText("Scenario include CPP") as HTMLInputElement).checked).toBe(false);
     fireEvent.change(screen.getByLabelText("Base withdrawal strategy"), { target: { value: "tax-minimizing" } });
-    expect((screen.getByLabelText("Withdrawal strategy") as HTMLSelectElement).value).toBe("inherit");
+    const scenarioEditor = screen.getByRole("region", { name: "Edit scenario" });
+    expect((within(scenarioEditor).getByLabelText("Withdrawal strategy") as HTMLSelectElement).value).toBe("inherit");
     stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
     expect(stored[0]).not.toHaveProperty("withdrawalStrategy");
-    fireEvent.click(screen.getByText("Withdrawal strategy and order"));
-    fireEvent.change(screen.getByLabelText("Withdrawal strategy"), { target: { value: "manual" } });
+    fireEvent.change(within(scenarioEditor).getByLabelText("Withdrawal strategy"), { target: { value: "manual" } });
     stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
     expect(stored[0]).toHaveProperty("withdrawalStrategy", "manual");
-    fireEvent.change(screen.getByLabelText("Withdrawal strategy"), { target: { value: "inherit" } });
+    fireEvent.change(within(scenarioEditor).getByLabelText("Withdrawal strategy"), { target: { value: "inherit" } });
     stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
     expect(stored[0]).not.toHaveProperty("withdrawalStrategy");
   });
@@ -265,12 +264,12 @@ describe("ScenariosView", () => {
     ws.scenarios.push({ ...delta, overrides: { retirementAge: 62, withdrawalOrder: ["nonreg", "tfsa", "rrsp"] } });
     render(<StoreProvider initialWorkspace={ws} initialBaseScenario={DEFAULT_SCENARIO_BASE}><ScenariosView /><ScenariosProbe /></StoreProvider>);
     fireEvent.click(screen.getByRole("button", { name: /edit/i }));
-    fireEvent.click(screen.getByText("Withdrawal strategy and order"));
+    fireEvent.click(screen.getByText("Account withdrawal order"));
     expect(screen.getByLabelText(/1st drawn/i)).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Withdrawal strategy"), { target: { value: "tax-minimizing" } });
     expect(screen.queryByLabelText(/1st drawn/i)).toBeNull();
     expect(screen.queryByLabelText("Cash withdrawal order")).toBeNull();
-    expect(screen.getByText("Your saved order is retained as the optimizer fallback.")).toBeTruthy();
+    expect(screen.getByText("Your saved account order is retained as the optimizer fallback.")).toBeTruthy();
     // Edits made while the controls are hidden must not lose the stored order override.
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Renamed under optimizer" } });
     let stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
@@ -278,6 +277,7 @@ describe("ScenariosView", () => {
     expect(stored[0]!.withdrawalStrategy).toBe("tax-minimizing");
     // Switching back to manual shows the unchanged order again.
     fireEvent.change(screen.getByLabelText("Withdrawal strategy"), { target: { value: "manual" } });
+    fireEvent.click(screen.getByText("Account withdrawal order"));
     expect((screen.getByLabelText(/1st drawn/i) as HTMLSelectElement).value).toBe("nonreg");
     expect((screen.getByLabelText("Cash withdrawal order") as HTMLSelectElement).value).toBe("automatic");
   });
@@ -285,9 +285,14 @@ describe("ScenariosView", () => {
   it("keeps key scenario fields visible and opens invalid advanced sections without losing drafts", async () => {
     renderView();
     fireEvent.click(screen.getByRole("button", { name: /new scenario/i }));
+    for (const name of ["Basics", "Benefits", "Simulation", "Withdrawals"]) {
+      expect(screen.getByRole("region", { name })).toBeTruthy();
+    }
     expect(screen.getByLabelText("Name")).toBeTruthy();
     expect(screen.getByLabelText("Scenario include CPP")).toBeTruthy();
     expect(screen.getByLabelText(/retirement age override/i)).toBeTruthy();
+    expect(screen.getByLabelText("Withdrawal strategy")).toBeTruthy();
+    expect(screen.getByText("Account withdrawal order").closest("details")!.open).toBe(false);
     const returnDetails = screen.getByText("Return assumptions").closest("details")!;
     expect(returnDetails.open).toBe(false);
     fireEvent.click(screen.getByText("Return assumptions"));
@@ -295,6 +300,7 @@ describe("ScenariosView", () => {
     fireEvent.change(equity, { target: { value: "-" } });
     expect(await screen.findByText(/return assumption \(capital equity\) must be a number/i)).toBeTruthy();
     expect(returnDetails.open).toBe(true);
+    expect(equity.value).toBe("-");
     fireEvent.click(screen.getByText("Return assumptions"));
     await waitFor(() => expect(returnDetails.open).toBe(true));
     expect(screen.getByLabelText("Equity %")).toBe(equity);

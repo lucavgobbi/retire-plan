@@ -1,19 +1,11 @@
-.base-scenario-settings .base-benefits-fieldset {
-  grid-column: 1 / -1;
+.base-scenario-settings {
   min-width: 0;
+  width: 100%;
 }
-
-.base-scenario-settings .base-benefits-fieldset > label {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.base-scenario-settings .base-benefits-fieldset input[type="checkbox"] {
-  flex: 0 0 auto;
-  margin-top: 2px;
-}
-
-.base-scenario-settings .base-benefits-fieldset .hint {
-  overflow-wrap: anywhere;
-}
+.base-settings-heading { margin-bottom: 14px; }
+.base-settings-heading h2 { margin: 0; }
+.base-settings-heading p { margin: 4px 0 0; color: #60706b; font-size: .82rem; }
+.base-settings-sections { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
+.base-return-section { margin-top: 14px; }
+.base-scenario-settings .form-errors { margin-top: 12px; }
+.base-scenario-settings .form-errors p { margin: 4px 0; }

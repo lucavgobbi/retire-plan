@@ -13,6 +13,10 @@ interface Column {
   value: (year: YearResult) => number;
   summary: SummaryKind;
   percent?: boolean;
+  /** Group-total column: computed from the FULL group (all members, visible or hidden). */
+  total?: true;
+  /** Clarifying accessible name for the header cell (meaning, never a value). */
+  note?: string;
 }
 
 /** First column: always visible, never selectable (like the Audit column). */
@@ -26,19 +30,33 @@ export function columns(): Column[] {
     { id: CALENDAR_YEAR_COLUMN_ID, group: null, label: "Household calendar year", value: (y) => y.age, summary: "year" },
     flow("income.employment", "Income", "Employment", (y) => y.income.employment), flow("income.cpp", "Income", "CPP", (y) => y.income.cpp),
     flow("income.oas", "Income", "OAS", (y) => y.income.oas), flow("income.gis", "Income", "GIS", (y) => y.income.gis), flow("income.other", "Income", "Other", (y) => y.income.other),
+    { id: "income.total", group: "Income", label: "Total income", value: (y) => y.income.employment + y.income.cpp + y.income.oas + y.income.gis + y.income.other, summary: "flow", total: true,
+      note: "Total income: sum of the income components; cash-account interest is shown separately" },
     flow("cash.interest", "Cash accounts", "Interest", (y) => y.cashInterest ?? 0),
+    { id: "cash.total", group: "Cash accounts", label: "Total interest", value: (y) => y.cashInterest ?? 0, summary: "flow", total: true,
+      note: "Total cash interest: interest earned by cash accounts this year — not a cash balance" },
     flow("tax.taxableIncome", null, "Taxable", (y) => y.taxableIncome), flow("tax.federal", "Tax", "Federal", (y) => y.tax.federal),
     flow("tax.provincial", "Tax", "Provincial", (y) => y.tax.provincial), flow("tax.surtax", "Tax", "Surtax", (y) => y.tax.surtax),
-    flow("tax.oasClawback", "Tax", "OAS claw", (y) => y.tax.oasClawback), flow("tax.total", "Tax", "Total", (y) => y.tax.total),
+    flow("tax.oasClawback", "Tax", "OAS claw", (y) => y.tax.oasClawback),
+    { id: "tax.total", group: "Tax", label: "Total", value: (y) => y.tax.total, summary: "flow", total: true,
+      note: "Total tax charged for this year, with the components shown separately" },
     { id: "tax.marginalRate", group: "Tax", label: "Marginal", value: (y) => y.tax.marginalRate, summary: "rate", percent: true },
     flow("withdrawals.tfsa", "Withdrawals", "TFSA", (y) => y.withdrawals.tfsa), flow("withdrawals.rrsp", "Withdrawals", "RRSP", (y) => y.withdrawals.rrsp),
-    flow("withdrawals.nonreg", "Withdrawals", "Non-reg", (y) => y.withdrawals.nonreg), flow("withdrawals.cash", "Withdrawals", "Cash", (y) => y.withdrawals.cash ?? 0), flow("contributions.tfsa", "Contributions", "TFSA", (y) => y.contributions.tfsa),
+    flow("withdrawals.nonreg", "Withdrawals", "Non-reg", (y) => y.withdrawals.nonreg), flow("withdrawals.cash", "Withdrawals", "Cash", (y) => y.withdrawals.cash ?? 0),
+    { id: "withdrawals.total", group: "Withdrawals", label: "Total withdrawn", value: (y) => y.withdrawals.tfsa + y.withdrawals.rrsp + y.withdrawals.nonreg + (y.withdrawals.cash ?? 0), summary: "flow", total: true,
+      note: "Total withdrawn: sum of withdrawals across the four account types" },
+    flow("contributions.tfsa", "Contributions", "TFSA", (y) => y.contributions.tfsa),
     flow("contributions.rrsp", "Contributions", "RRSP", (y) => y.contributions.rrsp), flow("contributions.nonreg", "Contributions", "Non-reg", (y) => y.contributions.nonreg), flow("contributions.cash", "Contributions", "Cash", (y) => y.contributions.cash ?? 0),
+    { id: "contributions.total", group: "Contributions", label: "Total contributed", value: (y) => y.contributions.tfsa + y.contributions.rrsp + y.contributions.nonreg + (y.contributions.cash ?? 0), summary: "flow", total: true,
+      note: "Total contributed: sum of contributions across the four account types" },
     flow("expenses", null, "Expenses", (y) => y.expenses), flow("shortfall", null, "Shortfall", (y) => y.shortfall),
     stock("balances.tfsa", "Balances", "TFSA", (y) => y.balances.tfsa), stock("balances.rrsp", "Balances", "RRSP", (y) => y.balances.rrsp),
     stock("balances.nonreg", "Balances", "Non-reg", (y) => y.balances.nonreg), stock("balances.cash", "Balances", "Cash", (y) => y.balances.cash),
     stock("balances.otherAssets", "Balances", "Other assets", (y) => y.balances.otherAssets ?? 0), stock("balances.home", "Balances", "Home", (y) => y.balances.home),
-    stock("balances.debt", "Balances", "Debt", (y) => y.balances.debt), stock("netWorth", null, "Net worth", (y) => y.netWorth),
+    stock("balances.debt", "Balances", "Debt", (y) => y.balances.debt),
+    { id: "balances.total", group: "Balances", label: "Total assets", value: (y) => y.balances.tfsa + y.balances.rrsp + y.balances.nonreg + y.balances.cash + (y.balances.otherAssets ?? 0) + y.balances.home, summary: "stock", total: true,
+      note: "Total assets: everything owned, added up; debt is not included (it is owed, not owned)" },
+    { id: "netWorth", group: null, label: "Net worth", value: (y) => y.netWorth, summary: "stock", note: "Total assets less debt" },
     stock("tfsaRoom", null, "TFSA room", (y) => y.tfsaRoom), stock("rrspRoom", null, "RRSP room", (y) => y.rrspRoom),
   ];
 }
@@ -138,7 +156,14 @@ export function ProjectionTable({ result, birthYear, jumpAge, jumpKey, historica
       {groupSpans.map((group, index) => <colgroup key={index} span={group.span} data-group-parity={group.parity ?? undefined} />)}
       <thead>
         <tr ref={groupHeaderRef}><th className="empty-group-th" />{groupSpans.map((group, index) => <th key={index} colSpan={group.span} data-group-parity={group.parity ?? undefined} className={group.label ? "group-th" : "empty-group-th"}>{group.label ?? ""}</th>)}<th rowSpan={2} scope="col">Audit</th></tr>
-        <tr><th scope="col" className="col-age-year">Age</th>{cols.map((col, index) => <th key={index} scope="col" data-group-parity={colParity[index] ?? undefined} className={col.label === "Year" ? "col-age-year" : undefined}>{col.label}</th>)}</tr>
+        <tr><th scope="col" className="col-age-year">Age</th>{cols.map((col, index) => (
+          <th key={index} scope="col" data-group-parity={colParity[index] ?? undefined} data-total={col.total ? "" : undefined} aria-describedby={col.note ? `col-note-${col.id}` : undefined} className={col.label === "Year" ? "col-age-year" : undefined}>
+            {col.label}
+            {/* Composition help: visually hidden so the accessible name stays the
+                short group+Total label; the note is described-by, not the name. */}
+            {col.note && <span id={`col-note-${col.id}`} className="col-note">{col.note}</span>}
+          </th>
+        ))}</tr>
       </thead>
       <tbody>
         {groups.map((years, groupIndex) => {
@@ -162,7 +187,7 @@ export function ProjectionTable({ result, birthYear, jumpAge, jumpKey, historica
                 <span>{yearForAge(birthYear, first.age)}–{yearForAge(birthYear, last.age)}</span>
                 {returnSourceYear(first.age) !== undefined && <small className="return-source-label">Return source: {returnSourceYear(first.age)}–{returnSourceYear(last.age)}</small>}
               </td>
-              {cols.slice(1).map((col, index) => <td key={index} className={col.percent ? "col-percent" : "col-money"}>{col.percent ? fmtPercent(summarize(col, years)) : fmtMoney(summarize(col, years))}</td>)}
+              {cols.slice(1).map((col, index) => <td key={index} data-total={col.total ? "" : undefined} className={col.percent ? "col-percent" : "col-money"}>{col.percent ? fmtPercent(summarize(col, years)) : fmtMoney(summarize(col, years))}</td>)}
               <td className="events-cell" aria-label={`${events} events, ${warnings} warnings`}>{events ? `⚡${events} ` : ""}{warnings ? `⚠${warnings}` : events + warnings === 0 ? <span className="hint">—</span> : null}</td>
             </tr>
             {years.map((year) => {
@@ -182,7 +207,7 @@ export function ProjectionTable({ result, birthYear, jumpAge, jumpKey, historica
                     <span>{yearForAge(birthYear, year.age)}</span>
                     {returnSourceYear(year.age) !== undefined && <small className="return-source-label">Return source: {returnSourceYear(year.age)}</small>}
                   </td>
-                  {cols.slice(1).map((col, index) => <td key={index} className={col.percent ? "col-percent" : "col-money"}>{col.percent ? fmtPercent(col.value(year)) : fmtMoney(col.value(year))}</td>)}
+                  {cols.slice(1).map((col, index) => <td key={index} data-total={col.total ? "" : undefined} className={col.percent ? "col-percent" : "col-money"}>{col.percent ? fmtPercent(col.value(year)) : fmtMoney(col.value(year))}</td>)}
                   <EventsCell year={year} />
                 </tr>
                 <YearDetailRow age={year.age} year={year} expanded={isExpanded} groupExpanded={expanded} colSpan={cols.length + 2}

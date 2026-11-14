@@ -3,6 +3,7 @@ import { HISTORICAL_DATASET } from "@retire-plan/engine";
 import { useWorkspace, type AccountType, type Scenario } from "../store/api";
 import type { BenefitSettings, WithdrawalStrategy } from "../domain/types";
 import { NumberTextInput } from "./NumberTextInput";
+import { FormSection } from "./FormSection";
 import { TAX_MINIMIZING_STRATEGY_HELP } from "../content/assumptions";
 import { ACCOUNT_TYPE_LABELS, cashOrderPosition, INVESTMENT_ACCOUNT_TYPES, investmentOrder, orderWithCashPosition, swapOrderPosition, type CashOrderPosition } from "../domain/accountOrder";
 import "./baseScenarioSettings.css";
@@ -80,6 +81,8 @@ export function BaseScenarioSettings() {
     simMode: "deterministic" as const, retirementAge: 0, returnAssumptions: { equity: NaN, bond: NaN, cash: NaN }, withdrawalOrder: ["tfsa", "nonreg", "rrsp"] as AccountType[],
   };
   const [draft, setDraft] = useState<SettingsDraft>(() => settingsDraftOf(stored));
+  const returnSettingsRef = useRef<HTMLDetailsElement>(null);
+  const withdrawalOrderRef = useRef<HTMLDetailsElement>(null);
   const lastApplied = useRef<SettingsDraft>(settingsDraftOf(stored));
   useEffect(() => {
     const current = settingsDraftOf(stored);
@@ -116,50 +119,94 @@ export function BaseScenarioSettings() {
     }
   };
   const { errors } = readSettingsDraft(draft, stored, latestWindowStart);
+  const returnSettingsInvalid = errors.some(error => error.includes("return (%)"));
+  const withdrawalOrderInvalid = errors.some(error => error.includes("withdrawal account exactly once"));
+  useEffect(() => {
+    if (returnSettingsInvalid && returnSettingsRef.current) returnSettingsRef.current.open = true;
+    if (withdrawalOrderInvalid && withdrawalOrderRef.current) withdrawalOrderRef.current.open = true;
+  }, [returnSettingsInvalid, withdrawalOrderInvalid]);
+  const keepInvalidSectionOpen = (ref: React.RefObject<HTMLDetailsElement | null>, invalid: boolean) => {
+    if (invalid && ref.current && !ref.current.open) ref.current.open = true;
+  };
 
-  return <section className="panel base-scenario-settings" aria-label="Base projection settings">
-    <h2>Base projection settings</h2>
-    <p className="muted">Saved with this workspace on every edit. Scenarios inherit these settings unless they override them.</p>
-    <div className="form-grid">
-      <label className="field">Base simulation mode<select aria-label="Base simulation mode" value={draft.simMode} onChange={event => change({ simMode: event.currentTarget.value as Scenario["simMode"] })}><option value="deterministic">Deterministic</option><option value="montecarlo">Monte Carlo</option><option value="historical">Historical JST U.S. proxy</option></select></label>
-      <fieldset className="field base-benefits-fieldset">
-        <legend>Benefits in this projection</legend>
-        <label><input type="checkbox" aria-label="Base include CPP" checked={draft.benefits.cpp} onChange={e => change({ benefits: { ...draft.benefits, cpp: e.currentTarget.checked } })} /> Include configured CPP income</label>
-        {draft.benefits.cpp && !workspace.plan.incomes.some(income => income.kind === "cpp") && <p className="hint">No CPP income stream is configured. Add one under Plan → Incomes to model CPP.</p>}
-        <label><input type="checkbox" aria-label="Base include OAS" checked={draft.benefits.oas} onChange={e => change({ benefits: { ...draft.benefits, oas: e.currentTarget.checked, gis: e.currentTarget.checked && draft.benefits.gis } })} /> Include configured OAS income</label>
-        {draft.benefits.oas && !workspace.plan.incomes.some(income => income.kind === "oas") && <p className="hint">No OAS income stream is configured. Add one under Plan → Incomes to model OAS.</p>}
-        <label><input type="checkbox" aria-label="Base include GIS" checked={draft.benefits.gis && draft.benefits.oas} disabled={!draft.benefits.oas} onChange={e => change({ benefits: { ...draft.benefits, gis: e.currentTarget.checked } })} /> Include modeled GIS</label>
-        <p className="hint">CPP and OAS amounts and start/end ages come from the income streams in Plan. No benefit amount is created by these switches. GIS requires OAS in this model; <a href="https://www.canada.ca/en/services/benefits/publicpensions/old-age-security/guaranteed-income-supplement/eligibility.html" target="_blank" rel="noreferrer">Service Canada eligibility</a>.</p>
-      </fieldset>
-      <label className="field">Base retirement age<NumberTextInput name="retirementAge" step="1" min="1" allowNegative={false} required value={draft.retirementAge} onChange={retirementAge => change({ retirementAge })} /></label>
-      {draft.simMode !== "historical" && (["equity", "bond", "cash"] as const).map(key => <label className="field" key={key}>Base {key === "bond" ? "bonds" : key} return (%)<NumberTextInput name={key} step="any" required value={draft[key]} onChange={value => change({ [key]: value })} /></label>)}
-      <label className="field">Withdrawal strategy<select aria-label="Base withdrawal strategy" value={draft.withdrawalStrategy} onChange={e => change({ withdrawalStrategy: e.currentTarget.value as WithdrawalStrategy })}><option value="manual">Manual account order</option><option value="tax-minimizing">Tax-minimizing planning</option></select>
-        {draft.withdrawalStrategy === "tax-minimizing" && <span className="hint">{TAX_MINIMIZING_STRATEGY_HELP}</span>}
-      </label>
-      {draft.withdrawalStrategy === "manual" && <>
-        <p className="hint">Choose an account to swap it with the account at that priority.</p>
-        {draft.order.map((type, index) => <label className="field" key={index}>Base withdrawal priority {index + 1}<select name={`order${index}`} value={type} aria-label={`Base withdrawal priority ${index + 1}`} onChange={event => {
-          change({ order: swapOrderPosition(draft.order, index, event.currentTarget.value as AccountType) });
-        }}>{INVESTMENT_ACCOUNT_TYPES.map(account => <option key={account} value={account}>{ACCOUNT_TYPE_LABELS[account]}</option>)}</select></label>)}
-        <label className="field">Named cash withdrawal order<select aria-label="Base cash withdrawal order" value={draft.cashPosition} onChange={event => change({ cashPosition: event.currentTarget.value as CashOrderPosition })}>
-          <option value="automatic">Automatic (cash first when named cash accounts exist)</option>
-          {["First", "Second", "Third", "Fourth"].map((label, index) => <option key={label} value={String(index)}>{label}</option>)}
-        </select></label>
-      </>}
-      {draft.withdrawalStrategy === "tax-minimizing" && <p className="hint">Your saved order is retained as the optimizer fallback.</p>}
-      {draft.simMode === "montecarlo" && <>
-        <label className="field">Monte Carlo runs<NumberTextInput aria-label="Base Monte Carlo runs" min={1} max={10_000} step={1} allowNegative={false} value={draft.runs} onChange={runs => change({ runs })} /></label>
-        <label className="field">Monte Carlo seed<NumberTextInput aria-label="Base Monte Carlo seed" min={0} max={4_294_967_295} step={1} allowNegative={false} value={draft.seed} onChange={seed => change({ seed })} /></label>
-        <label className="field">Equity standard deviation (%)<NumberTextInput min={0} max={100} allowNegative={false} value={draft.equitySd} onChange={equitySd => change({ equitySd })} /></label>
-        <label className="field">Bond standard deviation (%)<NumberTextInput min={0} max={100} allowNegative={false} value={draft.bondSd} onChange={bondSd => change({ bondSd })} /></label>
-        <label className="field">Cash standard deviation (%)<NumberTextInput min={0} max={100} allowNegative={false} value={draft.cashSd} onChange={cashSd => change({ cashSd })} /></label>
-      </>}
-      {draft.simMode === "historical" && <>
-        <label className="field">Earliest historical return year<NumberTextInput aria-label="Base historical start year" min={HISTORICAL_FIRST_YEAR} max={latestWindowStart} step={1} allowNegative={false} value={draft.historicalStartYear} onChange={historicalStartYear => change({ historicalStartYear })} /></label>
-        <p className="hint">Uses complete rolling windows starting in this source year through {latestWindowStart}. Source years map to your ages; household calendar years still use birth year.</p>
-        <p className="hint">{HISTORICAL_DATASET.country} annual nominal USD returns · non-Canadian proxy · no FX conversion · {HISTORICAL_DATASET.license} (noncommercial).</p>
-      </>}
+  return <section className="base-scenario-settings" aria-label="Base projection settings">
+    <header className="base-settings-heading">
+      <h2>Base projection settings</h2>
+      <p>Edits apply as you make them. Scenarios use these settings unless they override them.</p>
+    </header>
+    <div className="base-settings-sections">
+      <FormSection title="Basics" description="Choose the retirement age to use in this projection.">
+        <div className="form-section-grid">
+          <label className="form-field">Base retirement age<NumberTextInput aria-label="Base retirement age" name="retirementAge" step="1" min="1" allowNegative={false} required value={draft.retirementAge} onChange={retirementAge => change({ retirementAge })} /></label>
+        </div>
+      </FormSection>
+
+      <FormSection title="Benefits" description="Choose which configured benefits to include. The switches do not create benefit amounts.">
+        <div className="form-section-option-grid" role="group" aria-label="Benefits in this projection">
+          <label className="form-section-option"><input type="checkbox" aria-label="Base include CPP" checked={draft.benefits.cpp} onChange={e => change({ benefits: { ...draft.benefits, cpp: e.currentTarget.checked } })} /><span><span className="form-section-option-title">CPP</span><span className="form-section-option-note">Include configured CPP income</span></span></label>
+          <label className="form-section-option"><input type="checkbox" aria-label="Base include OAS" checked={draft.benefits.oas} onChange={e => change({ benefits: { ...draft.benefits, oas: e.currentTarget.checked, gis: e.currentTarget.checked && draft.benefits.gis } })} /><span><span className="form-section-option-title">OAS</span><span className="form-section-option-note">Include configured OAS income</span></span></label>
+          <label className="form-section-option"><input type="checkbox" aria-label="Base include GIS" checked={draft.benefits.gis && draft.benefits.oas} disabled={!draft.benefits.oas} onChange={e => change({ benefits: { ...draft.benefits, gis: e.currentTarget.checked } })} /><span><span className="form-section-option-title">GIS</span><span className="form-section-option-note">Include modeled GIS; requires OAS in this model</span></span></label>
+        </div>
+        {draft.benefits.cpp && !workspace.plan.incomes.some(income => income.kind === "cpp") && <p className="form-section-note">No CPP income stream is configured. Add one under Plan → Incomes to model CPP.</p>}
+        {draft.benefits.oas && !workspace.plan.incomes.some(income => income.kind === "oas") && <p className="form-section-note">No OAS income stream is configured. Add one under Plan → Incomes to model OAS.</p>}
+        <p className="form-section-note">CPP and OAS amounts and start/end ages come from the Plan income streams. GIS requires OAS here; <a href="https://www.canada.ca/en/services/benefits/publicpensions/old-age-security/guaranteed-income-supplement/eligibility.html" target="_blank" rel="noreferrer">Service Canada eligibility</a>.</p>
+      </FormSection>
+
+      <FormSection title="Simulation" description="Choose how investment returns are generated for the base projection.">
+        <div className="form-section-grid">
+          <label className="form-field form-section-wide">Simulation mode<select aria-label="Base simulation mode" value={draft.simMode} onChange={event => change({ simMode: event.currentTarget.value as Scenario["simMode"] })}><option value="deterministic">Deterministic</option><option value="montecarlo">Monte Carlo</option><option value="historical">Historical JST U.S. proxy</option></select></label>
+          {draft.simMode === "montecarlo" && <>
+            <label className="form-field">Monte Carlo runs<NumberTextInput aria-label="Base Monte Carlo runs" min={1} max={10_000} step={1} allowNegative={false} value={draft.runs} onChange={runs => change({ runs })} /></label>
+            <label className="form-field">Monte Carlo seed<NumberTextInput aria-label="Base Monte Carlo seed" min={0} max={4_294_967_295} step={1} allowNegative={false} value={draft.seed} onChange={seed => change({ seed })} /></label>
+            <label className="form-field">Equity standard deviation (%)<NumberTextInput aria-label="Base equity standard deviation (%)" min={0} max={100} allowNegative={false} value={draft.equitySd} onChange={equitySd => change({ equitySd })} /></label>
+            <label className="form-field">Bond standard deviation (%)<NumberTextInput aria-label="Base bond standard deviation (%)" min={0} max={100} allowNegative={false} value={draft.bondSd} onChange={bondSd => change({ bondSd })} /></label>
+            <label className="form-field">Cash standard deviation (%)<NumberTextInput aria-label="Base cash standard deviation (%)" min={0} max={100} allowNegative={false} value={draft.cashSd} onChange={cashSd => change({ cashSd })} /></label>
+            <p className="form-section-note form-section-wide">Monte Carlo reports the ensemble outcomes and one reproducible representative year path.</p>
+          </>}
+          {draft.simMode === "historical" && <>
+            <label className="form-field form-section-wide">Earliest historical return year<NumberTextInput aria-label="Base historical start year" min={HISTORICAL_FIRST_YEAR} max={latestWindowStart} step={1} allowNegative={false} value={draft.historicalStartYear} onChange={historicalStartYear => change({ historicalStartYear })} /></label>
+            <p className="form-section-note form-section-wide">Uses complete rolling windows from this source year through {latestWindowStart}. Source years map to ages; household calendar years still use birth year.</p>
+            <p className="form-section-note form-section-wide">{HISTORICAL_DATASET.country} annual nominal USD returns · non-Canadian proxy · no FX conversion · {HISTORICAL_DATASET.license} (noncommercial).</p>
+          </>}
+        </div>
+        {draft.simMode !== "historical" && <FormSection
+          title="Return assumptions"
+          description="Annual rates for equity, bonds and cash. These are separate rates, not portfolio percentages."
+          className="form-section-nested base-return-section"
+          collapsible
+          detailsRef={returnSettingsRef}
+          onToggle={() => keepInvalidSectionOpen(returnSettingsRef, returnSettingsInvalid)}
+        >
+          <div className="form-section-grid">
+            {(["equity", "bond", "cash"] as const).map(key => <label className="form-field" key={key}>Base {key === "bond" ? "bonds" : key} return (%)<NumberTextInput aria-label={`Base ${key} return (%)`} name={key} step="any" required value={draft[key]} onChange={value => change({ [key]: value })} /></label>)}
+          </div>
+        </FormSection>}
+        {draft.simMode === "historical" && <p className="form-section-note">Historical mode supplies the return path; the equity, bond and cash assumptions do not apply.</p>}
+      </FormSection>
+
+      <FormSection title="Withdrawals" description="Choose the planning strategy. Manual account order is an additional setting.">
+        <div className="form-section-grid">
+          <label className="form-field form-section-wide">Withdrawal strategy<select aria-label="Base withdrawal strategy" value={draft.withdrawalStrategy} onChange={e => change({ withdrawalStrategy: e.currentTarget.value as WithdrawalStrategy })}><option value="manual">Manual account order</option><option value="tax-minimizing">Tax-minimizing planning</option></select></label>
+          {draft.withdrawalStrategy === "tax-minimizing" && <><p className="form-section-note form-section-wide">{TAX_MINIMIZING_STRATEGY_HELP}</p><p className="form-section-note form-section-wide">Your saved account order remains the optimizer fallback.</p></>}
+          {draft.withdrawalStrategy === "manual" && <FormSection
+            title="Account withdrawal order"
+            description="Choose which accounts fund a deficit first. Changes swap positions."
+            className="form-section-nested form-section-wide"
+            collapsible
+            detailsRef={withdrawalOrderRef}
+            onToggle={() => keepInvalidSectionOpen(withdrawalOrderRef, withdrawalOrderInvalid)}
+          >
+            <div className="form-section-grid">
+              {draft.order.map((type, index) => <label className="form-field" key={index}>Base withdrawal priority {index + 1}<select name={`order${index}`} value={type} aria-label={`Base withdrawal priority ${index + 1}`} onChange={event => change({ order: swapOrderPosition(draft.order, index, event.currentTarget.value as AccountType) })}>{INVESTMENT_ACCOUNT_TYPES.map(account => <option key={account} value={account}>{ACCOUNT_TYPE_LABELS[account]}</option>)}</select></label>)}
+              <label className="form-field form-section-wide">Named cash withdrawal order<select aria-label="Base cash withdrawal order" value={draft.cashPosition} onChange={event => change({ cashPosition: event.currentTarget.value as CashOrderPosition })}>
+                <option value="automatic">Automatic (cash first when named cash accounts exist)</option>
+                {["First", "Second", "Third", "Fourth"].map((label, index) => <option key={label} value={String(index)}>{label}</option>)}
+              </select></label>
+            </div>
+          </FormSection>}
+        </div>
+      </FormSection>
+      {errors.length > 0 && <div role="alert" className="form-errors">{errors.map(error => <p key={error}>{error}</p>)}</div>}
     </div>
-    {errors.length > 0 && <div role="alert">{errors.map(error => <p key={error}>{error}</p>)}</div>}
   </section>;
 }

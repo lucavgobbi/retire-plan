@@ -5,7 +5,9 @@ import { storage, useAutosave, type StorageProvider, type RecoveryOutcome } from
 import { makeSampleWorkspace } from "./data/samplePlan";
 import { ambientDom, downloadRawRowJson, downloadWorkspaceJson, useExportImport } from "./content/planFileUi";
 import { BaseScenarioSettings } from "./components/BaseScenarioSettings";
+import { FormSection } from "./components/FormSection";
 import { withCurrentAge } from "./domain/age";
+import "./settingsDialog.css";
 
 function FileControls({ provider }: { provider: StorageProvider }) {
   const { workspace } = useWorkspace();
@@ -13,7 +15,7 @@ function FileControls({ provider }: { provider: StorageProvider }) {
   const [error, setError] = useState<string | null>(null);
   const perform = (operation: () => Promise<void>) => { void operation().catch(cause => setError(cause instanceof Error ? cause.message : String(cause))); };
   const candidate = file.candidate;
-  return <section className="panel file-controls" aria-label="Workspace files">
+  return <FormSection title="Workspace files" description="Import a workspace JSON file or export a backup." className="file-controls">
     <div className="toolbar"><strong>{workspace.meta?.name ?? "Untitled plan"}</strong>
       <button type="button" onClick={() => { const dom = ambientDom(); if (dom) downloadWorkspaceJson(workspace, dom); }}>Export JSON</button>
       <label className="file-input-label">Import JSON <input type="file" accept=".json,application/json" disabled={file.busy} onChange={event => { const chosen = event.currentTarget.files?.[0]; if (chosen) perform(() => file.importFile(chosen)); event.currentTarget.value = ""; }} /></label>
@@ -32,7 +34,7 @@ function FileControls({ provider }: { provider: StorageProvider }) {
       <div className="toolbar"><button type="button" disabled={file.busy} onClick={() => perform(file.confirmReplace)}>Replace workspace</button><button type="button" disabled={file.busy} onClick={file.cancelPreview}>Cancel</button></div>
     </div>}
     {file.notice && <div className="banner" role="status">{file.notice} <button type="button" disabled={file.busy} onClick={() => perform(file.restorePrevious)}>Restore previous</button><button type="button" onClick={file.dismissNotice}>Dismiss</button></div>}
-  </section>;
+  </FormSection>;
 }
 
 function AutosaveStatus({ provider }: { provider: StorageProvider }) {
@@ -51,10 +53,10 @@ function SettingsDialog({ provider, onClose }: { provider?: StorageProvider; onC
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
-  return <div className="dialog-overlay" onClick={onClose}>
-    <div ref={panelRef} role="dialog" aria-modal="true" aria-label="Settings" tabIndex={-1} className="dialog-panel" onClick={event => event.stopPropagation()}>
-      <div className="dialog-header">
-        <h2>Settings</h2>
+  return <div className="dialog-overlay settings-dialog-overlay" onClick={onClose}>
+    <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title" tabIndex={-1} className="dialog-panel settings-dialog-panel" onClick={event => event.stopPropagation()}>
+      <div className="dialog-header settings-dialog-header">
+        <div><p className="eyebrow">WORKSPACE</p><h2 id="settings-dialog-title">Settings</h2><p className="settings-dialog-intro">Set the defaults your scenarios inherit and manage workspace files.</p></div>
         <button type="button" aria-label="Close settings" onClick={onClose}>✕</button>
       </div>
       {provider && <FileControls provider={provider} />}

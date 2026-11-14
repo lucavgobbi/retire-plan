@@ -156,6 +156,18 @@ export function ProjectionView() {
             </div>
             <div className="settings-section">
               <p className="settings-heading">Table columns</p>
+              {/* ONE bulk action for TABLE columns only (charts unaffected): when every
+                  selectable column is visible it hides them all; in any partial state it
+                  selects all. The label carries the visible count. Pinned Age/calendar-year
+                  and Audit columns are never selectable, so they always remain. */}
+              <button type="button" onClick={() => {
+                const allVisible = (hiddenList ?? []).length === 0;
+                workspace.dispatch({ type: "projection/setHiddenColumns", hiddenColumnIds: allVisible ? selectableIds : null });
+              }}>
+                {(hiddenList ?? []).length === 0
+                  ? `Unselect all (${selectableIds.length} selected)`
+                  : `Select all (${selectableIds.length - hiddenList!.length} of ${selectableIds.length} shown)`}
+              </button>
               {columnPickerGroups.map(({ group, items }) => (
                 <div key={group} className="settings-group">
                   <p className="settings-group-name">{group}</p>
@@ -211,8 +223,19 @@ export function ProjectionView() {
             )}
           </p>
           {failureAge !== null && <FailBanner summary={run.result.summary} onJump={(age) => { setJumpAge(age); setJumpKey((key) => key + 1); }} />}
-          <RunAnalysisSummary run={run} />
-          {run.analysis && <p className="hint">Year table audit counts and failures describe the representative path shown below.</p>}
+          {/* Run summary region (ALL modes that have one): RunAnalysisSummary —
+              deterministic = "Tax strategy planning comparison", MC = "Monte Carlo
+              ensemble", historical = "Historical rolling-window results" — in ONE
+              native collapsible, expanded by default, state not persisted. Context
+              stamp, failure banner, run controls and charts stay outside. No box is
+              invented for plain manual-order deterministic runs, which have none. */}
+          {(run.analysis !== undefined || run.result.withdrawalPlan !== undefined) && (
+            <details className="run-summary-collapse" open>
+              <summary>Run analysis</summary>
+              <RunAnalysisSummary run={run} />
+              {run.analysis && <p className="hint">Year table audit counts and failures describe the representative path shown below.</p>}
+            </details>
+          )}
           <DashboardSection result={run.result} />
           <ProjectionTable result={run.result} birthYear={birthYear} historicalSourceStartYear={historicalSourceStartYear} jumpAge={jumpAge} jumpKey={jumpKey} hiddenColumnIds={hiddenIds} />
         </>
