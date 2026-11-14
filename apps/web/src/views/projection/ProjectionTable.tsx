@@ -88,18 +88,35 @@ export function ProjectionTable({ result, birthYear, jumpAge, jumpKey, historica
   }, [jumpAge, jumpKey, result.years]);
 
   const failureAge = result.summary.success || result.summary.failureAge === undefined ? null : result.summary.failureAge;
-  const groupSpans: { label: string | null; span: number }[] = [];
+  const groupSpans: { label: string | null; span: number; parity: "even" | "odd" | null }[] = [];
+  const colParity: ("even" | "odd" | null)[] = [];
+  let namedGroupIndex = 0;
   for (const col of cols) {
     const last = groupSpans[groupSpans.length - 1];
-    if (last && last.label === col.group) last.span += 1;
-    else groupSpans.push({ label: col.group, span: 1 });
+    if (last && last.label === col.group) {
+      last.span += 1;
+      colParity.push(last.parity);
+    } else {
+      // Parity advances on NAMED groups only (Income, Cash accounts, Tax, …);
+      // null/standalone columns stay neutral and do not shift the alternation.
+      const parity = col.group === null ? null : namedGroupIndex % 2 ? "odd" : "even";
+      if (parity) namedGroupIndex += 1;
+      groupSpans.push({ label: col.group, span: 1, parity });
+      colParity.push(parity);
+    }
   }
 
   return <div id="projection-year-table" className="projection-table-wrap" role="region" aria-label="Year-by-year projection results" tabIndex={-1}>
     <table ref={tableRef} className="projection-table">
+      {/* Column-group bands: one leading colgroup for the Age-toggle column (neutral,
+        like the Audit column), then one colgroup per consecutive column group with
+        alternating parity. Colgroup backgrounds paint under transparent body cells,
+        so year and decade-summary cells carry their column's band (projection.css). */}
+      <colgroup />
+      {groupSpans.map((group, index) => <colgroup key={index} span={group.span} data-group-parity={group.parity ?? undefined} />)}
       <thead>
-        <tr ref={groupHeaderRef}><th className="empty-group-th" />{groupSpans.map((group, index) => <th key={index} colSpan={group.span} className={group.label ? "group-th" : "empty-group-th"}>{group.label ?? ""}</th>)}<th rowSpan={2} scope="col">Audit</th></tr>
-        <tr><th scope="col" className="col-age-year">Age</th>{cols.map((col, index) => <th key={index} scope="col" className={col.label === "Year" ? "col-age-year" : undefined}>{col.label}</th>)}</tr>
+        <tr ref={groupHeaderRef}><th className="empty-group-th" />{groupSpans.map((group, index) => <th key={index} colSpan={group.span} data-group-parity={group.parity ?? undefined} className={group.label ? "group-th" : "empty-group-th"}>{group.label ?? ""}</th>)}<th rowSpan={2} scope="col">Audit</th></tr>
+        <tr><th scope="col" className="col-age-year">Age</th>{cols.map((col, index) => <th key={index} scope="col" data-group-parity={colParity[index] ?? undefined} className={col.label === "Year" ? "col-age-year" : undefined}>{col.label}</th>)}</tr>
       </thead>
       <tbody>
         {groups.map((years, groupIndex) => {
@@ -110,7 +127,7 @@ export function ProjectionTable({ result, birthYear, jumpAge, jumpKey, historica
           const events = years.reduce((sum, year) => sum + year.events.length, 0);
           const warnings = years.reduce((sum, year) => sum + year.warnings.length, 0);
           return <Fragment key={first.age}>
-            <tr className={`decade-row${failures ? " failed-row" : ""}`} data-group-start-age={first.age} data-group-parity={groupIndex % 2 ? "odd" : "even"}>
+            <tr className={`decade-row${failures ? " failed-row" : ""}`} data-group-start-age={first.age}>
               <td className="col-age-year"><button type="button" className="group-toggle" aria-expanded={expanded} aria-label={`${expanded ? "Collapse" : "Expand"} ${label}`} onClick={() => toggle(setExpandedGroups, groupIndex)}>{expanded ? "▾" : "▸"} {label}</button></td>
               <td className="col-age-year decade-years" aria-label={`Household calendar years ${yearForAge(birthYear, first.age)} to ${yearForAge(birthYear, last.age)}${returnSourceYear(first.age) === undefined ? "" : `; historical return source years ${returnSourceYear(first.age)} to ${returnSourceYear(last.age)}`}`}>
                 <span>{yearForAge(birthYear, first.age)}–{yearForAge(birthYear, last.age)}</span>

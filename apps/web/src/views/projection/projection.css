@@ -112,10 +112,6 @@ table.projection-table th.col-age-year {
   text-align: left;
 }
 
-table.projection-table tbody tr:nth-child(4n + 3) {
-  background: #f7fafc;
-}
-
 .yearly-row[data-group-collapsed="true"],
 .detail-row[data-group-collapsed="true"],
 .detail-row[data-expanded="false"] { display: none; }
@@ -232,10 +228,15 @@ tr.failed-row {
 }
 .group-toggle:focus-visible,
 .col-age-year button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
-/* Decade group headers alternate by group index (data attribute, NOT nth-child —
-  expanded detail rows are inserted between rows and would shift child positions). */
-table.projection-table tbody tr.decade-row[data-group-parity="even"] { background: #edf3f6; }
-table.projection-table tbody tr.decade-row[data-group-parity="odd"] { background: #e3ecf2; }
+/* Column-group bands: parity per NAMED column group, via data attributes on
+  colgroups and header cells (NOT nth-child — inserted detail rows shift positions).
+  Null/standalone columns and the Age/Audit edge columns stay neutral. Colgroup
+  backgrounds paint under transparent body cells, so decade summaries and year
+  rows carry their column's band; failed-row and detail rows keep their own fills. */
+table.projection-table colgroup[data-group-parity="even"],
+table.projection-table thead th[data-group-parity="even"] { background: #f4f8fa; }
+table.projection-table colgroup[data-group-parity="odd"],
+table.projection-table thead th[data-group-parity="odd"] { background: #e9eff3; }
 .decade-row { font-weight: 600; }
 .decade-row td { border-bottom-color: #cbd7de; padding-top: 5px; padding-bottom: 5px; }
 .yearly-row .col-age-year:first-child { padding-left: 20px; }
