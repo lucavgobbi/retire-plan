@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useProjectionRun, useRuns, useWorkspace } from "../../store/api";
-import { DashboardSection } from "./DashboardSection";
+import { DashboardSection, PROJECTION_CHARTS } from "./DashboardSection";
 import { ProjectionTable, columns, sanitizeHiddenColumns } from "./ProjectionTable";
+import { sanitizeHiddenIds } from "./hiddenIds";
 import { FailBanner } from "./FailBanner";
 import { RunAnalysisSummary } from "./RunAnalysisSummary";
 import "./projection.css";
@@ -70,6 +71,8 @@ export function ProjectionView() {
   const selectableIds = allColumns.slice(1).map((col) => col.id);
   const hiddenList = sanitizeHiddenColumns(workspace.workspace.hiddenProjectionColumns, selectableIds);
   const hiddenIds = hiddenList === null ? undefined : new Set(hiddenList);
+  // Chart visibility: sanitized against the stable dashboard chart ids.
+  const hiddenCharts = sanitizeHiddenIds(workspace.workspace.hiddenProjectionCharts, PROJECTION_CHARTS.map((chart) => chart.id));
   const columnPickerGroups: { group: string; items: { id: string; label: string }[] }[] = [];
   const pickerByName = new Map<string, { group: string; items: { id: string; label: string }[] }>();
   for (const col of allColumns.slice(1)) {
@@ -86,6 +89,11 @@ export function ProjectionView() {
     const current = hiddenList ?? [];
     const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
     workspace.dispatch({ type: "projection/setHiddenColumns", hiddenColumnIds: next });
+  };
+  const toggleChart = (id: string) => {
+    const current = hiddenCharts ?? [];
+    const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+    workspace.dispatch({ type: "projection/setHiddenCharts", hiddenChartIds: next });
   };
 
   const failureAge = run && !run.result.summary.success ? (run.result.summary.failureAge ?? null) : null;
@@ -122,27 +130,54 @@ export function ProjectionView() {
         <button type="button" onClick={() => { void runProjection(); }} disabled={validationErrors.length > 0 || isRunning}>
           Run projection
         </button>
-        <details className="column-picker">
-          <summary>Columns</summary>
-          <div className="column-picker-menu">
-            <button type="button" onClick={() => workspace.dispatch({ type: "projection/setHiddenColumns", hiddenColumnIds: null })}>
-              All columns
+        <details className="projection-settings">
+          <summary aria-label="Projection settings" title="Projection settings">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+              <g fill="currentColor">
+                {[0, 45, 90, 135, 180, 225, 270, 315].map((angle) => <rect key={angle} x="11" y="2.5" width="2" height="5" rx="1" transform={`rotate(${angle} 12 12)`} />)}
+                <circle cx="12" cy="12" r="5.2" />
+              </g>
+              <circle cx="12" cy="12" r="2.2" fill="#fff" />
+            </svg>
+          </summary>
+          <div className="projection-settings-menu">
+            <div className="settings-section">
+              <p className="settings-heading">Dashboard charts</p>
+              {PROJECTION_CHARTS.map((chart) => (
+                <label key={chart.id}>
+                  <input
+                    type="checkbox"
+                    checked={!(hiddenCharts ?? []).includes(chart.id)}
+                    onChange={() => toggleChart(chart.id)}
+                  />{" "}
+                  {chart.title}
+                </label>
+              ))}
+            </div>
+            <div className="settings-section">
+              <p className="settings-heading">Table columns</p>
+              {columnPickerGroups.map(({ group, items }) => (
+                <div key={group} className="settings-group">
+                  <p className="settings-group-name">{group}</p>
+                  {items.map((col) => (
+                    <label key={col.id}>
+                      <input
+                        type="checkbox"
+                        checked={!(hiddenIds ?? new Set<string>()).has(col.id)}
+                        onChange={() => toggleColumn(col.id)}
+                      />{" "}
+                      {col.label}
+                    </label>
+                  ))}
+                </div>
+              ))}
+            </div>
+            <button type="button" onClick={() => {
+              workspace.dispatch({ type: "projection/setHiddenColumns", hiddenColumnIds: null });
+              workspace.dispatch({ type: "projection/setHiddenCharts", hiddenChartIds: null });
+            }}>
+              Show everything
             </button>
-            {columnPickerGroups.map(({ group, items }) => (
-              <fieldset key={group}>
-                <legend>{group}</legend>
-                {items.map((col) => (
-                  <label key={col.id}>
-                    <input
-                      type="checkbox"
-                      checked={!(hiddenIds ?? new Set<string>()).has(col.id)}
-                      onChange={() => toggleColumn(col.id)}
-                    />{" "}
-                    {col.label}
-                  </label>
-                ))}
-              </fieldset>
-            ))}
           </div>
         </details>
         {isRunning && <>

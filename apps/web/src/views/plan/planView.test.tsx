@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { createEmptyWorkspace, DEFAULT_SCENARIO_BASE } from "../../domain/defaults";
 import type { SimulationRunner } from "../../store/simulationWorkerProtocol";
@@ -21,7 +21,7 @@ function planState() {
 }
 
 describe("PlanView", () => {
-  it("summarizes saved items and opens each editor at its own card", () => {
+  it("summarizes saved items and replaces each card with its in-place editor", async () => {
     const workspace = createEmptyWorkspace();
     workspace.plan.accounts = [
       { id: "cash", name: "Emergency fund", type: "cash", balance: 12_500, interestRate: 0.0425 },
@@ -45,12 +45,14 @@ describe("PlanView", () => {
     expect(screen.getByRole("region", { name: "Unconfigured rate account summary" }).textContent).toContain("Not set (defaults to 0%)");
     expect(screen.getByRole("region", { name: "Brokerage summary" }).textContent).toContain("Not set (defaults to market value)");
     fireEvent.click(within(accountCard).getByRole("button", { name: "Edit" }));
-    const accountEntry = accountCard.closest(".plan-item-entry") as HTMLElement;
+    expect(screen.queryByRole("region", { name: "Emergency fund summary" })).toBeNull();
+    const accountEntry = document.querySelector(".plan-item-entry") as HTMLElement;
+    const firstEditorField = within(accountEntry).getByLabelText(/^Name/);
     expect(within(accountEntry).getByLabelText("Annual interest rate (%)")).toBeTruthy();
-    const closeAccount = within(accountCard).getByRole("button", { name: "Close editor" });
-    closeAccount.focus();
-    fireEvent.click(closeAccount);
-    expect(document.activeElement).toBe(closeAccount);
+    expect(document.activeElement).toBe(firstEditorField);
+    fireEvent.click(within(accountEntry).getByRole("button", { name: "Close editor" }));
+    expect(screen.getByRole("region", { name: "Emergency fund summary" })).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(within(accountEntry).getByRole("button", { name: "Edit" })));
 
     fireEvent.click(screen.getByRole("tab", { name: "Assets & debts" }));
     const assetCard = screen.getByRole("region", { name: "Home summary" });

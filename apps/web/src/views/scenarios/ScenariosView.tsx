@@ -1,8 +1,7 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useWorkspace } from "../../store/api";
 import { ScenarioEditorForm } from "./ScenarioEditorForm";
 import { ScenarioList } from "./ScenarioList";
-import type { ScenarioDelta } from "../../domain/types";
 import "./scenarios.css";
 
 /**
@@ -15,12 +14,7 @@ export function ScenariosView() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
-  const editing = useMemo<ScenarioDelta | null>(() => {
-    if (creating) return null;
-    return workspace.workspace.scenarios.find((delta) => delta.id === editingId) ?? null;
-  }, [creating, editingId, workspace.workspace.scenarios]);
-
-  const showEditor = creating || editing !== null;
+  const showEditor = creating;
 
   return (
     <section aria-label="Scenarios" className="scenarios-view">
@@ -41,8 +35,8 @@ export function ScenariosView() {
 
       {showEditor ? (
         <ScenarioEditorForm
-          key={editing?.id ?? "new"}
-          delta={editing}
+          key="new"
+          delta={null}
           onDone={() => { setCreating(false); setEditingId(null); }}
         />
       ) : null}

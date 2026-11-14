@@ -36,12 +36,14 @@
   font-size: 1.1rem;
 }
 
-/* Column picker: a details dropdown in the toolbar; the menu overlays the table. */
-.column-picker { position: relative; }
-.column-picker summary { cursor: pointer; list-style: none; }
-.column-picker summary::before { content: "▾ "; }
-.column-picker[open] summary::before { content: "▴ "; }
-.column-picker-menu {
+/* Projection settings: a details disclosure in the toolbar; the gear-only trigger
+   carries the accessible name, the menu overlays the table. */
+.projection-settings { position: relative; }
+.projection-settings summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; justify-content: center; padding: 6px 10px; border: 1px solid #d3d9de; border-radius: 6px; background: #fff; color: #52606d; }
+.projection-settings summary:hover { background: #e8eef2; }
+.projection-settings summary::-webkit-details-marker { display: none; }
+.projection-settings[open] summary { background: #e8eef2; }
+.projection-settings-menu {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
@@ -55,9 +57,12 @@
   max-height: 60vh;
   overflow: auto;
 }
-.column-picker-menu fieldset { border: 0; margin: 0 0 8px; padding: 0; }
-.column-picker-menu legend { font-weight: 600; font-size: 12px; color: #52606d; }
-.column-picker-menu label { display: block; font-size: 12px; }
+.projection-settings-menu .settings-section { margin: 0 0 10px; }
+.projection-settings-menu .settings-heading { margin: 0 0 4px; font-weight: 600; font-size: 12px; color: #52606d; }
+.projection-settings-menu .settings-group { margin: 0 0 8px; }
+.projection-settings-menu .settings-group-name { margin: 0 0 2px; font-size: 11px; font-weight: 600; color: #7b8794; }
+.projection-settings-menu label { display: block; font-size: 12px; }
+.projection-settings-menu button { margin-top: 4px; }
 
 .fail-banner {
   border: 2px solid #dc2626;

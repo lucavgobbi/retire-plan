@@ -31,3 +31,22 @@ export const DRAWDOWN_HELP =
   "debt — the top of the stack is financial account and other-asset value only, not net worth. A " +
   "series flattening to zero shows that account being drawn down; use the net worth chart for the " +
   "after-debt, with-home total.";
+
+export const INCOME_SOURCES_HELP =
+  "Stacked areas splitting each year's income by source: employment, other income, cash-account " +
+  "interest, CPP, OAS and GIS. Cash interest is the top-level interest earned by cash accounts " +
+  "(a separate series, never merged into other income, so sources are not double-counted). The " +
+  "shift from employment to public benefits over time is visible here; the total matches the " +
+  "income line in the income vs spending chart.";
+
+export const ACCOUNT_FLOWS_HELP =
+  "Per-year bars of money moving through each account: contributions stacked ABOVE the zero line " +
+  "(TFSA, RRSP, non-registered, cash) and withdrawals stacked BELOW it. Withdrawal bars are the " +
+  "actual amounts drawn out that year — including required RRIF minimums — not negative wealth; " +
+  "account balances themselves live in the net worth and drawdown charts.";
+
+export const CONTRIBUTION_ROOM_HELP =
+  "Remaining TFSA and RRSP contribution headroom at each age, as tracked by the engine's " +
+  "contribution-room rules. A line reaching zero means the room is fully used. TFSA withdrawals " +
+  "restore that room the FOLLOWING year; RRSP withdrawals do NOT restore room — RRSP room only " +
+  "grows from new earned income or unused carry-forward, and contributions consume it.";

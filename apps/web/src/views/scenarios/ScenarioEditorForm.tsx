@@ -3,6 +3,7 @@ import { HISTORICAL_DATASET, type AccountType } from "@retire-plan/engine";
 import { useWorkspace } from "../../store/api";
 import type { BenefitSettings, ScenarioBase, ScenarioDelta, WithdrawalStrategy } from "../../domain/types";
 import { NumberTextInput } from "../../components/NumberTextInput";
+import { InlineEditorPanel } from "../../components/InlineEditorPanel";
 import { TAX_MINIMIZING_STRATEGY_HELP } from "../../content/assumptions";
 import { ACCOUNT_TYPE_LABELS, cashOrderPosition, INVESTMENT_ACCOUNT_TYPES, investmentOrder, orderWithCashPosition, swapOrderPosition, type CashOrderPosition } from "../../domain/accountOrder";
 
@@ -204,7 +205,7 @@ export function ScenarioEditorForm({ delta, onDone }: { delta: ScenarioDelta | n
   };
 
   return (
-    <div className="scenario-editor" aria-label="Scenario editor">
+    <InlineEditorPanel title={delta ? "Edit scenario" : "New scenario"} className="scenario-editor" onClose={onDone}>
       <label>
         Name
         <input
@@ -352,11 +353,6 @@ export function ScenarioEditorForm({ delta, onDone }: { delta: ScenarioDelta | n
         </div>
       )}
 
-      <div className="editor-actions">
-        <button type="button" onClick={onDone}>
-          Back
-        </button>
-      </div>
-    </div>
+    </InlineEditorPanel>
   );
 }

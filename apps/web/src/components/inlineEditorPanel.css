@@ -1,0 +1,26 @@
+.inline-editor-panel {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  margin: 8px 0 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border, #d3d9de);
+  border-radius: 7px;
+  background: #fbfcfa;
+}
+
+.inline-editor-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.inline-editor-heading h3 { margin: .1rem 0; }
+.inline-editor-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+
+@media (max-width: 480px) {
+  .inline-editor-panel { padding: 12px; }
+  .inline-editor-actions > button { flex: 1 1 auto; }
+}

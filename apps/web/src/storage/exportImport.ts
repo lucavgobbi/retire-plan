@@ -36,6 +36,7 @@ export function buildPlanFile(w: Workspace, options: BuildPlanFileOptions = {}):
     schemaVersion: SCHEMA_VERSION,
     ...(w.baseScenario ? { baseScenario: structuredCopy(w.baseScenario) } : {}),
     ...(w.hiddenProjectionColumns !== undefined ? { hiddenProjectionColumns: [...w.hiddenProjectionColumns] } : {}),
+    ...(w.hiddenProjectionCharts !== undefined ? { hiddenProjectionCharts: [...w.hiddenProjectionCharts] } : {}),
     plans: [{ meta, plan: structuredCopy(w.plan) }],
     scenarios: w.scenarios.map((s) => structuredCopy(s)),
   };
@@ -92,6 +93,7 @@ export function parsePlanFile(json: unknown): ParseOk | ParseFailure {
     meta: { ...entry.meta },
     ...(planFile.baseScenario ? { baseScenario: structuredCopy(planFile.baseScenario) } : {}),
     ...(planFile.hiddenProjectionColumns !== undefined ? { hiddenProjectionColumns: [...planFile.hiddenProjectionColumns] } : {}),
+    ...(planFile.hiddenProjectionCharts !== undefined ? { hiddenProjectionCharts: [...planFile.hiddenProjectionCharts] } : {}),
     plan: entry.plan,
     scenarios: planFile.scenarios.filter(
       (scenario) =>

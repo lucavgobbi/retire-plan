@@ -83,3 +83,42 @@ export function drawdownSeries(years: YearResult[]): { x: number; tfsa: number; 
     otherAssets: y.balances.otherAssets ?? 0,
   }));
 }
+
+/**
+ * Annual income split by source. Cash interest is the TOP-LEVEL `cashInterest`
+ * earned by cash accounts — deliberately NOT merged into `income.other` (which
+ * carries other taxable income), so the sources never double-count.
+ */
+export function incomeSourcesSeries(years: YearResult[]): { x: number; employment: number; other: number; cashInterest: number; cpp: number; oas: number; gis: number }[] {
+  return years.map((y) => ({
+    x: y.age,
+    employment: y.income.employment,
+    other: y.income.other,
+    cashInterest: y.cashInterest ?? 0,
+    cpp: y.income.cpp,
+    oas: y.income.oas,
+    gis: y.income.gis,
+  }));
+}
+
+export interface AccountFlowPoint {
+  x: number;
+  /** Money put INTO each account this year (positive magnitudes). */
+  contributions: { tfsa: number; rrsp: number; nonreg: number; cash: number };
+  /** Money drawn OUT of each account this year (positive magnitudes; the chart renders them below zero). */
+  withdrawals: { tfsa: number; rrsp: number; nonreg: number; cash: number };
+}
+
+/** Per-account contributions and withdrawals; optional cash fields normalize to 0. */
+export function accountFlowsSeries(years: YearResult[]): AccountFlowPoint[] {
+  return years.map((y) => ({
+    x: y.age,
+    contributions: { tfsa: y.contributions.tfsa, rrsp: y.contributions.rrsp, nonreg: y.contributions.nonreg, cash: y.contributions.cash ?? 0 },
+    withdrawals: { tfsa: y.withdrawals.tfsa, rrsp: y.withdrawals.rrsp, nonreg: y.withdrawals.nonreg, cash: y.withdrawals.cash ?? 0 },
+  }));
+}
+
+/** Remaining TFSA/RRSP contribution headroom; 0 means the room is used up. */
+export function contributionRoomSeries(years: YearResult[]): { x: number; tfsaRoom: number; rrspRoom: number }[] {
+  return years.map((y) => ({ x: y.age, tfsaRoom: y.tfsaRoom, rrspRoom: y.rrspRoom }));
+}

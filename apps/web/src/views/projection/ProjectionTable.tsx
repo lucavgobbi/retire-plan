@@ -2,6 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { SimulationResult, YearResult } from "@retire-plan/engine";
 import { fmtMoney, fmtPercent, yearForAge } from "./fmt";
 import { EventsCell, YearDetailRow } from "./YearDetailRow";
+import { sanitizeHiddenIds } from "./hiddenIds";
 
 type SummaryKind = "flow" | "stock" | "rate" | "year";
 interface Column {
@@ -51,9 +52,7 @@ export function columns(): Column[] {
  * hidden; the pinned Age/calendar-year/Audit columns still render.
  */
 export function sanitizeHiddenColumns(value: unknown, selectableIds: readonly string[]): string[] | null {
-  if (!Array.isArray(value)) return null;
-  const wanted = new Set(value.filter((id): id is string => typeof id === "string" && selectableIds.includes(id)));
-  return selectableIds.filter(id => wanted.has(id));
+  return sanitizeHiddenIds(value, selectableIds);
 }
 
 function summarize(col: Column, years: YearResult[]): number {

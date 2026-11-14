@@ -74,19 +74,24 @@ describe("parsePlanFile", () => {
     }
   });
 
-  it("round-trips hiddenProjectionColumns; old JSON without the field imports as absent (all columns)", () => {
+  it("round-trips hiddenProjectionColumns and hiddenProjectionCharts; old JSON without the fields imports as absent (all visible)", () => {
     const ws = makeSampleWorkspace();
     ws.hiddenProjectionColumns = ["income.employment", "stale.id"];
+    ws.hiddenProjectionCharts = ["tax", "stale.chart"];
     const parsed = parsePlanFile(JSON.parse(workspaceToText(ws)));
     expect(parsed.ok).toBe(true);
     if (parsed.ok) {
-      // The field round-trips verbatim; stale ids are filtered only at display time.
+      // Both fields round-trip verbatim; stale ids are filtered only at display time.
       expect(parsed.workspace.hiddenProjectionColumns).toEqual(["income.employment", "stale.id"]);
+      expect(parsed.workspace.hiddenProjectionCharts).toEqual(["tax", "stale.chart"]);
     }
-    // Backward compatibility: a legacy file without the field loads with it absent.
+    // Backward compatibility: a legacy file without the fields loads with them absent.
     const legacy = parsePlanFile(JSON.parse(workspaceToText(makeSampleWorkspace())));
     expect(legacy.ok).toBe(true);
-    if (legacy.ok) expect(legacy.workspace.hiddenProjectionColumns).toBeUndefined();
+    if (legacy.ok) {
+      expect(legacy.workspace.hiddenProjectionColumns).toBeUndefined();
+      expect(legacy.workspace.hiddenProjectionCharts).toBeUndefined();
+    }
   });
 
   it("records migratedFrom for pre-versioning files", () => {

@@ -58,6 +58,13 @@ export function reducer(state: StoreState, action: Action): StoreState {
       }
       return { ...state, workspace: { ...workspace, hiddenProjectionColumns: [...action.hiddenColumnIds] } };
     }
+    case "projection/setHiddenCharts": {
+      if (action.hiddenChartIds === null) {
+        const { hiddenProjectionCharts: _removed, ...rest } = workspace;
+        return { ...state, workspace: rest };
+      }
+      return { ...state, workspace: { ...workspace, hiddenProjectionCharts: [...action.hiddenChartIds] } };
+    }
     case "run/store": return { ...state, runs: [...state.runs.filter(run => run.id !== action.record.id), deepFreeze(structuredClone(action.record))].slice(-20) };
     default: return assertNever(action);
   }

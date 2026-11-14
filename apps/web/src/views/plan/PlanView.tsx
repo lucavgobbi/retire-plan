@@ -10,6 +10,7 @@ import type {
 } from "@retire-plan/engine";
 import { calculateCurrentAge, useWorkspace } from "../../store/api";
 import { NumberTextInput } from "../../components/NumberTextInput";
+import { InlineEditorPanel } from "../../components/InlineEditorPanel";
 import { fmtMoney, fmtPercent } from "../projection/fmt";
 import "./planView.css";
 
@@ -76,14 +77,13 @@ function ErrorList({ errors }: { errors: string[] }) {
 }
 
 /** Inline editor shell: heading, Remove, fields, and validation errors — no save buttons. */
-function ItemForm({ title, children, errors, onRemove }: {
-  title: string; children: ReactNode; errors: string[]; onRemove?: () => void;
+function ItemForm({ title, children, errors, onRemove, onClose }: {
+  title: string; children: ReactNode; errors: string[]; onRemove?: () => void; onClose: () => void;
 }) {
-  return <section className="plan-item-form" aria-label={title}>
-    <div className="plan-item-heading"><h3>{title}</h3>{onRemove && <button type="button" className="plan-remove" onClick={onRemove}>Remove</button>}</div>
+  return <InlineEditorPanel title={title} className="plan-item-form" onClose={onClose} onRemove={onRemove}>
     <div className="plan-fields">{children}</div>
     <ErrorList errors={errors} />
-  </section>;
+  </InlineEditorPanel>;
 }
 
 function ReadOnlyItemCard({ title, badge, primaryLabel, primaryValue, details, editing, onEdit }: {
@@ -92,7 +92,7 @@ function ReadOnlyItemCard({ title, badge, primaryLabel, primaryValue, details, e
 }) {
   return <section className="plan-summary-card" aria-label={`${title} summary`}>
     <div className="plan-summary-heading"><div><span className="plan-type-badge">{badge}</span><h3>{title}</h3></div>
-      <button type="button" aria-expanded={editing} onClick={onEdit}>{editing ? "Close editor" : "Edit"}</button>
+      <button type="button" data-inline-edit-trigger onClick={onEdit}>Edit</button>
     </div>
     <div className="plan-primary-value"><span>{primaryLabel}</span><strong>{primaryValue}</strong></div>
     {details.length > 0 && <dl className="plan-summary-details">{details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>}
@@ -185,9 +185,9 @@ function newAccountDraft(): AccountDraft {
   return { id: makeId("account"), name: "", type: "tfsa", balance: "0", bookValue: "", equity: "60", bond: "30", cash: "10", interestRate: "0" };
 }
 
-function AccountForm({ account, onApply, onRemove }: { account: AccountPlan; onApply: (item: AccountPlan) => void; onRemove: () => void }) {
+function AccountForm({ account, onApply, onRemove, onClose }: { account: AccountPlan; onApply: (item: AccountPlan) => void; onRemove: () => void; onClose: () => void }) {
   const { draft, change, errors } = useAutoApplyForm(account, accountDraft, readAccountDraft, onApply);
-  return <ItemForm title={draft.name.trim() || (draft.type === "cash" ? "Cash account" : `${ACCOUNT_LABELS[draft.type]} account`)} errors={errors} onRemove={onRemove}>
+  return <ItemForm title={draft.name.trim() || (draft.type === "cash" ? "Cash account" : `${ACCOUNT_LABELS[draft.type]} account`)} errors={errors} onRemove={onRemove} onClose={onClose}>
     <TextField label="Name" value={draft.name} onChange={name => change({ name })} optional />
     <SelectField label="Account type" value={draft.type} choices={["tfsa", "rrsp", "nonreg", "cash"] as const} labels={ACCOUNT_LABELS} onChange={type => change({ type, ...(type !== "nonreg" ? { bookValue: "" } : {}), ...(type === "cash" ? { equity: "", bond: "", cash: "", interestRate: "0" } : { equity: "60", bond: "30", cash: "10" }) })} />
     <TextInput label="Current balance ($)" value={draft.balance} min="0" onChange={balance => change({ balance })} />
@@ -217,9 +217,9 @@ function readAssetDraft(draft: AssetDraft): { errors: string[]; item: AssetPlan 
   const saleCosts = saleCostsPct === undefined ? undefined : saleCostsPct / 100;
   return { errors, item: { id: draft.id, kind: draft.kind, name: draft.name.trim() === "" ? undefined : draft.name.trim(), value, appreciationRate, ...(saleAge === undefined ? {} : { sellEvent: { age: saleAge, costsPct: saleCosts ?? 0 } }) } };
 }
-function AssetForm({ asset, onApply, onRemove }: { asset: AssetPlan; onApply: (item: AssetPlan) => void; onRemove: () => void }) {
+function AssetForm({ asset, onApply, onRemove, onClose }: { asset: AssetPlan; onApply: (item: AssetPlan) => void; onRemove: () => void; onClose: () => void }) {
   const { draft, change, errors } = useAutoApplyForm(asset, assetDraft, readAssetDraft, onApply);
-  return <ItemForm title={draft.name || "Asset"} errors={errors} onRemove={onRemove}>
+  return <ItemForm title={draft.name || "Asset"} errors={errors} onRemove={onRemove} onClose={onClose}>
     <SelectField label="Asset kind" value={draft.kind} choices={["primary-home", "other"] as const} labels={ASSET_KIND_LABELS} onChange={kind => change({ kind })} />
     <TextField label="Name" value={draft.name} onChange={name => change({ name })} optional />
     <TextInput label="Current value ($)" value={draft.value} min="0" onChange={value => change({ value })} />
@@ -247,9 +247,9 @@ function readDebtDraft(draft: DebtDraft): { errors: string[]; item: DebtPlan } {
   if (monthlyPayment <= 0) errors.push("Payment must be greater than $0.");
   return { errors, item: { id: draft.id, kind: "mortgage", rate, termYears, amortizationYears, balance, monthlyPayment, paymentFrequency: draft.paymentFrequency === "monthly" ? undefined : draft.paymentFrequency } };
 }
-function DebtForm({ debt, onApply, onRemove }: { debt: DebtPlan; onApply: (item: DebtPlan) => void; onRemove: () => void }) {
+function DebtForm({ debt, onApply, onRemove, onClose }: { debt: DebtPlan; onApply: (item: DebtPlan) => void; onRemove: () => void; onClose: () => void }) {
   const { draft, change, errors } = useAutoApplyForm(debt, debtDraft, readDebtDraft, onApply);
-  return <ItemForm title="Mortgage" errors={errors} onRemove={onRemove}>
+  return <ItemForm title="Mortgage" errors={errors} onRemove={onRemove} onClose={onClose}>
     <TextInput label="Annual interest rate (%)" value={draft.rate} min="0" onChange={rate => change({ rate })} />
     <TextInput label="Mortgage balance ($)" value={draft.balance} min="0" onChange={balance => change({ balance })} />
     <TextInput label="Payment ($)" value={draft.monthlyPayment} min="0" onChange={monthlyPayment => change({ monthlyPayment })} />
@@ -273,9 +273,9 @@ function readIncomeDraft(draft: IncomeDraft): { errors: string[]; item: IncomePl
   if (endAge !== undefined && endAge < startAge) errors.push("End age must be on or after start age.");
   return { errors, item: { id: draft.id, name: draft.name.trim() === "" ? undefined : draft.name.trim(), kind: draft.kind, annualAmount, startAge, ...(endAge === undefined ? {} : { endAge }), raiseRate } };
 }
-function IncomeForm({ income, onApply, onRemove }: { income: IncomePlan; onApply: (item: IncomePlan) => void; onRemove: () => void }) {
+function IncomeForm({ income, onApply, onRemove, onClose }: { income: IncomePlan; onApply: (item: IncomePlan) => void; onRemove: () => void; onClose: () => void }) {
   const { draft, change, errors } = useAutoApplyForm(income, incomeDraft, readIncomeDraft, onApply);
-  return <ItemForm title={draft.name.trim() || INCOME_LABELS[draft.kind]} errors={errors} onRemove={onRemove}>
+  return <ItemForm title={draft.name.trim() || INCOME_LABELS[draft.kind]} errors={errors} onRemove={onRemove} onClose={onClose}>
     <TextField label="Name" value={draft.name} onChange={name => change({ name })} optional />
     <SelectField label="Income type" value={draft.kind} choices={["employment", "cpp", "oas", "other"] as const} labels={INCOME_LABELS} onChange={kind => change({ kind, ...(kind === "employment" ? {} : { endAge: "" }) })} />
     <TextInput label="Annual amount ($)" value={draft.annualAmount} min="0" onChange={annualAmount => change({ annualAmount })} />
@@ -298,9 +298,9 @@ function readExpenseDraft(draft: ExpenseDraft): { errors: string[]; item: Expens
   if (endAge !== undefined && endAge < startAge) errors.push("End age must be on or after start age.");
   return { errors, item: { id: draft.id, name: draft.name.trim() === "" ? undefined : draft.name.trim(), annualAmount, startAge, ...(endAge === undefined ? {} : { endAge }), inflationRate } };
 }
-function ExpenseForm({ expense, onApply, onRemove }: { expense: ExpensePlan; onApply: (item: ExpensePlan) => void; onRemove: () => void }) {
+function ExpenseForm({ expense, onApply, onRemove, onClose }: { expense: ExpensePlan; onApply: (item: ExpensePlan) => void; onRemove: () => void; onClose: () => void }) {
   const { draft, change, errors } = useAutoApplyForm(expense, expenseDraft, readExpenseDraft, onApply);
-  return <ItemForm title={draft.name || "Expense"} errors={errors} onRemove={onRemove}>
+  return <ItemForm title={draft.name || "Expense"} errors={errors} onRemove={onRemove} onClose={onClose}>
     <TextField label="Name" value={draft.name} onChange={name => change({ name })} optional />
     <TextInput label="Annual amount ($)" value={draft.annualAmount} min="0" onChange={annualAmount => change({ annualAmount })} />
     <TextInput label="Start age" value={draft.startAge} min="1" step="1" onChange={startAge => change({ startAge })} />
@@ -321,9 +321,9 @@ function readSavingsDraft(draft: SavingsDraft): { errors: string[]; item: Saving
   if (matchRate !== undefined && matchRate > 1) errors.push("Employer match must be between 0% and 100%.");
   return { errors, item: { id: draft.id, priority, target: draft.target, ...(perYearCap === undefined ? {} : { perYearCap }), ...(untilAge === undefined ? {} : { untilAge }), ...(matchRate === undefined ? {} : { matchRate }) } };
 }
-function SavingsForm({ step, onApply, onRemove }: { step: SavingsPolicyStep; onApply: (item: SavingsPolicyStep) => void; onRemove: () => void }) {
+function SavingsForm({ step, onApply, onRemove, onClose }: { step: SavingsPolicyStep; onApply: (item: SavingsPolicyStep) => void; onRemove: () => void; onClose: () => void }) {
   const { draft, change, errors } = useAutoApplyForm(step, savingsDraft, readSavingsDraft, onApply);
-  return <ItemForm title={`Priority ${draft.priority}`} errors={errors} onRemove={onRemove}>
+  return <ItemForm title={`Priority ${draft.priority}`} errors={errors} onRemove={onRemove} onClose={onClose}>
     <TextInput label="Priority" value={draft.priority} min="1" onChange={priority => change({ priority })} />
     <SelectField label="Savings target" value={draft.target} choices={["tfsa", "rrsp-match", "rrsp", "nonreg", "cash", "mortgage-prepay"] as const} labels={SAVINGS_TARGET_LABELS} onChange={target => change({ target })} />
     <TextInput label="Annual cap ($)" value={draft.perYearCap} min="0" optional onChange={perYearCap => change({ perYearCap })} />
@@ -441,9 +441,10 @@ function AccountsEditor() {
   const editors = useInlineEditors();
   const add = () => { const id = addFromDraft(dispatch, "accounts", newAccountDraft(), readAccountDraft); if (id) editors.open(id); };
   return <section className="plan-panel"><div className="plan-section-heading"><div><h2>Accounts</h2><p>Balances, account type, and investments. Cash accounts earn their own fixed interest rate.</p></div><button type="button" onClick={add}>Add account</button></div>
-    {items.map(item => <div className="plan-item-entry" key={item.id}>
-      <AccountSummary account={item} editing={editors.isOpen(item.id)} onEdit={() => editors.toggle(item.id)} />
-      {editors.isOpen(item.id) && <AccountForm account={item} onApply={value => dispatch({ type: "plan/updateItem", section: "accounts", id: item.id, patch: value })} onRemove={() => { dispatch({ type: "plan/removeItem", section: "accounts", id: item.id }); editors.close(item.id); }} />}
+    {items.map(item => <div className="plan-item-entry" data-inline-edit-row key={item.id}>
+      {editors.isOpen(item.id)
+        ? <AccountForm account={item} onApply={value => dispatch({ type: "plan/updateItem", section: "accounts", id: item.id, patch: value })} onRemove={() => { dispatch({ type: "plan/removeItem", section: "accounts", id: item.id }); editors.close(item.id); }} onClose={() => editors.close(item.id)} />
+        : <AccountSummary account={item} editing={false} onEdit={() => editors.open(item.id)} />}
     </div>)}
     {!items.length && <p className="plan-empty">No accounts yet. Add a TFSA, RRSP, non-registered, or cash account.</p>}
   </section>;
@@ -457,13 +458,17 @@ function AssetsDebtsEditor() {
   const addDebt = () => { const id = addFromDraft(dispatch, "debts", newDebtDraft(), readDebtDraft); if (id) debtEditors.open(id); };
   return <section className="plan-panel">
     <div className="plan-section-heading"><div><h2>Assets</h2><p>Homes and other assets, including optional sale events.</p></div><button type="button" onClick={addAsset}>Add asset</button></div>
-    {assets.map(item => <div className="plan-item-entry" key={item.id}><AssetSummary asset={item} editing={assetEditors.isOpen(item.id)} onEdit={() => assetEditors.toggle(item.id)} />
-      {assetEditors.isOpen(item.id) && <AssetForm asset={item} onApply={value => dispatch({ type: "plan/updateItem", section: "assets", id: item.id, patch: value })} onRemove={() => { dispatch({ type: "plan/removeItem", section: "assets", id: item.id }); assetEditors.close(item.id); }} />}
+    {assets.map(item => <div className="plan-item-entry" data-inline-edit-row key={item.id}>
+      {assetEditors.isOpen(item.id)
+        ? <AssetForm asset={item} onApply={value => dispatch({ type: "plan/updateItem", section: "assets", id: item.id, patch: value })} onRemove={() => { dispatch({ type: "plan/removeItem", section: "assets", id: item.id }); assetEditors.close(item.id); }} onClose={() => assetEditors.close(item.id)} />
+        : <AssetSummary asset={item} editing={false} onEdit={() => assetEditors.open(item.id)} />}
     </div>)}
     {!assets.length && <p className="plan-empty">No assets yet.</p>}
     <div className="plan-section-heading plan-subsection"><div><h2>Debts</h2><p>Mortgage rate, term, amortization, and payment.</p></div><button type="button" onClick={addDebt} disabled={debts.length > 0}>Add mortgage</button></div>
-    {debts.map(item => <div className="plan-item-entry" key={item.id}><DebtSummary debt={item} editing={debtEditors.isOpen(item.id)} onEdit={() => debtEditors.toggle(item.id)} />
-      {debtEditors.isOpen(item.id) && <DebtForm debt={item} onApply={value => dispatch({ type: "plan/updateItem", section: "debts", id: item.id, patch: value })} onRemove={() => { dispatch({ type: "plan/removeItem", section: "debts", id: item.id }); debtEditors.close(item.id); }} />}
+    {debts.map(item => <div className="plan-item-entry" data-inline-edit-row key={item.id}>
+      {debtEditors.isOpen(item.id)
+        ? <DebtForm debt={item} onApply={value => dispatch({ type: "plan/updateItem", section: "debts", id: item.id, patch: value })} onRemove={() => { dispatch({ type: "plan/removeItem", section: "debts", id: item.id }); debtEditors.close(item.id); }} onClose={() => debtEditors.close(item.id)} />
+        : <DebtSummary debt={item} editing={false} onEdit={() => debtEditors.open(item.id)} />}
     </div>)}
     {!debts.length && <p className="plan-empty">No mortgage added.</p>}
   </section>;
@@ -494,8 +499,10 @@ function IncomesEditor() {
   const add = (kind: IncomePlan["kind"]) => { const id = addFromDraft(dispatch, "incomes", newIncomeDraft(kind, workspace.plan.profile.currentAge, baseScenario.retirementAge), readIncomeDraft); if (id) editors.open(id); };
   return <section className="plan-panel"><div className="plan-section-heading"><div><h2>Income</h2><p>Enter taxable income and the ages when each stream starts and ends. End age is optional.</p></div>
     <div className="plan-add-buttons">{(["employment", "cpp", "oas", "other"] as const).map(kind => <button key={kind} type="button" onClick={() => add(kind)}>Add {kind}</button>)}</div></div>
-    {items.map(item => <div className="plan-item-entry" key={item.id}><IncomeSummary income={item} editing={editors.isOpen(item.id)} onEdit={() => editors.toggle(item.id)} />
-      {editors.isOpen(item.id) && <IncomeForm income={item} onApply={value => dispatch({ type: "plan/updateItem", section: "incomes", id: item.id, patch: value })} onRemove={() => { dispatch({ type: "plan/removeItem", section: "incomes", id: item.id }); editors.close(item.id); }} />}
+    {items.map(item => <div className="plan-item-entry" data-inline-edit-row key={item.id}>
+      {editors.isOpen(item.id)
+        ? <IncomeForm income={item} onApply={value => dispatch({ type: "plan/updateItem", section: "incomes", id: item.id, patch: value })} onRemove={() => { dispatch({ type: "plan/removeItem", section: "incomes", id: item.id }); editors.close(item.id); }} onClose={() => editors.close(item.id)} />
+        : <IncomeSummary income={item} editing={false} onEdit={() => editors.open(item.id)} />}
     </div>)}
     {!items.length && <p className="plan-empty">No income streams yet.</p>}
   </section>;
@@ -506,8 +513,10 @@ function ExpensesEditor() {
   const editors = useInlineEditors();
   const add = () => { const id = addFromDraft(dispatch, "expenses", newExpenseDraft(workspace.plan.profile.currentAge), readExpenseDraft); if (id) editors.open(id); };
   return <section className="plan-panel"><div className="plan-section-heading"><div><h2>Expenses</h2><p>Annual spending, active years, and the inflation rate.</p></div><button type="button" onClick={add}>Add expense</button></div>
-    {items.map(item => <div className="plan-item-entry" key={item.id}><ExpenseSummary expense={item} editing={editors.isOpen(item.id)} onEdit={() => editors.toggle(item.id)} />
-      {editors.isOpen(item.id) && <ExpenseForm expense={item} onApply={value => dispatch({ type: "plan/updateItem", section: "expenses", id: item.id, patch: value })} onRemove={() => { dispatch({ type: "plan/removeItem", section: "expenses", id: item.id }); editors.close(item.id); }} />}
+    {items.map(item => <div className="plan-item-entry" data-inline-edit-row key={item.id}>
+      {editors.isOpen(item.id)
+        ? <ExpenseForm expense={item} onApply={value => dispatch({ type: "plan/updateItem", section: "expenses", id: item.id, patch: value })} onRemove={() => { dispatch({ type: "plan/removeItem", section: "expenses", id: item.id }); editors.close(item.id); }} onClose={() => editors.close(item.id)} />
+        : <ExpenseSummary expense={item} editing={false} onEdit={() => editors.open(item.id)} />}
     </div>)}
     {!items.length && <p className="plan-empty">No expenses yet.</p>}
   </section>;
@@ -518,8 +527,10 @@ function SavingsEditor() {
   const editors = useInlineEditors();
   const add = () => { const id = addFromDraft(dispatch, "savingsPolicy", newSavingsDraft(items.length + 1), readSavingsDraft); if (id) editors.open(id); };
   return <section className="plan-panel"><div className="plan-section-heading"><div><h2>Savings policy</h2><p>Order savings steps by priority. A TFSA/RRSP contribution uses available room.</p></div><button type="button" onClick={add}>Add savings step</button></div>
-    {items.map(item => <div className="plan-item-entry" key={item.id}><SavingsSummary step={item} editing={editors.isOpen(item.id)} onEdit={() => editors.toggle(item.id)} />
-      {editors.isOpen(item.id) && <SavingsForm step={item} onApply={value => dispatch({ type: "plan/updateItem", section: "savingsPolicy", id: item.id, patch: value })} onRemove={() => { dispatch({ type: "plan/removeItem", section: "savingsPolicy", id: item.id }); editors.close(item.id); }} />}
+    {items.map(item => <div className="plan-item-entry" data-inline-edit-row key={item.id}>
+      {editors.isOpen(item.id)
+        ? <SavingsForm step={item} onApply={value => dispatch({ type: "plan/updateItem", section: "savingsPolicy", id: item.id, patch: value })} onRemove={() => { dispatch({ type: "plan/removeItem", section: "savingsPolicy", id: item.id }); editors.close(item.id); }} onClose={() => editors.close(item.id)} />
+        : <SavingsSummary step={item} editing={false} onEdit={() => editors.open(item.id)} />}
     </div>)}
     {!items.length && <p className="plan-empty">No savings steps yet. Unallocated surplus goes to non-registered savings when available.</p>}
   </section>;

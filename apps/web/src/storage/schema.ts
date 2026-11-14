@@ -445,6 +445,12 @@ export function validateWorkspace(value: unknown): string[] {
       errors.push("Workspace hiddenProjectionColumns must be a list of column identifiers when present.");
     }
   }
+  if (value.hiddenProjectionCharts !== undefined) {
+    const hidden = value.hiddenProjectionCharts;
+    if (!Array.isArray(hidden) || !hidden.every((id) => isNonEmptyString(id))) {
+      errors.push("Workspace hiddenProjectionCharts must be a list of chart identifiers when present.");
+    }
+  }
   if (value.baseScenario !== undefined) errors.push(...validateBaseScenario(value.baseScenario));
   errors.push(...validatePlanShape(value.plan).map((e) => `Workspace plan: ${e}`));
   if (!Array.isArray(value.scenarios)) {
@@ -471,6 +477,12 @@ export function validatePlanFile(value: unknown): string[] {
     const hidden = value.hiddenProjectionColumns;
     if (!Array.isArray(hidden) || !hidden.every((id) => isNonEmptyString(id))) {
       errors.push(`File hiddenProjectionColumns must be a list of column identifiers when present.`);
+    }
+  }
+  if (value.hiddenProjectionCharts !== undefined) {
+    const hidden = value.hiddenProjectionCharts;
+    if (!Array.isArray(hidden) || !hidden.every((id) => isNonEmptyString(id))) {
+      errors.push(`File hiddenProjectionCharts must be a list of chart identifiers when present.`);
     }
   }
   value.plans.forEach((p, i) => {

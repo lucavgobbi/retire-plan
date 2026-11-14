@@ -2,6 +2,7 @@ import type { ScenarioDelta } from "../../domain/types";
 import { useProjectionRun, useWorkspace } from "../../store/api";
 import { fmtMoney, fmtPercent } from "../projection/fmt";
 import { formatAccountOrder } from "../../domain/accountOrder";
+import { ScenarioEditorForm } from "./ScenarioEditorForm";
 
 interface ScenarioSummary {
   success: boolean;
@@ -17,7 +18,7 @@ export function ScenarioList({
 }: {
   deltas: ScenarioDelta[];
   editingId: string | null;
-  onEdit: (id: string) => void;
+  onEdit: (id: string | null) => void;
 }) {
   if (deltas.length === 0 && editingId === null) return null;
   return (
@@ -37,13 +38,13 @@ export function ScenarioListItem({
 }: {
   delta: ScenarioDelta;
   editing: boolean;
-  onEdit: (id: string) => void;
+  onEdit: (id: string | null) => void;
 }) {
   const { dispatch, workspace } = useWorkspace();
   const { run, runProjection, error, stale, isRunning, cancelRun } = useProjectionRun(undefined, delta.id);
 
   return (
-    <li className="scenario-item">
+    <li className="scenario-item" data-inline-edit-row>
       <div className="scenario-head">
         <strong>{delta.name}</strong>
         <span className="badge">{delta.simMode === "montecarlo" ? "Monte Carlo" : delta.simMode === "historical" ? "Historical" : "Deterministic"}</span>
@@ -52,9 +53,7 @@ export function ScenarioListItem({
             Run
           </button>
           {isRunning && <button type="button" onClick={cancelRun}>Cancel projection</button>}
-          <button type="button" onClick={() => onEdit(delta.id)}>
-            Edit
-          </button>
+          {!editing && <button type="button" data-inline-edit-trigger onClick={() => onEdit(delta.id)}>Edit</button>}
           <button
             type="button"
             aria-label={`Duplicate ${delta.name}`}
@@ -79,11 +78,15 @@ export function ScenarioListItem({
           </button>
         </div>
       </div>
+      {editing
+        ? <ScenarioEditorForm key={delta.id} delta={delta} onDone={() => onEdit(null)} />
+        : <>
       <p className="hint scenario-overrides">{describeOverrides(delta)}</p>
-      {run && !editing && run.analysis ? <p className="summary-strip">
+      {run && run.analysis ? <p className="summary-strip">
         {run.analysis.mode === "historical" ? `Historical ${run.analysis.representativeStartYear}–${run.analysis.representativeEndYear} · ` : "Monte Carlo · "}
         {(run.analysis.successRate * 100).toFixed(1)}% success · final net worth p10 {fmtMoney(run.analysis.percentileNetWorth.p10)}, median {fmtMoney(run.analysis.percentileNetWorth.p50)}, p90 {fmtMoney(run.analysis.percentileNetWorth.p90)}
-      </p> : run && !editing && <SummaryStrip summary={run.result.summary} />}
+      </p> : run && <SummaryStrip summary={run.result.summary} />}
+        </>}
       {run && (
         <p className="hint scenario-run-stamp">
           Last run {new Date(run.createdAt).toLocaleString()}.

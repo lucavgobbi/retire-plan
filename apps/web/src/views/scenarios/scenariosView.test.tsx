@@ -98,8 +98,11 @@ describe("ScenariosView", () => {
     expect((screen.getByLabelText("Historical start year") as HTMLInputElement).value).toBe("1,900");
 
     fireEvent.change(screen.getByLabelText("Retirement age override"), { target: { value: "63" } });
-    const updated = screen.getByText(/retirement age 63/i);
-    expect(updated.closest("li")!.textContent).toContain("Copy of Retire 3 years earlier (2)");
+    const editor = screen.getByRole("region", { name: "Edit scenario" });
+    const copyItem = editor.closest("li")!;
+    expect(copyItem.textContent).toContain("Copy of Retire 3 years earlier (2)");
+    expect(within(editor).getByLabelText("Retirement age override")).toHaveProperty("value", "63");
+    expect(within(copyItem).queryByText(/retirement age 63/i)).toBeNull();
     const originalItem = screen.getByText("Retire 3 years earlier").closest("li")!;
     expect(originalItem.textContent).toContain("retirement age 61");
     expect(originalItem.textContent).toContain("1900");
@@ -137,9 +140,27 @@ describe("ScenariosView", () => {
     fireEvent.click(screen.getByRole("button", { name: /run retire 3 years earlier/i }));
     const item = screen.getByText(/retire 3 years earlier/i);
     await waitFor(() => expect(within(item.closest("li")!).getByText(/final net worth/i)).toBeTruthy());
+    const scenarioRow = item.closest("li")!;
+    fireEvent.click(within(scenarioRow).getByRole("button", { name: "Edit" }));
+    expect(within(scenarioRow).getByText(/Last run/)).toBeTruthy();
+    expect(within(scenarioRow).queryByText(/final net worth/i)).toBeNull();
+    expect(within(scenarioRow).getByRole("region", { name: "Edit scenario" })).toBeTruthy();
   });
 
-  it("lets TFSA move across scenario priorities without a duplicate intermediate and keeps cash placement", () => {
+  it("keeps an actionable run error visible while the scenario editor is open", async () => {
+    const ws = makeWorkspace();
+    ws.scenarios.push(delta);
+    const simulationRunner: SimulationRunner = async () => { throw new Error("worker crashed"); };
+    renderView(ws, simulationRunner);
+    const row = screen.getByRole("button", { name: "Run Retire 3 years earlier" }).closest("li")!;
+    fireEvent.click(within(row).getByRole("button", { name: "Run Retire 3 years earlier" }));
+    expect((await within(row).findByRole("alert")).textContent).toContain("worker crashed");
+    fireEvent.click(within(row).getByRole("button", { name: "Edit" }));
+    expect(document.activeElement).toBe(screen.getByLabelText("Name"));
+    expect(within(row).getByRole("alert").textContent).toContain("worker crashed");
+  });
+
+  it("lets TFSA move across scenario priorities without a duplicate intermediate and keeps cash placement", async () => {
     const ws = makeWorkspace();
     ws.scenarios.push(delta);
     renderView(ws);
@@ -153,11 +174,11 @@ describe("ScenariosView", () => {
     expect(second.value).toBe("tfsa");
     expect((screen.getByLabelText(/3rd drawn/i) as HTMLSelectElement).value).toBe("rrsp");
     expect(screen.queryByText(/choose each investment withdrawal account exactly once/i)).toBeNull();
-    expect(screen.getByText(/withdrawal order Non-registered → TFSA → RRSP\/RRIF/)).toBeTruthy();
-
     fireEvent.change(screen.getByLabelText("Cash withdrawal order"), { target: { value: "2" } });
-    expect(screen.getByText(/withdrawal order Non-registered → TFSA → Cash account → RRSP\/RRIF/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Cash withdrawal order"), { target: { value: "automatic" } });
+    const scenarioRow = screen.getByRole("region", { name: "Edit scenario" }).closest("li")!;
+    fireEvent.click(within(scenarioRow).getByRole("button", { name: "Close editor" }));
+    await waitFor(() => expect(document.activeElement).toBe(within(scenarioRow).getByRole("button", { name: "Edit" })));
     expect(screen.getByText(/withdrawal order Non-registered → TFSA → RRSP\/RRIF/)).toBeTruthy();
   });
 
@@ -267,7 +288,7 @@ describe("ScenariosView", () => {
     expect(screen.queryByText(/retire 3 years earlier/i)).toBeNull();
   });
 
-  it("edit keeps untouched rates byte-identical; Back closes without a save button", () => {
+  it("edit keeps untouched rates byte-identical; Close editor returns to the same summary row", async () => {
     const decimal = makeWorkspace();
     decimal.scenarios.push({
       ...delta,
@@ -293,7 +314,13 @@ describe("ScenariosView", () => {
     expect(equity.value).toBe("5.5");
     expect(screen.queryByRole("button", { name: /^save scenario$/i })).toBeNull();
     // Close WITHOUT touching any field — rates must survive byte-identical.
-    fireEvent.click(screen.getByRole("button", { name: /^back$/i }));
+    const editor = screen.getByRole("region", { name: "Edit scenario" });
+    expect(editor.closest("li")).toBeTruthy();
+    expect(within(editor.closest("li")!).queryByText(/retirement age 62/i)).toBeNull();
+    const closeEditor = screen.getByRole("button", { name: "Close editor" });
+    const scenarioRow = closeEditor.closest("li")!;
+    fireEvent.click(closeEditor);
+    await waitFor(() => expect(document.activeElement).toBe(within(scenarioRow).getByRole("button", { name: "Edit" })));
     expect(screen.getByTestId("stored-rates").textContent).toBe(
       `{"retirementAge":62,"returnAssumptions":{"equity":0.055,"bond":0.035,"cash":0.01},"withdrawalOrder":["tfsa","nonreg","rrsp"]}|0.055/0.035/0.01`);
 

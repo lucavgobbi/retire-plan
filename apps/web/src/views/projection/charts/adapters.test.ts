@@ -6,6 +6,9 @@ import {
   incomeSpendSeries,
   taxStackSeries,
   drawdownSeries,
+  incomeSourcesSeries,
+  accountFlowsSeries,
+  contributionRoomSeries,
   dropNonFinite,
 } from "./adapters";
 
@@ -105,5 +108,27 @@ describe("chart adapters", () => {
     ]);
     expect(p).toEqual({ x: 70, tfsa: 3000, rrsp: 0, nonreg: 500, cash: 1600, otherAssets: 0 });
     expect(p!.cash).toBe(1000 + 600); // named balances included once, no double count
+  });
+
+  it("incomeSourcesSeries keeps cash interest its own top-level source, never merged into income.other", () => {
+    const [p] = incomeSourcesSeries([year(66, { income: { employment: 10, cpp: 20, oas: 30, gis: 5, other: 7 }, cashInterest: 3 })]);
+    expect(p).toEqual({ x: 66, employment: 10, other: 7, cashInterest: 3, cpp: 20, oas: 30, gis: 5 });
+    // Legacy runs without the optional cashInterest field normalize to 0.
+    const [legacy] = incomeSourcesSeries([year(67, { income: { employment: 1, cpp: 0, oas: 0, gis: 0, other: 2 } })]);
+    expect(legacy!.cashInterest).toBe(0);
+  });
+
+  it("accountFlowsSeries carries contribution/withdrawal magnitudes per account; optional cash fields normalize to 0", () => {
+    const [p] = accountFlowsSeries([year(70, {
+      contributions: { tfsa: 7, rrsp: 5, nonreg: 3 },
+      withdrawals: { tfsa: 11, rrsp: 13, nonreg: 17 },
+    })]);
+    expect(p!.contributions).toEqual({ tfsa: 7, rrsp: 5, nonreg: 3, cash: 0 });
+    expect(p!.withdrawals).toEqual({ tfsa: 11, rrsp: 13, nonreg: 17, cash: 0 });
+  });
+
+  it("contributionRoomSeries passes the engine room values through untouched", () => {
+    const [p] = contributionRoomSeries([year(71, { tfsaRoom: 7000, rrspRoom: 12345 })]);
+    expect(p).toEqual({ x: 71, tfsaRoom: 7000, rrspRoom: 12345 });
   });
 });

@@ -346,7 +346,12 @@ describe("ProjectionView", () => {
 
 function HiddenColumnsProbe() {
   const { workspace } = useWorkspace();
-  return <output data-testid="hidden-columns-state">{JSON.stringify(workspace.hiddenProjectionColumns ?? null)}</output>;
+  return (
+    <>
+      <output data-testid="hidden-columns-state">{JSON.stringify(workspace.hiddenProjectionColumns ?? null)}</output>
+      <output data-testid="hidden-charts-state">{JSON.stringify(workspace.hiddenProjectionCharts ?? null)}</output>
+    </>
+  );
 }
 
 describe("projection table column selector", () => {
@@ -374,7 +379,7 @@ describe("projection table column selector", () => {
     for (const row of decadeRows) expect(row.querySelectorAll("td").length).toBe(31);
   });
 
-  it("picker toggles persist in workspace state across re-renders; All columns restores the default", async () => {
+  it("picker toggles persist in workspace state across re-renders; Show everything restores the default", async () => {
     render(
       <StoreProvider initialWorkspace={makeWorkspace()} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
         <ProjectionView />
@@ -391,8 +396,62 @@ describe("projection table column selector", () => {
     expect(screen.queryByRole("columnheader", { name: "Interest" })).toBeNull();
     expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toEqual(["cash.interest"]);
 
-    fireEvent.click(screen.getByRole("button", { name: "All columns" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show everything" }));
     expect(screen.getByRole("columnheader", { name: "Interest" })).toBeTruthy();
     expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toBeNull();
+  });
+
+  it("projection settings gear opens with its accessible name; chart toggles persist and default to all visible", async () => {
+    render(
+      <StoreProvider initialWorkspace={makeWorkspace()} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+        <ProjectionView />
+        <HiddenColumnsProbe />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(document.querySelector(".projection-table")).toBeTruthy());
+    // Default: all seven dashboard charts visible, nothing persisted.
+    expect(screen.getAllByRole("figure").length).toBe(7);
+    expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toBeNull();
+
+    // The gear trigger is a native disclosure summary: keyboard-activatable with
+    // the accessible name "Projection settings" (summary has an implicit button
+    // role in browsers; jsdom needs the attribute assertions).
+    const gear = document.querySelector(".projection-settings summary") as HTMLElement;
+    expect(gear).toBeTruthy();
+    expect(gear.getAttribute("aria-label")).toBe("Projection settings");
+    expect(gear.querySelector("svg")).toBeTruthy();
+
+    // Opening the menu shows both configuration groups in one place.
+    fireEvent.click(gear);
+    expect(document.querySelector(".projection-settings")!.hasAttribute("open")).toBe(true);
+    expect(screen.getByRole("checkbox", { name: "Interest" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Tax by component" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Tax by component" }));
+    expect(screen.queryByRole("figure", { name: "Tax by component chart" })).toBeNull();
+    expect(screen.getAllByRole("figure").length).toBe(6);
+    expect(JSON.parse(screen.getByTestId("hidden-charts-state").textContent ?? "null")).toEqual(["tax"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Show everything" }));
+    expect(screen.getByRole("figure", { name: "Tax by component chart" })).toBeTruthy();
+    expect(JSON.parse(screen.getByTestId("hidden-charts-state").textContent ?? "null")).toBeNull();
+    // The "Show everything" button clears BOTH groups.
+    expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toBeNull();
+  });
+
+  it("restores persisted hidden charts on load; stale chart ids are ignored", async () => {
+    const ws = makeWorkspace();
+    ws.hiddenProjectionCharts = ["income-spend", "stale.chart"];
+    render(
+      <StoreProvider initialWorkspace={ws} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+        <ProjectionView />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(document.querySelector(".projection-table")).toBeTruthy());
+    expect(screen.getAllByRole("figure").length).toBe(6);
+    expect(screen.queryByRole("figure", { name: "Income versus spending chart" })).toBeNull();
+    expect(screen.getByRole("figure", { name: "Tax by component chart" })).toBeTruthy();
   });
 });
