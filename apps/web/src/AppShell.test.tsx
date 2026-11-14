@@ -201,7 +201,7 @@ describe("local workspace integration", () => {
     await screen.findByLabelText("Birth year");
     expect(screen.queryByText("Saved on this device")).toBeNull();
     fireEvent.change(screen.getByLabelText("Birth year"), { target: { value: String(new Date().getFullYear() - 46) } });
-    expect(screen.getByText("Profile changes applied.")).toBeTruthy();
+    expect(screen.queryByText("Profile changes applied.")).toBeNull();
     expect((screen.getByRole("button", { name: "Run projection" }) as HTMLButtonElement).disabled).toBe(false);
     expect(screen.queryByLabelText("Workspace save status")).toBeNull();
     expect(screen.queryByText("Saved on this device")).toBeNull();
@@ -282,7 +282,7 @@ describe("local workspace integration", () => {
     const row = screen.getByRole("region", { name: "TFSA account" });
     expect(within(row).queryByRole("button", { name: /save/i })).toBeNull();
     fireEvent.change(within(row).getByLabelText("Current balance ($)"), { target: { value: "125" } });
-    expect(within(row).getByText(/Changes applied automatically/)).toBeTruthy();
+    expect(within(row).queryByText(/Changes applied automatically/)).toBeNull();
     expect(screen.queryByLabelText("Workspace save status")).toBeNull();
     const pending = await provider.load();
     if (pending.kind === "loaded") expect(pending.workspace.plan.accounts[0]?.balance).toBe(100);

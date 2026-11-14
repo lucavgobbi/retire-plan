@@ -127,9 +127,8 @@ function useAutoApplyForm<TDraft extends object, TItem extends object>(
   toDraft: (item: TItem) => TDraft,
   readDraft: (draft: TDraft) => { errors: string[]; item: TItem },
   onApply: (item: TItem) => void,
-): { draft: TDraft; change: (patch: Partial<TDraft>) => void; applied: boolean; errors: string[] } {
+): { draft: TDraft; change: (patch: Partial<TDraft>) => void; errors: string[] } {
   const [draft, setDraft] = useState(() => toDraft(stored));
-  const [applied, setApplied] = useState(false);
   const lastApplied = useRef<TDraft>(toDraft(stored));
   const refresh = useRef(toDraft);
   refresh.current = toDraft;
@@ -138,14 +137,13 @@ function useAutoApplyForm<TDraft extends object, TItem extends object>(
     if (JSON.stringify(current) !== JSON.stringify(lastApplied.current)) {
       lastApplied.current = current;
       setDraft(current);
-      setApplied(false);
     }
   }, [stored]);
   const change = (patch: Partial<TDraft>) => {
     const next = { ...draft, ...patch };
     setDraft(next);
     const parsed = readDraft(next);
-    if (parsed.errors.length > 0) { setApplied(false); return; }
+    if (parsed.errors.length > 0) return;
     // Compare normalized drafts so typing "100." keeps its caret and text while
     // the stored value remains 100.
     const normalized = refresh.current(parsed.item);
@@ -153,16 +151,13 @@ function useAutoApplyForm<TDraft extends object, TItem extends object>(
       lastApplied.current = normalized;
       onApply(parsed.item);
     }
-    setApplied(true);
   };
-  return { draft, change, applied, errors: readDraft(draft).errors };
+  return { draft, change, errors: readDraft(draft).errors };
 }
 
-/** The "edits apply themselves" notices shared by every inline editor. */
-function ApplyNotice({ errors, applied }: { errors: string[]; applied: boolean }) {
-  return errors.length > 0 ? <p className="draft-notice" role="status">These edits are not applied. Fix the errors to update the plan; the last valid values are kept.</p>
-    : applied ? <p className="plan-help" role="status">Changes applied automatically. Local saving status is shown above.</p>
-    : <p className="plan-help">Valid edits apply automatically.</p>;
+/** Only invalid drafts surface a notice: the actionable "not applied" warning. */
+function ApplyNotice({ errors }: { errors: string[] }) {
+  return errors.length > 0 ? <p className="draft-notice" role="status">These edits are not applied. Fix the errors to update the plan; the last valid values are kept.</p> : null;
 }
 
 interface AccountDraft { id: string; name: string; type: AccountPlan["type"]; balance: string; bookValue: string; equity: string; bond: string; cash: string; interestRate: string }
@@ -191,7 +186,7 @@ function newAccountDraft(): AccountDraft {
 }
 
 function AccountForm({ account, onApply, onRemove }: { account: AccountPlan; onApply: (item: AccountPlan) => void; onRemove: () => void }) {
-  const { draft, change, applied, errors } = useAutoApplyForm(account, accountDraft, readAccountDraft, onApply);
+  const { draft, change, errors } = useAutoApplyForm(account, accountDraft, readAccountDraft, onApply);
   return <ItemForm title={draft.name.trim() || (draft.type === "cash" ? "Cash account" : `${ACCOUNT_LABELS[draft.type]} account`)} errors={errors} onRemove={onRemove}>
     <TextField label="Name" value={draft.name} onChange={name => change({ name })} optional />
     <SelectField label="Account type" value={draft.type} choices={["tfsa", "rrsp", "nonreg", "cash"] as const} labels={ACCOUNT_LABELS} onChange={type => change({ type, ...(type !== "nonreg" ? { bookValue: "" } : {}), ...(type === "cash" ? { equity: "", bond: "", cash: "", interestRate: "0" } : { equity: "60", bond: "30", cash: "10" }) })} />
@@ -202,7 +197,7 @@ function AccountForm({ account, onApply, onRemove }: { account: AccountPlan; onA
     <TextInput label="Bonds (%)" value={draft.bond} min="0" onChange={bond => change({ bond })} />
     <TextInput label="Cash (%)" value={draft.cash} min="0" onChange={cash => change({ cash })} />
     </>}
-    <ApplyNotice errors={errors} applied={applied} />
+    <ApplyNotice errors={errors} />
   </ItemForm>;
 }
 
@@ -223,7 +218,7 @@ function readAssetDraft(draft: AssetDraft): { errors: string[]; item: AssetPlan 
   return { errors, item: { id: draft.id, kind: draft.kind, name: draft.name.trim() === "" ? undefined : draft.name.trim(), value, appreciationRate, ...(saleAge === undefined ? {} : { sellEvent: { age: saleAge, costsPct: saleCosts ?? 0 } }) } };
 }
 function AssetForm({ asset, onApply, onRemove }: { asset: AssetPlan; onApply: (item: AssetPlan) => void; onRemove: () => void }) {
-  const { draft, change, applied, errors } = useAutoApplyForm(asset, assetDraft, readAssetDraft, onApply);
+  const { draft, change, errors } = useAutoApplyForm(asset, assetDraft, readAssetDraft, onApply);
   return <ItemForm title={draft.name || "Asset"} errors={errors} onRemove={onRemove}>
     <SelectField label="Asset kind" value={draft.kind} choices={["primary-home", "other"] as const} labels={ASSET_KIND_LABELS} onChange={kind => change({ kind })} />
     <TextField label="Name" value={draft.name} onChange={name => change({ name })} optional />
@@ -234,7 +229,7 @@ function AssetForm({ asset, onApply, onRemove }: { asset: AssetPlan; onApply: (i
       <TextInput label="Sale age" value={draft.saleAge} min="1" step="1" onChange={saleAge => change({ saleAge })} />
       <TextInput label="Sale costs (%)" value={draft.saleCosts} min="0" onChange={saleCosts => change({ saleCosts })} />
     </>}
-    <ApplyNotice errors={errors} applied={applied} />
+    <ApplyNotice errors={errors} />
   </ItemForm>;
 }
 interface DebtDraft { id: string; paymentFrequency: DebtPlan["paymentFrequency"]; rate: string; termYears: string; amortizationYears: string; balance: string; monthlyPayment: string }
@@ -253,7 +248,7 @@ function readDebtDraft(draft: DebtDraft): { errors: string[]; item: DebtPlan } {
   return { errors, item: { id: draft.id, kind: "mortgage", rate, termYears, amortizationYears, balance, monthlyPayment, paymentFrequency: draft.paymentFrequency === "monthly" ? undefined : draft.paymentFrequency } };
 }
 function DebtForm({ debt, onApply, onRemove }: { debt: DebtPlan; onApply: (item: DebtPlan) => void; onRemove: () => void }) {
-  const { draft, change, applied, errors } = useAutoApplyForm(debt, debtDraft, readDebtDraft, onApply);
+  const { draft, change, errors } = useAutoApplyForm(debt, debtDraft, readDebtDraft, onApply);
   return <ItemForm title="Mortgage" errors={errors} onRemove={onRemove}>
     <TextInput label="Annual interest rate (%)" value={draft.rate} min="0" onChange={rate => change({ rate })} />
     <TextInput label="Mortgage balance ($)" value={draft.balance} min="0" onChange={balance => change({ balance })} />
@@ -261,7 +256,7 @@ function DebtForm({ debt, onApply, onRemove }: { debt: DebtPlan; onApply: (item:
     <SelectField label="Payment frequency" value={draft.paymentFrequency ?? "monthly"} choices={["monthly", "biweekly", "weekly"] as const} labels={FREQUENCY_LABELS} onChange={paymentFrequency => change({ paymentFrequency })} />
     <TextInput label="Term (years)" value={draft.termYears} min="1" step="1" onChange={termYears => change({ termYears })} />
     <TextInput label="Amortization (years)" value={draft.amortizationYears} min="1" step="1" onChange={amortizationYears => change({ amortizationYears })} />
-    <ApplyNotice errors={errors} applied={applied} />
+    <ApplyNotice errors={errors} />
   </ItemForm>;
 }
 
@@ -279,7 +274,7 @@ function readIncomeDraft(draft: IncomeDraft): { errors: string[]; item: IncomePl
   return { errors, item: { id: draft.id, name: draft.name.trim() === "" ? undefined : draft.name.trim(), kind: draft.kind, annualAmount, startAge, ...(endAge === undefined ? {} : { endAge }), raiseRate } };
 }
 function IncomeForm({ income, onApply, onRemove }: { income: IncomePlan; onApply: (item: IncomePlan) => void; onRemove: () => void }) {
-  const { draft, change, applied, errors } = useAutoApplyForm(income, incomeDraft, readIncomeDraft, onApply);
+  const { draft, change, errors } = useAutoApplyForm(income, incomeDraft, readIncomeDraft, onApply);
   return <ItemForm title={draft.name.trim() || INCOME_LABELS[draft.kind]} errors={errors} onRemove={onRemove}>
     <TextField label="Name" value={draft.name} onChange={name => change({ name })} optional />
     <SelectField label="Income type" value={draft.kind} choices={["employment", "cpp", "oas", "other"] as const} labels={INCOME_LABELS} onChange={kind => change({ kind, ...(kind === "employment" ? {} : { endAge: "" }) })} />
@@ -287,7 +282,7 @@ function IncomeForm({ income, onApply, onRemove }: { income: IncomePlan; onApply
     <TextInput label="Start age" value={draft.startAge} min="1" step="1" onChange={startAge => change({ startAge })} />
     <TextInput label="End age" value={draft.endAge} min="1" step="1" optional onChange={endAge => change({ endAge })} />
     <TextInput label="Annual raise / indexing (%)" value={draft.raiseRate} onChange={raiseRate => change({ raiseRate })} />
-    <ApplyNotice errors={errors} applied={applied} />
+    <ApplyNotice errors={errors} />
   </ItemForm>;
 }
 interface ExpenseDraft { id: string; name: string; annualAmount: string; startAge: string; endAge: string; inflationRate: string }
@@ -304,14 +299,14 @@ function readExpenseDraft(draft: ExpenseDraft): { errors: string[]; item: Expens
   return { errors, item: { id: draft.id, name: draft.name.trim() === "" ? undefined : draft.name.trim(), annualAmount, startAge, ...(endAge === undefined ? {} : { endAge }), inflationRate } };
 }
 function ExpenseForm({ expense, onApply, onRemove }: { expense: ExpensePlan; onApply: (item: ExpensePlan) => void; onRemove: () => void }) {
-  const { draft, change, applied, errors } = useAutoApplyForm(expense, expenseDraft, readExpenseDraft, onApply);
+  const { draft, change, errors } = useAutoApplyForm(expense, expenseDraft, readExpenseDraft, onApply);
   return <ItemForm title={draft.name || "Expense"} errors={errors} onRemove={onRemove}>
     <TextField label="Name" value={draft.name} onChange={name => change({ name })} optional />
     <TextInput label="Annual amount ($)" value={draft.annualAmount} min="0" onChange={annualAmount => change({ annualAmount })} />
     <TextInput label="Start age" value={draft.startAge} min="1" step="1" onChange={startAge => change({ startAge })} />
     <TextInput label="End age" value={draft.endAge} min="1" step="1" optional onChange={endAge => change({ endAge })} />
     <TextInput label="Annual inflation (%)" value={draft.inflationRate} onChange={inflationRate => change({ inflationRate })} />
-    <ApplyNotice errors={errors} applied={applied} />
+    <ApplyNotice errors={errors} />
   </ItemForm>;
 }
 interface SavingsDraft { id: string; priority: string; target: SavingsTarget; perYearCap: string; untilAge: string; matchRate: string }
@@ -327,14 +322,14 @@ function readSavingsDraft(draft: SavingsDraft): { errors: string[]; item: Saving
   return { errors, item: { id: draft.id, priority, target: draft.target, ...(perYearCap === undefined ? {} : { perYearCap }), ...(untilAge === undefined ? {} : { untilAge }), ...(matchRate === undefined ? {} : { matchRate }) } };
 }
 function SavingsForm({ step, onApply, onRemove }: { step: SavingsPolicyStep; onApply: (item: SavingsPolicyStep) => void; onRemove: () => void }) {
-  const { draft, change, applied, errors } = useAutoApplyForm(step, savingsDraft, readSavingsDraft, onApply);
+  const { draft, change, errors } = useAutoApplyForm(step, savingsDraft, readSavingsDraft, onApply);
   return <ItemForm title={`Priority ${draft.priority}`} errors={errors} onRemove={onRemove}>
     <TextInput label="Priority" value={draft.priority} min="1" onChange={priority => change({ priority })} />
     <SelectField label="Savings target" value={draft.target} choices={["tfsa", "rrsp-match", "rrsp", "nonreg", "cash", "mortgage-prepay"] as const} labels={SAVINGS_TARGET_LABELS} onChange={target => change({ target })} />
     <TextInput label="Annual cap ($)" value={draft.perYearCap} min="0" optional onChange={perYearCap => change({ perYearCap })} />
     <TextInput label="Active through age" value={draft.untilAge} min="1" step="1" optional onChange={untilAge => change({ untilAge })} />
     {draft.target === "rrsp-match" && <TextInput label="Employer match (%)" value={draft.matchRate} min="0" onChange={matchRate => change({ matchRate })} />}
-    <ApplyNotice errors={errors} applied={applied} />
+    <ApplyNotice errors={errors} />
   </ItemForm>;
 }
 
@@ -357,7 +352,7 @@ function addFromDraft<TDraft extends object, TItem extends { id: string }>(
 function ProfileEditor() {
   const { workspace, dispatch, baseScenario, validationErrors, runProjection, runError, isRunning, runCancelled, cancelRun, calendarYear } = useWorkspace();
   const profile = workspace.plan.profile;
-  const { draft, change, applied, errors } = useAutoApplyForm(
+  const { draft, change, errors } = useAutoApplyForm(
     profile,
     stored => ({ birthYear: String(stored.birthYear), endAge: String(stored.endAge) }),
     draft => {
@@ -384,7 +379,7 @@ function ProfileEditor() {
         <label className="plan-field"><span className="field-label">Retirement age</span><input type="number" aria-label="Retirement age" readOnly value={baseScenario.retirementAge} /><small>Change this in Base projection settings.</small></label>
       </div>
       <ErrorList errors={errors} />
-      <ApplyNotice errors={errors} applied={applied} />
+      <ApplyNotice errors={errors} />
       <div className="plan-actions">
         <button type="button" disabled={validationErrors.length > 0 || isRunning} onClick={() => { void runProjection(); }}>Run projection</button>
         {isRunning && <><span role="status">Projection running in the background…</span><button type="button" onClick={cancelRun}>Cancel projection</button></>}
@@ -476,9 +471,8 @@ function AssetsDebtsEditor() {
 
 /** Full plan editor; mounted by the app shell at the Plan route. */
 export function PlanView() {
-  const { clearEditNotice } = useWorkspace();
   const [activeTab, setActiveTab] = useState<Tab>("Profile");
-  return <div className="plan-view" onChangeCapture={clearEditNotice}>
+  return <div className="plan-view">
     <div className="plan-view-header"><div><span className="eyebrow">YOUR FINANCIAL PICTURE</span><h1>Plan</h1><p className="plan-help">Edit your starting profile, accounts, income, spending, and savings rules.</p></div></div>
     <div className="plan-tabs" role="tablist" aria-label="Plan sections">
       {TABS.map(tab => <button key={tab} type="button" role="tab" id={`plan-tab-${tab.replaceAll(" ", "-").toLowerCase()}`} aria-selected={activeTab === tab} aria-controls="plan-tabpanel" onClick={() => setActiveTab(tab)}>{tab}</button>)}

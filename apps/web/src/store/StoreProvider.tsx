@@ -23,8 +23,6 @@ export interface WorkspaceApi {
   runError: string | null;
   calendarYear: number;
   activeRunId: string | null;
-  editNotice: string | null;
-  clearEditNotice: () => void;
 }
 export const StoreContext = createContext<(WorkspaceApi & { runs: RunRecord[] }) | null>(null);
 export interface StoreProviderProps {
@@ -49,7 +47,6 @@ export function StoreProvider({ children, initialWorkspace, initialBaseScenario,
   const [isRunning, setIsRunning] = useState(false);
   const [runCancelled, setRunCancelled] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
-  const [editNotice, setEditNotice] = useState<string | null>(null);
   const sequence = useRef(0);
   const currentRun = useRef<{ sequence: number; controller: AbortController } | null>(null);
   const cancelCurrentRun = useCallback(() => {
@@ -67,7 +64,6 @@ export function StoreProvider({ children, initialWorkspace, initialBaseScenario,
   useEffect(() => () => {
     cancelCurrentRun();
   }, [cancelCurrentRun]);
-  const clearEditNotice = useCallback(() => setEditNotice(null), []);
   const dispatch = useCallback<Dispatch<Action>>((action) => {
     setRunCancelled(false);
     if (action.type === "workspace/loaded") {
@@ -76,25 +72,12 @@ export function StoreProvider({ children, initialWorkspace, initialBaseScenario,
       setRunCancelled(false);
       rawDispatch({ ...action, workspace: withCurrentAge(action.workspace, calendarYear) });
       setActiveRunId(null);
-      setEditNotice(null);
       setRunError(null);
       return;
     }
     if (action.type === "plan/setProfile") {
       rawDispatch({ ...action, calendarYear });
     } else rawDispatch(action);
-    const messages: Partial<Record<Action["type"], string>> = {
-      "plan/setProfile": "Profile changes applied.",
-      "plan/addItem": "Item added to the plan.",
-      "plan/updateItem": "Changes applied to the plan.",
-      "plan/removeItem": "Item removed from the plan.",
-      "scenario/setBase": "Projection settings applied.",
-      "scenario/add": "Scenario added.",
-      "scenario/update": "Scenario changes applied.",
-      "scenario/remove": "Scenario removed.",
-    };
-    const message = messages[action.type];
-    if (message) setEditNotice(message);
   }, [calendarYear, cancelCurrentRun]);
   const validationErrors = useMemo(() => {
     const plan = state.workspace.plan;
@@ -158,6 +141,6 @@ export function StoreProvider({ children, initialWorkspace, initialBaseScenario,
       return null;
     }
   }, [state.workspace, baseScenario, validationErrors, makeId, now, dispatch, simulationRunner]);
-  const value = useMemo(() => ({ ...state, dispatch, baseScenario, setBaseScenario, validationErrors, runProjection, isRunning, runCancelled, cancelRun, runError, calendarYear, activeRunId, editNotice, clearEditNotice }), [state, dispatch, baseScenario, setBaseScenario, validationErrors, runProjection, isRunning, runCancelled, cancelRun, runError, calendarYear, activeRunId, editNotice, clearEditNotice]);
+  const value = useMemo(() => ({ ...state, dispatch, baseScenario, setBaseScenario, validationErrors, runProjection, isRunning, runCancelled, cancelRun, runError, calendarYear, activeRunId }), [state, dispatch, baseScenario, setBaseScenario, validationErrors, runProjection, isRunning, runCancelled, cancelRun, runError, calendarYear, activeRunId]);
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

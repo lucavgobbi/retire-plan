@@ -73,20 +73,18 @@ function readSettingsDraft(draft: SettingsDraft, stored: SettingsItem, latestWin
  * change dispatches immediately; invalid drafts stay local with an error.
  */
 export function BaseScenarioSettings() {
-  const { baseScenario, setBaseScenario, clearEditNotice, workspace } = useWorkspace();
+  const { baseScenario, setBaseScenario, workspace } = useWorkspace();
   const latestWindowStart = HISTORICAL_LAST_YEAR - (workspace.plan.profile.endAge - workspace.plan.profile.currentAge);
   const stored = baseScenario ?? {
     simMode: "deterministic" as const, retirementAge: 0, returnAssumptions: { equity: NaN, bond: NaN, cash: NaN }, withdrawalOrder: ["tfsa", "nonreg", "rrsp"] as AccountType[],
   };
   const [draft, setDraft] = useState<SettingsDraft>(() => settingsDraftOf(stored));
-  const [applied, setApplied] = useState(false);
   const lastApplied = useRef<SettingsDraft>(settingsDraftOf(stored));
   useEffect(() => {
     const current = settingsDraftOf(stored);
     if (JSON.stringify(current) !== JSON.stringify(lastApplied.current)) {
       lastApplied.current = current;
       setDraft(current);
-      setApplied(false);
     }
   }, [stored]);
   /** Normalized draft for comparing against the last applied value, like the plan editors. */
@@ -109,14 +107,12 @@ export function BaseScenarioSettings() {
   const change = (patch: Partial<SettingsDraft>) => {
     const next = { ...draft, ...patch };
     setDraft(next);
-    clearEditNotice();
     const { errors, item } = readSettingsDraft(next, stored, latestWindowStart);
-    if (errors.length > 0) { setApplied(false); return; }
+    if (errors.length > 0) return;
     if (JSON.stringify(normalized(item)) !== JSON.stringify(lastApplied.current)) {
       lastApplied.current = normalized(item);
       setBaseScenario(item);
     }
-    setApplied(true);
   };
   const { errors } = readSettingsDraft(draft, stored, latestWindowStart);
 
@@ -160,7 +156,6 @@ export function BaseScenarioSettings() {
         {["First", "Second", "Third", "Fourth"].map((label, index) => <option key={label} value={String(index)}>{label}</option>)}
       </select></label>
     </div>
-    {errors.length > 0 ? <div role="alert">{errors.map(error => <p key={error}>{error}</p>)}</div>
-      : applied ? <p className="plan-help">Changes applied automatically; local saving status is shown above.</p> : null}
+    {errors.length > 0 && <div role="alert">{errors.map(error => <p key={error}>{error}</p>)}</div>}
   </section>;
 }

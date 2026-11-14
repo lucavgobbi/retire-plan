@@ -15,6 +15,22 @@
   flex-wrap: wrap;
 }
 
+/* Toolbar-local field layout: the "Run" label sits inline with the select on the
+   same baseline as the Run/Cancel buttons (the global .field stacks label above
+   control, which misaligns the dropdown in a toolbar row). Each control wraps as
+   one unit on mobile, so the label never shifts the input baseline. */
+.projection-controls .field {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.projection-controls .field > select {
+  width: auto;
+  min-width: min(240px, 100%);
+  max-width: 100%;
+}
+
 .projection-controls h2 {
   margin: 0;
   font-size: 1.1rem;
@@ -254,6 +270,9 @@ tr.failed-row {
   background: #fff;
   padding: 16px;
   margin: 0;
+  /* Inline-size container: cqw units in the chart-help body resolve to the card's
+    own width, so the tooltip can be sized within the card's horizontal bounds. */
+  container-type: inline-size;
 }
 
 .projection-view .chart-card figcaption {
@@ -318,7 +337,12 @@ tr.failed-row {
   top: calc(100% + 6px);
   left: 0;
   z-index: 30;
-  max-width: min(88vw, 46rem);
+  /* Explicit readable width, bounded to the CHART CARD's actual width (cqw of the
+    inline-size container): the overlay extends rightward from the toggle and its
+    right edge stays inside the card, so left/right grid cards never leak outside
+    their own card viewport. Fallback line for engines without container queries. */
+  width: min(88vw, 46rem);
+  width: min(46rem, calc(100cqw - 40px));
   padding: 10px 12px;
   border: 1px solid #b9c4cc;
   border-radius: 8px;
@@ -391,5 +415,5 @@ tr.failed-row {
   .detail-wrap { width: auto; max-width: none; }
   .detail-grid { display: grid; grid-template-columns: 1fr 1fr; }
   .detail-section { max-width: none; }
-  .chart-help-body { position: static; max-width: none; box-shadow: none; }
+  .chart-help-body { position: static; width: auto; box-shadow: none; }
 }

@@ -64,7 +64,7 @@ function SettingsDialog({ provider, onClose }: { provider?: StorageProvider; onC
 }
 
 export function AppShell({ provider, sample = false }: { provider?: StorageProvider; sample?: boolean }) {
-  const { workspace, activeRunId, editNotice } = useWorkspace();
+  const { workspace, activeRunId } = useWorkspace();
   const [route, setRoute] = useState<Route>("Plan");
   const [settingsOpen, setSettingsOpen] = useState(false);
   useEffect(() => { if (activeRunId !== null) setRoute("Projection"); }, [activeRunId]);
@@ -87,7 +87,6 @@ export function AppShell({ provider, sample = false }: { provider?: StorageProvi
     <nav className="main-nav" aria-label="Main views">{ROUTES.map(name => <button key={name} type="button" aria-current={name === route ? "page" : undefined} onClick={() => setRoute(name)}>{name}</button>)}</nav>
     <main id="main">
       {sample && workspace.meta?.name === "Sample plan" && <div className="banner">Sample plan — edit the example or import your own JSON workspace.</div>}
-      {editNotice && <p className="edit-notice" role="status">{editNotice}</p>}
       {provider && <AutosaveStatus provider={provider} />}
       <RouteContent route={route} />
     </main>
