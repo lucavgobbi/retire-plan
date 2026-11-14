@@ -110,7 +110,7 @@ export function ProjectionTable({ result, birthYear, jumpAge, jumpKey, historica
           const events = years.reduce((sum, year) => sum + year.events.length, 0);
           const warnings = years.reduce((sum, year) => sum + year.warnings.length, 0);
           return <Fragment key={first.age}>
-            <tr className={`decade-row${failures ? " failed-row" : ""}`} data-group-start-age={first.age}>
+            <tr className={`decade-row${failures ? " failed-row" : ""}`} data-group-start-age={first.age} data-group-parity={groupIndex % 2 ? "odd" : "even"}>
               <td className="col-age-year"><button type="button" className="group-toggle" aria-expanded={expanded} aria-label={`${expanded ? "Collapse" : "Expand"} ${label}`} onClick={() => toggle(setExpandedGroups, groupIndex)}>{expanded ? "▾" : "▸"} {label}</button></td>
               <td className="col-age-year decade-years" aria-label={`Household calendar years ${yearForAge(birthYear, first.age)} to ${yearForAge(birthYear, last.age)}${returnSourceYear(first.age) === undefined ? "" : `; historical return source years ${returnSourceYear(first.age)} to ${returnSourceYear(last.age)}`}`}>
                 <span>{yearForAge(birthYear, first.age)}–{yearForAge(birthYear, last.age)}</span>

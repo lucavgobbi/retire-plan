@@ -122,7 +122,7 @@ table.projection-table tbody tr:nth-child(4n + 3) {
 
 table.projection-table td {
   padding: 2px 6px;
-  border-bottom: 1px solid #e6eaee;
+  border-bottom: 1px solid #dce3e9; /* clear but subtle horizontal cell separator */
   text-align: right;
 }
 
@@ -232,7 +232,11 @@ tr.failed-row {
 }
 .group-toggle:focus-visible,
 .col-age-year button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
-.decade-row { background: #edf3f6; font-weight: 600; }
+/* Decade group headers alternate by group index (data attribute, NOT nth-child —
+  expanded detail rows are inserted between rows and would shift child positions). */
+table.projection-table tbody tr.decade-row[data-group-parity="even"] { background: #edf3f6; }
+table.projection-table tbody tr.decade-row[data-group-parity="odd"] { background: #e3ecf2; }
+.decade-row { font-weight: 600; }
 .decade-row td { border-bottom-color: #cbd7de; padding-top: 5px; padding-bottom: 5px; }
 .yearly-row .col-age-year:first-child { padding-left: 20px; }
 .decade-years { font-size: 11px; color: #52606d; }
