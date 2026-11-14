@@ -9,7 +9,7 @@ describe("application shell", () => {
     for (const view of ["Plan", "Projection", "Scenarios", "Compare", "Assumptions"]) expect(screen.getByRole("button", { name: view })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Plan" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Assumptions" }));
-    expect(screen.getByRole("heading", { name: /Assumptions & simplifications/ })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "What the projection includes" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Assumptions" }).getAttribute("aria-current")).toBe("page");
   });
 });
