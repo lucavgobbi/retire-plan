@@ -57,6 +57,16 @@
   max-height: 60vh;
   overflow: auto;
 }
+/* Narrow screens: the toolbar wraps and the gear lands on a row at the viewport's
+   LEFT edge, so the fixed-width, right-anchored menu hangs mostly offscreen. Anchor
+   it to the full toolbar container instead (gear goes static), spanning the
+   toolbar's viewport-bound width so every checkbox label stays readable with no
+   body overflow; the menu itself still scrolls within max-height. */
+@media (max-width: 650px) {
+  .projection-controls { position: relative; }
+  .projection-settings { position: static; }
+  .projection-settings-menu { left: 0; right: 0; width: auto; }
+}
 .projection-settings-menu .settings-section { margin: 0 0 10px; }
 .projection-settings-menu .settings-heading { margin: 0 0 4px; font-weight: 600; font-size: 12px; color: #52606d; }
 .projection-settings-menu .settings-group { margin: 0 0 8px; }
