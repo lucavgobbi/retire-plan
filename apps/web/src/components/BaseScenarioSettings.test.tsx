@@ -73,6 +73,7 @@ describe("base projection return inputs", () => {
 
   it("saves benefit choices and the withdrawal strategy, disabling GIS when OAS is off", () => {
     renderSettings(DEFAULT_SCENARIO_BASE);
+    expect(screen.getByRole("group", { name: "Benefits in this projection" }).className).toContain("base-benefits-fieldset");
     expect(screen.getByText(/no CPP income stream is configured/i)).toBeTruthy();
     expect(screen.getByText(/no OAS income stream is configured/i)).toBeTruthy();
     fireEvent.click(screen.getByLabelText("Base include CPP"));

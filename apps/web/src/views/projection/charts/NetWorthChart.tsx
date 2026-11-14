@@ -11,6 +11,7 @@
 import type { NetWorthBarPoint } from "./adapters";
 import { H, PAD, W, domainOf, fmtTick, ticks, xScale, yScale } from "./svg";
 import { PALETTE, STACK_COLORS } from "./palette";
+import { ChartCrosshair, ChartMarkers, ChartTooltip, stackTops, useChartInteraction } from "./chartInteraction";
 
 const OWNED_SERIES = ["TFSA", "RRSP", "Non-registered", "Cash", "Home", "Other assets"] as const;
 
@@ -29,6 +30,7 @@ export function NetWorthChart({ points }: { points: NetWorthBarPoint[] }) {
   const xs = points.map((p) => p.x);
   const firstX = xs[0];
   const lastX = xs[xs.length - 1];
+  const it = useChartInteraction(xs, firstX !== undefined && lastX !== undefined ? [firstX, lastX] : [0, 0]);
   if (xs.length === 0 || firstX === undefined || lastX === undefined) {
     return <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="No data" role="img" />;
   }
@@ -47,7 +49,8 @@ export function NetWorthChart({ points }: { points: NetWorthBarPoint[] }) {
   const zeroY = yScale(0, yDomain);
 
   return (
-    <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label={`Stacked net-worth components by age: owned accounts and assets above zero, debt below zero, with the net worth marker`} role="img">
+    <>
+    <svg className="financial-chart chart-interactive" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label={`Stacked net-worth components by age: owned accounts and assets above zero, debt below zero, with the net worth marker`} role="img" {...it.svgProps}>
       <title>Projected net worth by account type over age</title>
       <desc>Stacked bars of owned balances (TFSA, RRSP, non-registered, cash, home, other assets) above zero and debt below zero; the marker on each bar is net worth, the owned stack minus debt.</desc>
       {yTicks.map((t) => (
@@ -120,6 +123,35 @@ export function NetWorthChart({ points }: { points: NetWorthBarPoint[] }) {
           </g>
         );
       })}
+      {it.active !== null && (() => {
+        const p = points[it.active]!;
+        const cx = xScale(p.x, xDomain);
+        return (
+          <>
+            <ChartCrosshair x={cx} />
+            <ChartMarkers coords={stackTops(stacks[it.active]!).map((top, s) => ({ cx, cy: yScale(top, yDomain), color: STACK_COLORS[s % STACK_COLORS.length]! }))} />
+          </>
+        );
+      })()}
     </svg>
+    {it.active !== null && (() => {
+      const idx = it.active;
+      const p = points[idx]!;
+      const debt = debts[idx] ?? 0;
+      return (
+        <ChartTooltip
+          age={p.x}
+          fraction={xScale(p.x, xDomain) / W}
+          keyboard={it.keyboard}
+          rows={[
+            ...OWNED_SERIES.map((label, s) => ({ label, value: stacks[idx]![s]! })),
+            // Debt is owed money: shown with its true negative sign (never as owned).
+            { label: "Debt (owed)", value: -debt },
+            { label: "Net worth", value: p.netWorth },
+          ]}
+        />
+      );
+    })()}
+    </>
   );
 }

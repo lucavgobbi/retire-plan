@@ -119,6 +119,21 @@
 .scenario-editor fieldset { min-width: 0; margin: 0; padding: 12px; gap: 10px; }
 .scenario-editor legend { max-width: 100%; padding: 0 4px; overflow-wrap: anywhere; }
 .scenario-editor fieldset label { display: grid; grid-template-columns: minmax(80px, 120px) minmax(0, 160px); align-items: center; }
+.scenario-editor > .scenario-advanced-section {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid #d3d9de;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+.scenario-editor > .scenario-advanced-section > summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.scenario-editor > .scenario-advanced-section[open] > summary { margin-bottom: 8px; }
+.scenario-editor > .scenario-advanced-section > fieldset { margin: 0; }
 @media (max-width: 480px) {
   .scenario-actions { flex-basis: 100%; margin-left: 0; }
   .scenario-actions button { flex: 1 1 auto; }

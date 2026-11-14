@@ -165,14 +165,43 @@ table.projection-table td.col-age-year {
   min-width: 48px;
 }
 
-table.projection-table td.col-age-year button {
+table.projection-table td.col-age-year button.projection-disclosure-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
   font: inherit;
+  font-weight: 550;
+  min-width: 44px;
+  min-height: 44px;
   background: none;
   border: none;
+  border-radius: 4px;
   cursor: pointer;
-  color: #2563eb;
-  text-decoration: underline;
-  padding: 0;
+  color: #263238;
+  text-decoration: none;
+  padding: 4px 6px;
+  white-space: nowrap;
+}
+
+table.projection-table td.col-age-year button.projection-disclosure-toggle:hover {
+  background: #e8eef2;
+}
+
+.projection-disclosure-chevron {
+  display: inline-block;
+  flex: 0 0 10px;
+  width: 10px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: .9;
+  transform: rotate(0deg);
+  transition: transform 120ms ease-out;
+}
+
+.projection-disclosure-chevron.is-expanded {
+  transform: rotate(90deg);
 }
 
 table.projection-table td.col-percent {
@@ -253,19 +282,7 @@ tr.failed-row {
 .detail-values .detail-total { padding-top: 5px; border-top: 1px solid #dbe3e8; font-weight: 700; color: #17212b; }
 .cash-account-balances { margin-top: 9px !important; padding-top: 7px !important; border-top: 1px solid #dbe3e8; font-size: .84rem; }
 
-.group-toggle {
-  font: inherit;
-  font-weight: 650;
-  color: #174f86;
-  background: none;
-  border: 0;
-  border-radius: 3px;
-  padding: 2px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.group-toggle:focus-visible,
-.col-age-year button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+table.projection-table td.col-age-year button.projection-disclosure-toggle:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 /* Column-group bands: parity per NAMED column group, via data attributes on
   colgroups and header cells (NOT nth-child — inserted detail rows shift positions).
   Null/standalone columns and the Age/Audit edge columns stay neutral. Colgroup

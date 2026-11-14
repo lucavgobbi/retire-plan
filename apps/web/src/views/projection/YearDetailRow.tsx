@@ -37,7 +37,7 @@ export function YearDetailRow({
     ? { householdCalendarYear, returnSourceYear: historicalReturnYear }
     : undefined);
   return (
-    <tr className="detail-row" data-detail-for={age} data-expanded={expanded ? "true" : "false"} data-group-collapsed={!groupExpanded ? "true" : undefined}>
+    <tr id={`projection-year-detail-${age}`} className="detail-row" data-detail-for={age} data-expanded={expanded ? "true" : "false"} data-group-collapsed={!groupExpanded ? "true" : undefined}>
       <td colSpan={colSpan}>
         {/* Bounded, compact card container: the td still spans the table, but the
           detail cards form a width-bounded responsive cluster instead of a full-width

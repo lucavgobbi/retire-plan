@@ -165,6 +165,7 @@ describe("ScenariosView", () => {
     ws.scenarios.push(delta);
     renderView(ws);
     fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    fireEvent.click(screen.getByText("Withdrawal strategy and order"));
     const first = screen.getByLabelText(/1st drawn/i) as HTMLSelectElement;
     expect(first.value).toBe("tfsa");
     expect(Array.from(first.options).map(option => option.textContent)).toEqual(["TFSA", "Non-registered", "RRSP/RRIF"]);
@@ -216,6 +217,7 @@ describe("ScenariosView", () => {
     fireEvent.click(screen.getByRole("button", { name: /new scenario/i }));
     expect(screen.getByText(/no CPP income stream is configured/i)).toBeTruthy();
     expect(screen.getByText(/no OAS income stream is configured/i)).toBeTruthy();
+    fireEvent.click(screen.getByText("Withdrawal strategy and order"));
     fireEvent.click(screen.getByLabelText("Scenario include CPP"));
     fireEvent.click(screen.getByLabelText("Scenario include OAS"));
     expect((screen.getByLabelText("Scenario include GIS") as HTMLInputElement).disabled).toBe(true);
@@ -249,6 +251,7 @@ describe("ScenariosView", () => {
     expect((screen.getByLabelText("Withdrawal strategy") as HTMLSelectElement).value).toBe("inherit");
     stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
     expect(stored[0]).not.toHaveProperty("withdrawalStrategy");
+    fireEvent.click(screen.getByText("Withdrawal strategy and order"));
     fireEvent.change(screen.getByLabelText("Withdrawal strategy"), { target: { value: "manual" } });
     stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
     expect(stored[0]).toHaveProperty("withdrawalStrategy", "manual");
@@ -262,6 +265,7 @@ describe("ScenariosView", () => {
     ws.scenarios.push({ ...delta, overrides: { retirementAge: 62, withdrawalOrder: ["nonreg", "tfsa", "rrsp"] } });
     render(<StoreProvider initialWorkspace={ws} initialBaseScenario={DEFAULT_SCENARIO_BASE}><ScenariosView /><ScenariosProbe /></StoreProvider>);
     fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    fireEvent.click(screen.getByText("Withdrawal strategy and order"));
     expect(screen.getByLabelText(/1st drawn/i)).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Withdrawal strategy"), { target: { value: "tax-minimizing" } });
     expect(screen.queryByLabelText(/1st drawn/i)).toBeNull();
@@ -276,6 +280,24 @@ describe("ScenariosView", () => {
     fireEvent.change(screen.getByLabelText("Withdrawal strategy"), { target: { value: "manual" } });
     expect((screen.getByLabelText(/1st drawn/i) as HTMLSelectElement).value).toBe("nonreg");
     expect((screen.getByLabelText("Cash withdrawal order") as HTMLSelectElement).value).toBe("automatic");
+  });
+
+  it("keeps key scenario fields visible and opens invalid advanced sections without losing drafts", async () => {
+    renderView();
+    fireEvent.click(screen.getByRole("button", { name: /new scenario/i }));
+    expect(screen.getByLabelText("Name")).toBeTruthy();
+    expect(screen.getByLabelText("Scenario include CPP")).toBeTruthy();
+    expect(screen.getByLabelText(/retirement age override/i)).toBeTruthy();
+    const returnDetails = screen.getByText("Return assumptions").closest("details")!;
+    expect(returnDetails.open).toBe(false);
+    fireEvent.click(screen.getByText("Return assumptions"));
+    const equity = screen.getByLabelText("Equity %") as HTMLInputElement;
+    fireEvent.change(equity, { target: { value: "-" } });
+    expect(await screen.findByText(/return assumption \(capital equity\) must be a number/i)).toBeTruthy();
+    expect(returnDetails.open).toBe(true);
+    fireEvent.click(screen.getByText("Return assumptions"));
+    await waitFor(() => expect(returnDetails.open).toBe(true));
+    expect(screen.getByLabelText("Equity %")).toBe(equity);
   });
 
   it("delete removes the scenario after the plain confirm dialog", () => {

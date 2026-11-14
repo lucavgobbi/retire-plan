@@ -7,6 +7,7 @@
 import { domainOf, fmtTick, H, PAD, W, ticks, xScale, yScale } from "./svg";
 import { STACK_COLORS } from "./palette";
 import type { AccountFlowPoint } from "./adapters";
+import { ChartCrosshair, ChartMarkers, ChartTooltip, stackTops, useChartInteraction } from "./chartInteraction";
 
 /** Explicit adapter-key → display-label mapping (labels are not object keys). */
 const FLOWS: { key: "tfsa" | "rrsp" | "nonreg" | "cash"; label: string }[] = [
@@ -20,6 +21,7 @@ export function AccountFlowsChart({ points }: { points: AccountFlowPoint[] }) {
   const xs = points.map((p) => p.x);
   const firstX = xs[0];
   const lastX = xs[xs.length - 1];
+  const it = useChartInteraction(xs, firstX !== undefined && lastX !== undefined ? [firstX, lastX] : [0, 0]);
   if (xs.length === 0 || firstX === undefined || lastX === undefined) return <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="No data" role="img" />;
   const xDomain: [number, number] = [firstX, lastX];
   const parts = (p: AccountFlowPoint) => [...FLOWS.map((f) => p.contributions[f.key]), ...FLOWS.map((f) => p.withdrawals[f.key])];
@@ -40,7 +42,8 @@ export function AccountFlowsChart({ points }: { points: AccountFlowPoint[] }) {
   const zeroY = yScale(0, yDomain);
 
   return (
-    <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label={`Annual account flows by age: contributions above zero (${FLOWS.map((f) => f.label).join(", ")}), withdrawals below zero`} role="img">
+    <>
+    <svg className="financial-chart chart-interactive" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label={`Annual account flows by age: contributions above zero (${FLOWS.map((f) => f.label).join(", ")}), withdrawals below zero`} role="img" {...it.svgProps}>
       <title>Contributions vs withdrawals by account over age</title>
       <desc>Bars per age: money contributed into TFSA, RRSP, non-registered and cash accounts stacked above zero; money withdrawn stacked below zero. Withdrawal bars show actual outflows, not negative wealth.</desc>
       {yTicks.map((t) => (
@@ -98,6 +101,37 @@ export function AccountFlowsChart({ points }: { points: AccountFlowPoint[] }) {
           </g>
         );
       })}
+      {it.active !== null && (() => {
+        const p = points[it.active]!;
+        const cx = xScale(p.x, xDomain);
+        const upTops = stackTops(FLOWS.map((f) => p.contributions[f.key]));
+        const downBottoms = stackTops(FLOWS.map((f) => p.withdrawals[f.key]));
+        return (
+          <>
+            <ChartCrosshair x={cx} />
+            <ChartMarkers coords={[
+              ...upTops.map((top, s) => ({ cx, cy: yScale(top, yDomain), color: STACK_COLORS[s % STACK_COLORS.length]! })),
+              // Withdrawal markers sit at each below-zero segment's outer edge.
+              ...downBottoms.map((bottom, s) => ({ cx, cy: yScale(-bottom, yDomain), color: `${STACK_COLORS[s % STACK_COLORS.length]!}59` })),
+            ]} />
+          </>
+        );
+      })()}
     </svg>
+    {it.active !== null && (() => {
+      const p = points[it.active]!;
+      return (
+        <ChartTooltip
+          age={p.x}
+          fraction={xScale(p.x, xDomain) / W}
+          keyboard={it.keyboard}
+          rows={[
+            ...FLOWS.map((f) => ({ label: `${f.label} contributed`, value: p.contributions[f.key] })),
+            ...FLOWS.map((f) => ({ label: `${f.label} withdrawn`, value: p.withdrawals[f.key] })),
+          ]}
+        />
+      );
+    })()}
+    </>
   );
 }

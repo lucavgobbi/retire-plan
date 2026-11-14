@@ -4,6 +4,7 @@
  */
 import { domainOf, fmtTick, H, PAD, polylinePoints, ticks, W, xScale, yScale } from "./svg";
 import { PALETTE } from "./palette";
+import { ChartCrosshair, ChartMarkers, ChartTooltip, useChartInteraction } from "./chartInteraction";
 
 interface Point {
   x: number;
@@ -16,6 +17,7 @@ export function IncomeSpendChart({ points }: { points: Point[] }) {
   const xs = points.map((p) => p.x);
   const firstX = xs[0];
   const lastX = xs[xs.length - 1];
+  const it = useChartInteraction(xs, firstX !== undefined && lastX !== undefined ? [firstX, lastX] : [0, 0]);
   if (xs.length === 0 || firstX === undefined || lastX === undefined) return <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="No data" role="img" />;
   const xDomain: [number, number] = [firstX, lastX];
   const yDomain = domainOf(points.flatMap((p) => [p.income, p.expenses, p.shortfall]));
@@ -36,7 +38,8 @@ export function IncomeSpendChart({ points }: { points: Point[] }) {
   );
 
   return (
-    <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="Total annual income against spending at each age" role="img">
+    <>
+    <svg className="financial-chart chart-interactive" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="Total annual income against spending at each age" role="img" {...it.svgProps}>
       <title>Income vs spending over age</title>
       <desc>Total annual income line with a spending band; shortfall ages are visible where income falls short.</desc>
       {yTicks.map((t) => (
@@ -54,6 +57,35 @@ export function IncomeSpendChart({ points }: { points: Point[] }) {
       ))}
       <path d={bandPath} fill={PALETTE.color3} fillOpacity="0.25" stroke={PALETTE.color3} strokeDasharray="4 3" />
       <polyline points={incomeLine} fill="none" stroke={PALETTE.color1} strokeWidth="2" />
+      {it.active !== null && (() => {
+        const p = points[it.active]!;
+        const cx = xScale(p.x, xDomain);
+        return (
+          <>
+            <ChartCrosshair x={cx} />
+            <ChartMarkers coords={[
+              ...(Number.isFinite(p.income) ? [{ cx, cy: yScale(p.income, yDomain), color: PALETTE.color1 }] : []),
+              ...(Number.isFinite(p.expenses) ? [{ cx, cy: yScale(p.expenses, yDomain), color: PALETTE.color3 }] : []),
+            ]} />
+          </>
+        );
+      })()}
     </svg>
+    {it.active !== null && (() => {
+      const p = points[it.active]!;
+      return (
+        <ChartTooltip
+          age={p.x}
+          fraction={xScale(p.x, xDomain) / W}
+          keyboard={it.keyboard}
+          rows={[
+            { label: "Income", value: p.income },
+            { label: "Spending", value: p.expenses },
+            { label: "Shortfall", value: p.shortfall },
+          ]}
+        />
+      );
+    })()}
+    </>
   );
 }

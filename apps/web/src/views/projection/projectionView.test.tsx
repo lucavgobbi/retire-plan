@@ -211,7 +211,7 @@ describe("ProjectionView", () => {
     expect(yearRow.querySelectorAll("td")[1]?.textContent).toContain("2026");
     expect(yearRow.querySelectorAll("td")[1]?.textContent).toContain(`Return source: ${representativeStart}`);
     fireEvent.click(screen.getByRole("button", { name: /expand ages 45–46/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Age 45" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show details for age 45" }));
     const warnings = document.querySelector('[data-detail-for="45"] [aria-label="Warnings"]')!;
     expect(warnings.textContent).toContain(`Household calendar year 2026 uses historical return source year ${representativeStart}`);
   });
@@ -247,6 +247,27 @@ describe("ProjectionView", () => {
     expect(results.querySelector('thead tr:first-child th[rowspan="2"]')?.textContent).toBe("Audit");
     results.focus();
     expect(document.activeElement).toBe(results);
+  });
+
+  it("shows accessible chevrons for decade and year disclosure controls", async () => {
+    renderView();
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(document.querySelectorAll(".decade-row")).toHaveLength(6));
+
+    const decadeToggle = screen.getByRole("button", { name: "Expand Ages 45–54" });
+    expect(decadeToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(decadeToggle.getAttribute("aria-controls")).toContain("projection-year-45");
+    expect(decadeToggle.querySelector(".projection-disclosure-chevron")).toBeTruthy();
+    decadeToggle.focus();
+    expect(document.activeElement).toBe(decadeToggle);
+    fireEvent.click(decadeToggle);
+
+    const yearToggle = screen.getByRole("button", { name: "Show details for age 45" });
+    expect(yearToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(yearToggle.getAttribute("aria-controls")).toBe("projection-year-detail-45");
+    expect(yearToggle.querySelector(".projection-disclosure-chevron")).toBeTruthy();
+    fireEvent.click(yearToggle);
+    expect(screen.getByRole("button", { name: "Hide details for age 45" }).getAttribute("aria-expanded")).toBe("true");
   });
 
   it("renders one row per year with derived calendar year and net worth", async () => {
@@ -286,7 +307,7 @@ describe("ProjectionView", () => {
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
     await screen.findByRole("button", { name: /expand ages 45–54/i });
     fireEvent.click(screen.getByRole("button", { name: /expand ages 45–54/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^age 47$/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Show details for age 47" }));
     const detail = document.querySelector('[data-detail-for="47"]');
     expect(detail).toBeTruthy();
     // The run-out plan produces shortfall warnings in the audit trail.
@@ -321,7 +342,7 @@ describe("ProjectionView", () => {
     const group = yearRow!.closest("tbody")!.querySelector('[data-group-start-age="65"]');
     expect(group).toBeTruthy();
     fireEvent.click(group!.querySelector("button")!);
-    fireEvent.click(screen.getByRole("button", { name: /^age 71$/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Show details for age 71" }));
 
     const detail = document.querySelector('[data-detail-for="71"]')!;
     const warnings = detail.querySelector('[aria-label="Warnings"]')!;

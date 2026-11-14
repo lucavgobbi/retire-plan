@@ -5,6 +5,7 @@ import type { BenefitSettings, WithdrawalStrategy } from "../domain/types";
 import { NumberTextInput } from "./NumberTextInput";
 import { TAX_MINIMIZING_STRATEGY_HELP } from "../content/assumptions";
 import { ACCOUNT_TYPE_LABELS, cashOrderPosition, INVESTMENT_ACCOUNT_TYPES, investmentOrder, orderWithCashPosition, swapOrderPosition, type CashOrderPosition } from "../domain/accountOrder";
+import "./baseScenarioSettings.css";
 
 function percentInput(rate: number): string { return String(Math.round(rate * 1e12) / 1e10); }
 
@@ -116,12 +117,12 @@ export function BaseScenarioSettings() {
   };
   const { errors } = readSettingsDraft(draft, stored, latestWindowStart);
 
-  return <section className="panel" aria-label="Base projection settings">
+  return <section className="panel base-scenario-settings" aria-label="Base projection settings">
     <h2>Base projection settings</h2>
     <p className="muted">Saved with this workspace on every edit. Scenarios inherit these settings unless they override them.</p>
     <div className="form-grid">
       <label className="field">Base simulation mode<select aria-label="Base simulation mode" value={draft.simMode} onChange={event => change({ simMode: event.currentTarget.value as Scenario["simMode"] })}><option value="deterministic">Deterministic</option><option value="montecarlo">Monte Carlo</option><option value="historical">Historical JST U.S. proxy</option></select></label>
-      <fieldset className="field">
+      <fieldset className="field base-benefits-fieldset">
         <legend>Benefits in this projection</legend>
         <label><input type="checkbox" aria-label="Base include CPP" checked={draft.benefits.cpp} onChange={e => change({ benefits: { ...draft.benefits, cpp: e.currentTarget.checked } })} /> Include configured CPP income</label>
         {draft.benefits.cpp && !workspace.plan.incomes.some(income => income.kind === "cpp") && <p className="hint">No CPP income stream is configured. Add one under Plan → Incomes to model CPP.</p>}

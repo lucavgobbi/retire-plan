@@ -150,7 +150,14 @@ export function ProjectionTable({ result, birthYear, jumpAge, jumpKey, historica
           const warnings = years.reduce((sum, year) => sum + year.warnings.length, 0);
           return <Fragment key={first.age}>
             <tr className={`decade-row${failures ? " failed-row" : ""}`} data-group-start-age={first.age}>
-              <td className="col-age-year"><button type="button" className="group-toggle" aria-expanded={expanded} aria-label={`${expanded ? "Collapse" : "Expand"} ${label}`} onClick={() => toggle(setExpandedGroups, groupIndex)}>{expanded ? "▾" : "▸"} {label}</button></td>
+              <td className="col-age-year"><button
+                type="button"
+                className="projection-disclosure-toggle group-toggle"
+                aria-expanded={expanded}
+                aria-controls={years.flatMap(year => [`projection-year-${year.age}`, `projection-year-detail-${year.age}`]).join(" ")}
+                aria-label={`${expanded ? "Collapse" : "Expand"} ${label}`}
+                onClick={() => toggle(setExpandedGroups, groupIndex)}
+              ><span className={`projection-disclosure-chevron${expanded ? " is-expanded" : ""}`} aria-hidden="true">›</span><span>{label}</span></button></td>
               <td className="col-age-year decade-years" aria-label={`Household calendar years ${yearForAge(birthYear, first.age)} to ${yearForAge(birthYear, last.age)}${returnSourceYear(first.age) === undefined ? "" : `; historical return source years ${returnSourceYear(first.age)} to ${returnSourceYear(last.age)}`}`}>
                 <span>{yearForAge(birthYear, first.age)}–{yearForAge(birthYear, last.age)}</span>
                 {returnSourceYear(first.age) !== undefined && <small className="return-source-label">Return source: {returnSourceYear(first.age)}–{returnSourceYear(last.age)}</small>}
@@ -163,7 +170,14 @@ export function ProjectionTable({ result, birthYear, jumpAge, jumpKey, historica
               const isFailed = failureAge === year.age;
               return <Fragment key={year.age}>
                 <tr data-age={year.age} data-group-collapsed={!expanded ? "true" : undefined} data-failed={isFailed ? "true" : undefined} id={`projection-year-${year.age}`} className={isFailed ? "failed-row yearly-row" : "yearly-row"}>
-                  <td className="col-age-year"><button type="button" aria-expanded={isExpanded} aria-label={`Age ${year.age}`} onClick={() => toggle(setExpandedYears, year.age)}>{year.age}</button></td>
+                  <td className="col-age-year"><button
+                    type="button"
+                    className="projection-disclosure-toggle year-detail-toggle"
+                    aria-expanded={isExpanded}
+                    aria-controls={`projection-year-detail-${year.age}`}
+                    aria-label={`${isExpanded ? "Hide" : "Show"} details for age ${year.age}`}
+                    onClick={() => toggle(setExpandedYears, year.age)}
+                  ><span className={`projection-disclosure-chevron${isExpanded ? " is-expanded" : ""}`} aria-hidden="true">›</span><span>{year.age}</span></button></td>
                   <td className="col-age-year" aria-label={`Household calendar year ${yearForAge(birthYear, year.age)}${returnSourceYear(year.age) === undefined ? "" : `; historical return source year ${returnSourceYear(year.age)}`}`}>
                     <span>{yearForAge(birthYear, year.age)}</span>
                     {returnSourceYear(year.age) !== undefined && <small className="return-source-label">Return source: {returnSourceYear(year.age)}</small>}

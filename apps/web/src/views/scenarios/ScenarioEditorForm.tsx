@@ -118,6 +118,8 @@ export function ScenarioEditorForm({ delta, onDone }: { delta: ScenarioDelta | n
   const appliedId = useRef<string | null>(delta?.id ?? null);
   const lastApplied = useRef<ScenarioDelta | null>(delta);
   const lastBase = useRef(JSON.stringify(base));
+  const returnSettingsRef = useRef<HTMLDetailsElement>(null);
+  const withdrawalSettingsRef = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     const storedDelta = workspace.workspace.scenarios.find(item => item.id === appliedId.current) ?? null;
     const deltaChanged = JSON.stringify(storedDelta) !== JSON.stringify(lastApplied.current);
@@ -164,6 +166,19 @@ export function ScenarioEditorForm({ delta, onDone }: { delta: ScenarioDelta | n
     return validationErrors;
   };
   const errors = validate(draft);
+  const returnSettingsInvalid = errors.some(error => error.startsWith("Return assumption (capital "));
+  const withdrawalSettingsInvalid = errors.some(error => error.includes("investment withdrawal account"));
+
+  useEffect(() => {
+    // Invalid advanced fields remain visible until corrected. Other edits and
+    // store autosaves leave the browser's native disclosure state untouched.
+    if (returnSettingsInvalid && returnSettingsRef.current) returnSettingsRef.current.open = true;
+    if (withdrawalSettingsInvalid && withdrawalSettingsRef.current) withdrawalSettingsRef.current.open = true;
+  }, [returnSettingsInvalid, withdrawalSettingsInvalid]);
+
+  const keepInvalidSectionOpen = (ref: React.RefObject<HTMLDetailsElement | null>, invalid: boolean) => {
+    if (invalid && ref.current && !ref.current.open) ref.current.open = true;
+  };
 
   const change = (patch: Partial<EditorDraft>) => {
     const next = { ...draft, ...patch };
@@ -266,84 +281,98 @@ export function ScenarioEditorForm({ delta, onDone }: { delta: ScenarioDelta | n
         <span className="hint">Whole years only (integer ages).</span>
       </label>
 
-      {draft.simMode !== "historical" && <fieldset>
-        <legend>Return assumptions (rates, not a mix — no sum check)</legend>
-        <label>
-          Equity %
-          <NumberTextInput
-            aria-label="Equity %"
-            value={draft.equity}
-            onChange={(equity) => change({ equity })}
-          />
-        </label>
-        <label>
-          Bond %
-          <NumberTextInput
-            aria-label="Bond %"
-            value={draft.bond}
-            onChange={(bond) => change({ bond })}
-          />
-        </label>
-        <label>
-          Cash %
-          <NumberTextInput
-            aria-label="Cash %"
-            value={draft.cash}
-            onChange={(cash) => change({ cash })}
-          />
-        </label>
-      </fieldset>}
-
-      <fieldset>
-        <legend>Withdrawal order (order in which accounts fund deficits)</legend>
-        <label>
-          <span>Withdrawal strategy</span>
-          <select
-            aria-label="Withdrawal strategy"
-            value={draft.withdrawalStrategyOverridden ? draft.withdrawalStrategy : "inherit"}
-            onChange={(e) => {
-              const value = e.target.value;
-              if (value === "inherit") change({ withdrawalStrategy: base.withdrawalStrategy ?? "manual", withdrawalStrategyOverridden: false });
-              else change({ withdrawalStrategy: value as WithdrawalStrategy, withdrawalStrategyOverridden: true });
-            }}
-          >
-            <option value="inherit">Base scenario strategy</option>
-            <option value="manual">Manual account order</option>
-            <option value="tax-minimizing">Tax-minimizing planning</option>
-          </select>
-        </label>
-        {!draft.withdrawalStrategyOverridden && <p className="hint">Following the base scenario strategy.</p>}
-        {effectiveStrategy === "tax-minimizing" && <p className="hint">{TAX_MINIMIZING_STRATEGY_HELP}</p>}
-        {effectiveStrategy === "tax-minimizing" && <p className="hint">Your saved order is retained as the optimizer fallback.</p>}
-        {effectiveStrategy === "manual" && <>
-          <p className="hint">Choose an account to swap it with the account at that priority.</p>
-          {[0, 1, 2].map((index) => (
-            <label key={index}>
-              <span>{`${index + 1}${["st", "nd", "rd"][index]} drawn`}</span>
-              <select
-                aria-label={`${index + 1}${["st", "nd", "rd"][index]} drawn`}
-                value={draft.order[index]}
-                onChange={(e) => {
-                  change({ order: swapOrderPosition(draft.order, index, e.target.value as AccountType) });
-                }}
-              >
-                {ACCOUNT_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {ACCOUNT_TYPE_LABELS[type]}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ))}
+      {draft.simMode !== "historical" && <details
+        ref={returnSettingsRef}
+        className="scenario-advanced-section"
+        onToggle={() => keepInvalidSectionOpen(returnSettingsRef, returnSettingsInvalid)}
+      >
+        <summary>Return assumptions</summary>
+        <fieldset>
+          <legend>Annual return rates (not a mix; no sum check)</legend>
           <label>
-            <span>Named cash withdrawal order</span>
-            <select aria-label="Cash withdrawal order" value={draft.cashPosition} onChange={e => change({ cashPosition: e.target.value as CashOrderPosition })}>
-              <option value="automatic">Automatic (cash first when named cash accounts exist)</option>
-              {["First", "Second", "Third", "Fourth"].map((label, index) => <option key={label} value={String(index)}>{label}</option>)}
+            Equity %
+            <NumberTextInput
+              aria-label="Equity %"
+              value={draft.equity}
+              onChange={(equity) => change({ equity })}
+            />
+          </label>
+          <label>
+            Bond %
+            <NumberTextInput
+              aria-label="Bond %"
+              value={draft.bond}
+              onChange={(bond) => change({ bond })}
+            />
+          </label>
+          <label>
+            Cash %
+            <NumberTextInput
+              aria-label="Cash %"
+              value={draft.cash}
+              onChange={(cash) => change({ cash })}
+            />
+          </label>
+        </fieldset>
+      </details>}
+
+      <details
+        ref={withdrawalSettingsRef}
+        className="scenario-advanced-section"
+        onToggle={() => keepInvalidSectionOpen(withdrawalSettingsRef, withdrawalSettingsInvalid)}
+      >
+        <summary>Withdrawal strategy and order</summary>
+        <fieldset>
+          <legend>Order in which accounts fund deficits</legend>
+          <label>
+            <span>Withdrawal strategy</span>
+            <select
+              aria-label="Withdrawal strategy"
+              value={draft.withdrawalStrategyOverridden ? draft.withdrawalStrategy : "inherit"}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === "inherit") change({ withdrawalStrategy: base.withdrawalStrategy ?? "manual", withdrawalStrategyOverridden: false });
+                else change({ withdrawalStrategy: value as WithdrawalStrategy, withdrawalStrategyOverridden: true });
+              }}
+            >
+              <option value="inherit">Base scenario strategy</option>
+              <option value="manual">Manual account order</option>
+              <option value="tax-minimizing">Tax-minimizing planning</option>
             </select>
           </label>
-        </>}
-      </fieldset>
+          {!draft.withdrawalStrategyOverridden && <p className="hint">Following the base scenario strategy.</p>}
+          {effectiveStrategy === "tax-minimizing" && <p className="hint">{TAX_MINIMIZING_STRATEGY_HELP}</p>}
+          {effectiveStrategy === "tax-minimizing" && <p className="hint">Your saved order is retained as the optimizer fallback.</p>}
+          {effectiveStrategy === "manual" && <>
+            <p className="hint">Choose an account to swap it with the account at that priority.</p>
+            {[0, 1, 2].map((index) => (
+              <label key={index}>
+                <span>{`${index + 1}${["st", "nd", "rd"][index]} drawn`}</span>
+                <select
+                  aria-label={`${index + 1}${["st", "nd", "rd"][index]} drawn`}
+                  value={draft.order[index]}
+                  onChange={(e) => {
+                    change({ order: swapOrderPosition(draft.order, index, e.target.value as AccountType) });
+                  }}
+                >
+                  {ACCOUNT_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {ACCOUNT_TYPE_LABELS[type]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+            <label>
+              <span>Named cash withdrawal order</span>
+              <select aria-label="Cash withdrawal order" value={draft.cashPosition} onChange={e => change({ cashPosition: e.target.value as CashOrderPosition })}>
+                <option value="automatic">Automatic (cash first when named cash accounts exist)</option>
+                {["First", "Second", "Third", "Fourth"].map((label, index) => <option key={label} value={String(index)}>{label}</option>)}
+              </select>
+            </label>
+          </>}
+        </fieldset>
+      </details>
 
       {errors.length > 0 && (
         <div role="status" className="form-errors">

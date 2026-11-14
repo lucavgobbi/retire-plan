@@ -1,0 +1,19 @@
+.base-scenario-settings .base-benefits-fieldset {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.base-scenario-settings .base-benefits-fieldset > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.base-scenario-settings .base-benefits-fieldset input[type="checkbox"] {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.base-scenario-settings .base-benefits-fieldset .hint {
+  overflow-wrap: anywhere;
+}

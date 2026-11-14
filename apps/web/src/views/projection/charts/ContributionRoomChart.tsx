@@ -1,6 +1,7 @@
 /** Contribution room remaining: TFSA and RRSP room lines; 0 means the room is used up. */
 import { domainOf, fmtTick, H, PAD, polylinePoints, ticks, W, xScale, yScale } from "./svg";
 import { PALETTE } from "./palette";
+import { ChartCrosshair, ChartMarkers, ChartTooltip, useChartInteraction } from "./chartInteraction";
 
 interface Point {
   x: number;
@@ -12,6 +13,7 @@ export function ContributionRoomChart({ points }: { points: Point[] }) {
   const xs = points.map((p) => p.x);
   const firstX = xs[0];
   const lastX = xs[xs.length - 1];
+  const it = useChartInteraction(xs, firstX !== undefined && lastX !== undefined ? [firstX, lastX] : [0, 0]);
   if (xs.length === 0 || firstX === undefined || lastX === undefined) return <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="No data" role="img" />;
   const xDomain: [number, number] = [firstX, lastX];
   const yDomain = domainOf([...points.flatMap((p) => [p.tfsaRoom, p.rrspRoom]), 0]);
@@ -20,7 +22,8 @@ export function ContributionRoomChart({ points }: { points: Point[] }) {
   const rrspLine = polylinePoints(points.map((p) => ({ x: p.x, y: Number.isFinite(p.rrspRoom) ? p.rrspRoom : null })), xDomain, yDomain);
 
   return (
-    <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="Remaining TFSA and RRSP contribution room over age" role="img">
+    <>
+    <svg className="financial-chart chart-interactive" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="Remaining TFSA and RRSP contribution room over age" role="img" {...it.svgProps}>
       <title>Contribution room remaining over age</title>
       <desc>Remaining TFSA and RRSP contribution headroom at each age; a line reaching zero means that room is fully used.</desc>
       {yTicks.map((t) => (
@@ -42,6 +45,34 @@ export function ContributionRoomChart({ points }: { points: Point[] }) {
       <polyline points={rrspLine} fill="none" stroke={PALETTE.color2} strokeWidth="2" data-series="RRSP room">
         <title>RRSP room</title>
       </polyline>
+      {it.active !== null && (() => {
+        const p = points[it.active]!;
+        const cx = xScale(p.x, xDomain);
+        return (
+          <>
+            <ChartCrosshair x={cx} />
+            <ChartMarkers coords={[
+              ...(Number.isFinite(p.tfsaRoom) ? [{ cx, cy: yScale(p.tfsaRoom, yDomain), color: PALETTE.color1 }] : []),
+              ...(Number.isFinite(p.rrspRoom) ? [{ cx, cy: yScale(p.rrspRoom, yDomain), color: PALETTE.color2 }] : []),
+            ]} />
+          </>
+        );
+      })()}
     </svg>
+    {it.active !== null && (() => {
+      const p = points[it.active]!;
+      return (
+        <ChartTooltip
+          age={p.x}
+          fraction={xScale(p.x, xDomain) / W}
+          keyboard={it.keyboard}
+          rows={[
+            { label: "TFSA room", value: p.tfsaRoom },
+            { label: "RRSP room", value: p.rrspRoom },
+          ]}
+        />
+      );
+    })()}
+    </>
   );
 }

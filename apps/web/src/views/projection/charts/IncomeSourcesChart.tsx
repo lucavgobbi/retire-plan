@@ -1,6 +1,7 @@
 /** Income by source: stacked bands for employment, other, cash interest, CPP, OAS, GIS. */
 import { domainOf, fmtTick, H, PAD, W, stackedBandPaths, ticks, xScale, yScale } from "./svg";
 import { STACK_COLORS } from "./palette";
+import { ChartCrosshair, ChartMarkers, ChartTooltip, stackTops, useChartInteraction } from "./chartInteraction";
 
 interface Point {
   x: number;
@@ -19,6 +20,7 @@ export function IncomeSourcesChart({ points }: { points: Point[] }) {
   const xs = points.map((p) => p.x);
   const firstX = xs[0];
   const lastX = xs[xs.length - 1];
+  const it = useChartInteraction(xs, firstX !== undefined && lastX !== undefined ? [firstX, lastX] : [0, 0]);
   if (xs.length === 0 || firstX === undefined || lastX === undefined) return <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="No data" role="img" />;
   const xDomain: [number, number] = [firstX, lastX];
   const values = (p: Point) => [p.employment, p.other, p.cashInterest, p.cpp, p.oas, p.gis];
@@ -31,7 +33,8 @@ export function IncomeSourcesChart({ points }: { points: Point[] }) {
   const bands = stackedBandPaths(xs, SERIES.map((_, s) => points.map((p) => values(p)[s] ?? 0)), yDomain);
 
   return (
-    <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label={`Stacked annual income by source over age: ${SERIES.join(", ")}`} role="img">
+    <>
+    <svg className="financial-chart chart-interactive" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label={`Stacked annual income by source over age: ${SERIES.join(", ")}`} role="img" {...it.svgProps}>
       <title>Income by source over age</title>
       <desc>Stacked areas for employment, other income, cash-account interest, CPP, OAS and GIS at each age; the shift from employment to public benefits is visible over time.</desc>
       {yTicks.map((t) => (
@@ -52,6 +55,33 @@ export function IncomeSourcesChart({ points }: { points: Point[] }) {
           <title>{SERIES[index]}</title>
         </path>
       ))}
+      {it.active !== null && (() => {
+        const p = points[it.active]!;
+        const cx = xScale(p.x, xDomain);
+        const tops = stackTops(values(p));
+        return (
+          <>
+            <ChartCrosshair x={cx} />
+            <ChartMarkers coords={tops.map((top, s) => ({ cx, cy: yScale(top, yDomain), color: STACK_COLORS[s % STACK_COLORS.length]! }))} />
+          </>
+        );
+      })()}
     </svg>
+    {it.active !== null && (() => {
+      const p = points[it.active]!;
+      const parts = values(p);
+      return (
+        <ChartTooltip
+          age={p.x}
+          fraction={xScale(p.x, xDomain) / W}
+          keyboard={it.keyboard}
+          rows={[
+            ...SERIES.map((label, s) => ({ label, value: parts[s]! })),
+            { label: "Total", value: parts.reduce((a, b) => a + b, 0) },
+          ]}
+        />
+      );
+    })()}
+    </>
   );
 }

@@ -147,7 +147,7 @@ describe("local workspace integration", () => {
     await screen.findByRole("table");
     expect(screen.getByRole("button", { name: "Projection" }).getAttribute("aria-current")).toBe("page");
     expect(document.activeElement?.id).toBe("projection-year-table");
-    fireEvent.click(screen.getByRole("button", { name: "Age 62" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show details for age 62" }));
     expect(screen.getByRole("table").textContent).toMatch(/retirement/i);
   });
 
@@ -164,7 +164,7 @@ describe("local workspace integration", () => {
     expect(select.value).toBe("early");
     expect(document.querySelector(".run-stamp")?.textContent).toContain("Early retirement");
     // The run carries the scenario's actual assumptions (retirement age 62 override).
-    expect(screen.getAllByRole("button", { name: /^Age 62$/ }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByRole("button", { name: /^Show details for age 62$/ }).length).toBeGreaterThanOrEqual(1);
     expect(document.querySelectorAll('[data-age="62"]').length).toBeGreaterThanOrEqual(1);
   });
 
