@@ -572,12 +572,14 @@ describe("projection table group totals", () => {
   });
 });
 
-describe("bulk table-column toggle (Select all / Unselect all)", () => {
-  function gearBulk() {
+describe("bulk table-column toggle (native Select all columns checkbox)", () => {
+  function openGear() {
+    // Native closed <details> hides its controls from users — open the gear
+    // BEFORE querying the bulk checkbox (real browser behavior).
     fireEvent.click(document.querySelector(".projection-settings summary")!);
-    const button = screen.getByRole("button", { name: /select all|unselect all/i });
-    fireEvent.click(button);
-    return button;
+  }
+  function clickBulk() {
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all columns" }));
   }
 
   it("Unselect all hides every selectable column but keeps pinned Age/year and Audit; Select all restores", async () => {
@@ -589,23 +591,31 @@ describe("bulk table-column toggle (Select all / Unselect all)", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
     await waitFor(() => expect(document.querySelector(".projection-table")).toBeTruthy());
-    expect(screen.getByRole("button", { name: `Unselect all (${selectableColumnCount()} selected)` })).toBeTruthy();
+    openGear();
+    // All selectable columns visible: checkbox is checked, count says N of N shown.
+    const bulk = screen.getByRole("checkbox", { name: "Select all columns" }) as HTMLInputElement;
+    expect(bulk.checked).toBe(true);
+    expect(bulk.indeterminate).toBe(false);
+    expect(document.querySelector(".bulk-columns-count")!.textContent).toBe(`(${selectableColumnCount()} of ${selectableColumnCount()} shown)`);
 
-    gearBulk();
+    clickBulk();
     // Every selectable id is hidden; pinned calendar-year, Age and Audit remain.
     expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toEqual(selectableColumnIds());
     expect(screen.queryByRole("columnheader", { name: "Interest" })).toBeNull();
     expect(screen.getByRole("columnheader", { name: "Age" })).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "Household calendar year" })).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "Audit" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: `Select all (0 of ${selectableColumnCount()} shown)` })).toBeTruthy();
+    // None visible: checkbox is unchecked (not mixed).
+    const empty = screen.getByRole("checkbox", { name: "Select all columns" }) as HTMLInputElement;
+    expect(empty.checked).toBe(false);
+    expect(empty.indeterminate).toBe(false);
 
-    gearBulk();
+    clickBulk();
     expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toBeNull();
     expect(screen.getByRole("columnheader", { name: "Interest" })).toBeTruthy();
   });
 
-  it("partial state: the bulk button selects all and clears the partial hidden set", async () => {
+  it("partial state: the checkbox is DOM-indeterminate (native mixed), selects all on click and clears the partial hidden set", async () => {
     render(
       <StoreProvider initialWorkspace={makeWorkspace()} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
         <ProjectionView />
@@ -614,11 +624,35 @@ describe("bulk table-column toggle (Select all / Unselect all)", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
     await waitFor(() => expect(document.querySelector(".projection-table")).toBeTruthy());
-    fireEvent.click(document.querySelector(".projection-settings summary")!);
+    openGear();
     fireEvent.click(screen.getByRole("checkbox", { name: "Interest" }));
     expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toEqual(["cash.interest"]);
-    fireEvent.click(screen.getByRole("button", { name: `Select all (${selectableColumnCount() - 1} of ${selectableColumnCount()} shown)` }));
+    // One of many hidden → unchecked with native indeterminate ("mixed" to AT).
+    const mixed = screen.getByRole("checkbox", { name: "Select all columns" }) as HTMLInputElement;
+    expect(mixed.checked).toBe(false);
+    expect(mixed.indeterminate).toBe(true);
+    expect(document.querySelector(".bulk-columns-count")!.textContent).toBe(`(${selectableColumnCount() - 1} of ${selectableColumnCount()} shown)`);
+    clickBulk();
     expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toBeNull();
+    expect((screen.getByRole("checkbox", { name: "Select all columns" }) as HTMLInputElement).indeterminate).toBe(false);
+  });
+
+  it("charts are unaffected by the bulk column checkbox; chart preferences untouched", async () => {
+    render(
+      <StoreProvider initialWorkspace={makeWorkspace()} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+        <ProjectionView />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(document.querySelector(".projection-table")).toBeTruthy());
+    const chartsBefore = document.querySelectorAll(".chart-grid figure").length;
+    openGear();
+    const bulk = screen.getByRole("checkbox", { name: "Select all columns" }) as HTMLInputElement;
+    expect(bulk.checked).toBe(true);
+    // Chart checkboxes are separate controls, unaffected by the bulk control.
+    expect(screen.getAllByRole("checkbox", { name: /.+/ }).length).toBeGreaterThan(1);
+    clickBulk();
+    expect(document.querySelectorAll(".chart-grid figure").length).toBe(chartsBefore);
   });
 });
 

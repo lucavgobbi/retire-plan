@@ -71,6 +71,17 @@ export function ProjectionView() {
   const selectableIds = allColumns.slice(1).map((col) => col.id);
   const hiddenList = sanitizeHiddenColumns(workspace.workspace.hiddenProjectionColumns, selectableIds);
   const hiddenIds = hiddenList === null ? undefined : new Set(hiddenList);
+  // Bulk column checkbox: DOM `indeterminate` is the native accessible "mixed"
+  // state — set whenever a partial (non-empty, non-full) set of columns is
+  // hidden. Recomputed every render (no dependency array) so it tracks the
+  // workspace state without extra effects dependencies.
+  const bulkColumnsRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (bulkColumnsRef.current) {
+      const hiddenCount = (hiddenList ?? []).length;
+      bulkColumnsRef.current.indeterminate = hiddenCount > 0 && hiddenCount < selectableIds.length;
+    }
+  });
   // Chart visibility: sanitized against the stable dashboard chart ids.
   const hiddenCharts = sanitizeHiddenIds(workspace.workspace.hiddenProjectionCharts, PROJECTION_CHARTS.map((chart) => chart.id));
   const columnPickerGroups: { group: string; items: { id: string; label: string }[] }[] = [];
@@ -156,18 +167,31 @@ export function ProjectionView() {
             </div>
             <div className="settings-section">
               <p className="settings-heading">Table columns</p>
-              {/* ONE bulk action for TABLE columns only (charts unaffected): when every
-                  selectable column is visible it hides them all; in any partial state it
-                  selects all. The label carries the visible count. Pinned Age/calendar-year
-                  and Audit columns are never selectable, so they always remain. */}
-              <button type="button" onClick={() => {
-                const allVisible = (hiddenList ?? []).length === 0;
-                workspace.dispatch({ type: "projection/setHiddenColumns", hiddenColumnIds: allVisible ? selectableIds : null });
-              }}>
-                {(hiddenList ?? []).length === 0
-                  ? `Unselect all (${selectableIds.length} selected)`
-                  : `Select all (${selectableIds.length - hiddenList!.length} of ${selectableIds.length} shown)`}
-              </button>
+              {/* ONE bulk action for TABLE columns only (charts unaffected): a native
+                  checkbox — checked when every selectable column is visible, unchecked
+                  when none is, DOM-`indeterminate` (announced as "mixed") in any
+                  partial state. Clicking in a partial or none state selects all;
+                  clicking while checked unselects all. The visible count stays beside
+                  the stable accessible label. Pinned Age/calendar-year and Audit
+                  columns are never selectable, so they always remain. */}
+              <div className="bulk-columns">
+                <label>
+                  <input
+                    ref={bulkColumnsRef}
+                    type="checkbox"
+                    aria-label="Select all columns"
+                    checked={(hiddenList ?? []).length === 0}
+                    onChange={() => {
+                      const allVisible = (hiddenList ?? []).length === 0;
+                      workspace.dispatch({ type: "projection/setHiddenColumns", hiddenColumnIds: allVisible ? selectableIds : null });
+                    }}
+                  />{" "}
+                  Select all columns
+                </label>{" "}
+                <span className="bulk-columns-count">
+                  ({selectableIds.length - (hiddenList ?? []).length} of {selectableIds.length} shown)
+                </span>
+              </div>
               {columnPickerGroups.map(({ group, items }) => (
                 <div key={group} className="settings-group">
                   <p className="settings-group-name">{group}</p>
