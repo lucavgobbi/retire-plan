@@ -169,6 +169,35 @@ describe("PlanView", () => {
     expect(planState().accounts[0]).toEqual({ id: expect.any(String), name: "Emergency savings", type: "cash", balance: 12_500, interestRate: 0.0425 });
   });
 
+  it("unchecking Plan a sale event removes the planned sale from the plan and restores it from retained fields on re-check", () => {
+    const workspace = createEmptyWorkspace();
+    workspace.plan.assets = [{ id: "home", kind: "primary-home", name: "Home", value: 500_000, appreciationRate: 0.02, sellEvent: { age: 70, costsPct: 0.05 } }];
+    renderPlan(undefined, workspace);
+    fireEvent.click(screen.getByRole("tab", { name: "Assets & debts" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Home summary" })).getByRole("button", { name: "Edit" }));
+    const checkbox = () => screen.getByLabelText("Plan a sale event") as HTMLInputElement;
+    expect(checkbox().checked).toBe(true);
+    expect(screen.getByLabelText("Sale age")).toBeTruthy();
+    expect(screen.getByLabelText("Sale costs (%)")).toBeTruthy();
+
+    // Unchecking must actually REMOVE the planned sale from the stored plan —
+    // the checkbox must not snap back to checked.
+    fireEvent.click(checkbox());
+    expect(checkbox().checked).toBe(false);
+    expect(planState().assets[0]).not.toHaveProperty("sellEvent");
+    // The sale fields are hidden while unchecked...
+    expect(screen.queryByLabelText("Sale age")).toBeNull();
+    expect(screen.queryByLabelText("Sale costs (%)")).toBeNull();
+
+    // ...and re-checking restores the planned sale from the RETAINED draft
+    // values (no re-entry, no data loss).
+    fireEvent.click(checkbox());
+    expect(checkbox().checked).toBe(true);
+    expect((screen.getByLabelText("Sale age") as HTMLInputElement).value).toBe("70");
+    expect((screen.getByLabelText("Sale costs (%)") as HTMLInputElement).value).toBe("5");
+    expect(planState().assets[0]).toMatchObject({ sellEvent: { age: 70, costsPct: 0.05 } });
+  });
+
   it("creates plan items immediately on add and applies edits while typing", () => {
     renderPlan();
     fireEvent.click(screen.getByRole("tab", { name: "Assets & debts" }));

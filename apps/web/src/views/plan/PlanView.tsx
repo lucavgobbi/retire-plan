@@ -215,7 +215,13 @@ function readAssetDraft(draft: AssetDraft): { errors: string[]; item: AssetPlan 
   const saleCostsPct = draft.hasSale ? requiredNumber(draft.saleCosts, "Sale costs", errors, 0) : undefined;
   if (saleCostsPct !== undefined && saleCostsPct > 100) errors.push("Sale costs cannot exceed 100%.");
   const saleCosts = saleCostsPct === undefined ? undefined : saleCostsPct / 100;
-  return { errors, item: { id: draft.id, kind: draft.kind, name: draft.name.trim() === "" ? undefined : draft.name.trim(), value, appreciationRate, ...(saleAge === undefined ? {} : { sellEvent: { age: saleAge, costsPct: saleCosts ?? 0 } }) } };
+  // Unchecked: carry an EXPLICIT sellEvent undefined so the plan/updateItem patch
+  // merge ({ ...stored, ...patch }) actually removes a previously planned sale —
+  // omitting the key would leave the stored sale in place and the checkbox would
+  // snap back to checked. (JSON autosave drops undefined; validation and the
+  // engine treat it as "no sale".)
+  return { errors, item: { id: draft.id, kind: draft.kind, name: draft.name.trim() === "" ? undefined : draft.name.trim(), value, appreciationRate,
+    ...(saleAge === undefined ? { sellEvent: undefined } : { sellEvent: { age: saleAge, costsPct: saleCosts ?? 0 } }) } };
 }
 function AssetForm({ asset, onApply, onRemove, onClose }: { asset: AssetPlan; onApply: (item: AssetPlan) => void; onRemove: () => void; onClose: () => void }) {
   const { draft, change, errors } = useAutoApplyForm(asset, assetDraft, readAssetDraft, onApply);
