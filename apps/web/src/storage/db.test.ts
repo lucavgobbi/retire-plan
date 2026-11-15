@@ -2,8 +2,41 @@ import { describe, expect, it } from "vitest";
 import { IDBFactory } from "fake-indexeddb";
 import { createStorageProvider } from "./db";
 import { makeSampleWorkspace } from "../data/samplePlan";
+import { buildPlanFile, parsePlanFile } from "./exportImport";
 
 describe("IndexedDB-backed provider", () => {
+  it("persists projection settings locally and preserves them in an exported/imported PlanFile", async () => {
+    const factory = new IDBFactory();
+    const savedAt = "2026-03-01T00:00:00.000Z";
+    const workspace = makeSampleWorkspace({ id: "prefs-idb", name: "Saved preferences", updatedAt: savedAt });
+    workspace.projectionScenarioId = "sample";
+    workspace.projectionRunSummaryCollapsed = true;
+    workspace.hiddenProjectionColumns = ["tax.total"];
+    workspace.hiddenProjectionCharts = ["net-worth"];
+    workspace.baseScenario = {
+      simMode: "montecarlo", retirementAge: 63,
+      returnAssumptions: { equity: 0.05, bond: 0.02, cash: 0 },
+      withdrawalOrder: ["tfsa", "nonreg", "rrsp"],
+      mcConfig: { runs: 750, stdDev: { equity: 0.17, bond: 0.06, cash: 0.01 }, seed: 4_321 },
+      benefits: { cpp: true, oas: false, gis: false }, withdrawalStrategy: "tax-minimizing",
+    };
+    const provider = createStorageProvider(factory, { now: () => savedAt });
+    await provider.save(workspace);
+
+    const reloaded = await createStorageProvider(factory, { now: () => savedAt }).load();
+    expect(reloaded.kind).toBe("loaded");
+    if (reloaded.kind !== "loaded") return;
+    expect(reloaded.workspace).toMatchObject({
+      projectionScenarioId: "sample", projectionRunSummaryCollapsed: true,
+      hiddenProjectionColumns: ["tax.total"], hiddenProjectionCharts: ["net-worth"],
+      baseScenario: workspace.baseScenario,
+    });
+
+    const imported = parsePlanFile(JSON.parse(JSON.stringify(buildPlanFile(reloaded.workspace))));
+    expect(imported.ok).toBe(true);
+    if (imported.ok) expect(buildPlanFile(imported.workspace)).toEqual(buildPlanFile(workspace));
+  });
+
   it("commits writes, reloads through a second provider and retains only three backups", async () => {
     const factory = new IDBFactory();
     let tick = 0;

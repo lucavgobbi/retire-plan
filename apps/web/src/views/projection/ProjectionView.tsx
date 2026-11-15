@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useProjectionRun, useRuns, useWorkspace } from "../../store/api";
+import { useProjectionRun, useWorkspace } from "../../store/api";
 import { DashboardSection, PROJECTION_CHARTS } from "./DashboardSection";
 import { ProjectionTable, columns, sanitizeHiddenColumns } from "./ProjectionTable";
 import { sanitizeHiddenIds } from "./hiddenIds";
@@ -19,48 +19,41 @@ import "./projection.css";
  * belongs to the selected scenario, and `runProjection` re-runs the resolved
  * delta (user item 7). While a run is busy the dropdown is disabled (the store
  * has a single run slot) — cancel means cancelling the running projection. The
- * selection is in-memory view state; the store has no
- * UI-preferences persistence pattern, so none is invented here.
+ * selection is PERSISTED as workspace.projectionScenarioId (the Provider also
+ * records each run's intent there at request time); the UI derives from it.
  */
 export function ProjectionView() {
   const [jumpAge, setJumpAge] = useState<number | null>(null);
   const [jumpKey, setJumpKey] = useState(0);
   const workspace = useWorkspace();
-  const runs = useRuns();
   const { validationErrors, runError } = workspace;
-  const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
-  // The ACTIVE run for the current plan (the store's single run slot). The dropdown
-  // initializes from it (entering Projection with a completed saved-scenario run
-  // must show that run, not hide it behind a null selection) and FOLLOWS each newly
-  // completed run by id — including a run that finishes after the view mounted
-  // mid-background-run. Idle manual dropdown changes are never reverted: the sync
-  // fires only when the active run ID changes, and stays locked while a run is busy.
+  // Scenario selection is PERSISTED as workspace.projectionScenarioId under the
+  // agreed contract: "" (the UI's empty option) is an EXPLICIT base choice,
+  // undefined is absence/default (also the base), and any NON-EMPTY string is an
+  // actual saved-scenario id — no sentinel id is invented. null is reserved for
+  // the CLEAR action. An explicit base choice survives remounts even when the
+  // plan's most recent run is a saved-scenario run.
   const planId = workspace.workspace.meta?.id ?? "unsaved";
-  const activeRun = [...runs].reverse().find((record) => record.id === workspace.activeRunId && record.planId === planId);
-  const followedRunIdRef = useRef<string | null>(null);
+  const storedScenarioId = workspace.workspace.projectionScenarioId ?? "";
+  // Run-analysis disclosure preference: persisted as an explicit boolean
+  // (true = collapsed, false = expanded); the field's absence is also expanded.
+  const summaryCollapsed = workspace.workspace.projectionRunSummaryCollapsed === true;
+  // The shown selection derives DIRECTLY from the persisted preference: a
+  // non-empty id must match a CURRENT saved scenario — no view-side run-follow
+  // heuristics, since the Provider records the run intent into the preference
+  // AT REQUEST TIME. An invalid stored id falls back to the baseline (the
+  // empty option), never to some older run; a stale stored id (deleted while
+  // mounted, or an import that dropped it) is also persist-cleared below so
+  // autosave/exports stop carrying the dead id.
   useEffect(() => {
-    if (activeRun === undefined || followedRunIdRef.current === activeRun.id) return;
-    followedRunIdRef.current = activeRun.id;
-    setSelectedScenarioId(activeRun.scenarioId);
-  }, [activeRun]);
-  // Actual state reset (not just the derived fallback): when the selected id no
-  // longer exists (scenario deleted / import dropped it), clear it so restoring
-  // the SAME id later does not auto-reselect. The functional updater validates
-  // the CURRENT value, so it never clobbers a newly-followed active run set by
-  // the effect above.
-  useEffect(() => {
-    setSelectedScenarioId((current) => {
-      if (current === null) return current;
-      const stillExists = workspace.workspace.scenarios.some((item) => item.id === current);
-      return stillExists ? current : null;
-    });
-  }, [workspace.workspace.scenarios]);
-  // Fallback guard: if the selected scenario is deleted (or a workspace import drops it)
-  // while the view is mounted, an unknown id must NOT keep keying the run lookup or
-  // silently no-op Run — it falls back to baseline (user item 7 edge).
-  const selectedScenario = selectedScenarioId === null
+    const stored = workspace.workspace.projectionScenarioId;
+    if (stored === undefined || stored === "") return;
+    if (workspace.workspace.scenarios.some((item) => item.id === stored)) return;
+    workspace.dispatch({ type: "projection/setScenarioId", scenarioId: null });
+  }, [workspace.workspace.projectionScenarioId, workspace.workspace.scenarios]);
+  const selectedScenario = storedScenarioId === ""
     ? null
-    : workspace.workspace.scenarios.find((item) => item.id === selectedScenarioId) ?? null;
+    : workspace.workspace.scenarios.find((item) => item.id === storedScenarioId) ?? null;
   const effectiveScenarioId = selectedScenario?.id ?? null;
   const { run, runProjection, stale, isRunning, runCancelled, cancelRun } = useProjectionRun(planId, effectiveScenarioId);
 
@@ -129,7 +122,9 @@ export function ProjectionView() {
             value={effectiveScenarioId ?? ""}
             disabled={isRunning}
             onChange={(event) => {
-              setSelectedScenarioId(event.currentTarget.value === "" ? null : event.currentTarget.value);
+              // Persist the RAW option value: "" is the explicit base choice,
+              // a non-empty value the saved scenario's own id.
+              workspace.dispatch({ type: "projection/setScenarioId", scenarioId: event.currentTarget.value });
             }}
           >
             <option value="">Baseline — working plan with base scenario</option>
@@ -208,14 +203,8 @@ export function ProjectionView() {
                 </div>
               ))}
             </div>
-            <button type="button" onClick={() => {
-              workspace.dispatch({ type: "projection/setHiddenColumns", hiddenColumnIds: null });
-              workspace.dispatch({ type: "projection/setHiddenCharts", hiddenChartIds: null });
-            }}>
-              Show everything
-            </button>
-          </div>
-        </details>
+           </div>
+         </details>
         {isRunning && <>
           <p role="status" aria-live="polite">Projection running in the background…</p>
           <button type="button" onClick={cancelRun}>Cancel projection</button>
@@ -250,11 +239,22 @@ export function ProjectionView() {
           {/* Run summary region (ALL modes that have one): RunAnalysisSummary —
               deterministic = "Tax strategy planning comparison", MC = "Monte Carlo
               ensemble", historical = "Historical rolling-window results" — in ONE
-              native collapsible, expanded by default, state not persisted. Context
-              stamp, failure banner, run controls and charts stay outside. No box is
-              invented for plain manual-order deterministic runs, which have none. */}
+              native collapsible, PERSISTED (projectionRunSummaryCollapsed: true =
+              collapsed, false = expanded; the field's absence is also expanded).
+              onToggle writes the actual state only when it differs — the toggle
+              never fires on mount, so nothing clobbers the stored preference.
+              Context stamp, failure banner, run controls and charts stay outside.
+              No box is invented for plain manual-order deterministic runs. */}
           {(run.analysis !== undefined || run.result.withdrawalPlan !== undefined) && (
-            <details className="run-summary-collapse" open>
+            <details
+              className="run-summary-collapse"
+              open={!summaryCollapsed}
+              onToggle={(event) => {
+                const collapsed = !event.currentTarget.open;
+                if (collapsed === summaryCollapsed) return;
+                workspace.dispatch({ type: "projection/setRunSummaryCollapsed", collapsed });
+              }}
+            >
               <summary>Run analysis</summary>
               <RunAnalysisSummary run={run} />
               {run.analysis && <p className="hint">Year table audit counts and failures describe the representative path shown below.</p>}

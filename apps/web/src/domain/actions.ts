@@ -16,4 +16,6 @@ export type Action =
   | { type: "run/store"; record: RunRecord }
   | { type: "workspace/loaded"; workspace: Workspace }
   | { type: "projection/setHiddenColumns"; /** Hidden data-column ids; null removes the field = default (all columns visible). */ hiddenColumnIds: string[] | null }
-  | { type: "projection/setHiddenCharts"; /** Hidden dashboard-chart ids; null removes the field = default (all charts visible). */ hiddenChartIds: string[] | null };
+  | { type: "projection/setHiddenCharts"; /** Hidden dashboard-chart ids; null removes the field = default (all charts visible). */ hiddenChartIds: string[] | null }
+  | { type: "projection/setScenarioId"; /** null clears the preference to the legacy/default baseline. */ scenarioId: string | null }
+  | { type: "projection/setRunSummaryCollapsed"; /** null clears the preference to default-open. */ collapsed: boolean | null };

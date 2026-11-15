@@ -145,6 +145,20 @@ describe("structural schema checks", () => {
     ).toBe(true);
   });
 
+  it("validates optional projection selection and summary preferences while allowing a stale id to fall back in the view", () => {
+    const workspace = { meta: null, plan: makeSamplePlan(), scenarios: [] };
+    expect(validateWorkspace({ ...workspace, projectionScenarioId: "removed-scenario", projectionRunSummaryCollapsed: false })).toEqual([]);
+    expect(validateWorkspace({ ...workspace, projectionScenarioId: 42 }).join(" ")).toMatch(/projectionScenarioId/);
+    expect(validateWorkspace({ ...workspace, projectionRunSummaryCollapsed: "closed" }).join(" ")).toMatch(/projectionRunSummaryCollapsed/);
+    const file = {
+      schemaVersion: 1,
+      plans: [{ meta: { id: "p", name: "P", updatedAt: new Date().toISOString() }, plan: makeSamplePlan() }],
+      scenarios: [],
+    };
+    expect(validatePlanFile({ ...file, projectionScenarioId: "removed-scenario", projectionRunSummaryCollapsed: true })).toEqual([]);
+    expect(validatePlanFile({ ...file, projectionRunSummaryCollapsed: null }).join(" ")).toMatch(/projectionRunSummaryCollapsed/);
+  });
+
   it("validates the whole PlanFile envelope", () => {
     const file = {
       schemaVersion: 1,

@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { useState } from "react";
 import type { RunOutcome } from "../../domain/run";
 import type { SimulationRunner } from "../../store/simulationWorkerProtocol";
 import type { Scenario, SimulationResult, YearResult } from "@retire-plan/engine";
@@ -376,6 +377,8 @@ function HiddenColumnsProbe() {
     <>
       <output data-testid="hidden-columns-state">{JSON.stringify(workspace.hiddenProjectionColumns ?? null)}</output>
       <output data-testid="hidden-charts-state">{JSON.stringify(workspace.hiddenProjectionCharts ?? null)}</output>
+      <output data-testid="projection-scenario-state">{JSON.stringify(workspace.projectionScenarioId ?? null)}</output>
+      <output data-testid="run-summary-collapsed-state">{JSON.stringify(workspace.projectionRunSummaryCollapsed ?? null)}</output>
     </>
   );
 }
@@ -406,7 +409,7 @@ describe("projection table column selector", () => {
     for (const row of decadeRows) expect(row.querySelectorAll("td").length).toBe(35);
   });
 
-  it("picker toggles persist in workspace state across re-renders; Show everything restores the default", async () => {
+  it("picker toggles persist in workspace state across re-renders; the bulk checkbox restores the default", async () => {
     render(
       <StoreProvider initialWorkspace={makeWorkspace()} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
         <ProjectionView />
@@ -423,7 +426,9 @@ describe("projection table column selector", () => {
     expect(screen.queryByRole("columnheader", { name: "Interest" })).toBeNull();
     expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toEqual(["cash.interest"]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Show everything" }));
+    // The bulk "Select all columns" checkbox restores every column (checked state
+    // selects all; there is no separate "Show everything" reset button).
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all columns" }));
     expect(screen.getByRole("columnheader", { name: "Interest" })).toBeTruthy();
     expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toBeNull();
   });
@@ -460,11 +465,17 @@ describe("projection table column selector", () => {
     expect(screen.getAllByRole("figure").length).toBe(6);
     expect(JSON.parse(screen.getByTestId("hidden-charts-state").textContent ?? "null")).toEqual(["tax"]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Show everything" }));
+    // The chart's own checkbox restores it (no separate "Show everything" reset);
+    // an empty list is the persisted all-visible state (absent or empty = all).
+    fireEvent.click(screen.getByRole("checkbox", { name: "Tax by component" }));
     expect(screen.getByRole("figure", { name: "Tax by component chart" })).toBeTruthy();
-    expect(JSON.parse(screen.getByTestId("hidden-charts-state").textContent ?? "null")).toBeNull();
-    // The "Show everything" button clears BOTH groups.
+    expect(JSON.parse(screen.getByTestId("hidden-charts-state").textContent ?? "null")).toEqual([]);
+    // Chart preferences are independent of column preferences: hiding/restoring a
+    // chart above never touched the (still default) column state.
     expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toBeNull();
+    // The old "Show everything" reset button is gone — chart checkboxes restore
+    // themselves, and the column bulk checkbox handles columns.
+    expect(screen.queryByRole("button", { name: "Show everything" })).toBeNull();
   });
 
   it("restores persisted hidden charts on load; stale chart ids are ignored", async () => {
@@ -653,6 +664,281 @@ describe("bulk table-column toggle (native Select all columns checkbox)", () => 
     expect(screen.getAllByRole("checkbox", { name: /.+/ }).length).toBeGreaterThan(1);
     clickBulk();
     expect(document.querySelectorAll(".chart-grid figure").length).toBe(chartsBefore);
+  });
+});
+
+describe("persisted Run scenario selection (projectionScenarioId)", () => {
+  const resolvedRunner = () => Promise.resolve(emptyOutcome);
+  const probeScenario = () => JSON.parse(screen.getByTestId("projection-scenario-state").textContent ?? "null");
+  const dropdownValue = () => (screen.getByRole("combobox", { name: /scenario to run/i }) as HTMLSelectElement).value;
+
+  function RemountableProjection() {
+    const [key, setKey] = useState(0);
+    return (
+      <>
+        <button type="button" onClick={() => setKey((k) => k + 1)}>Remount projection</button>
+        <ProjectionView key={key} />
+      </>
+    );
+  }
+
+  it("manual selection persists; the baseline choice persists the explicit stable base id (not null)", () => {
+    render(
+      <StoreProvider initialWorkspace={makeWorkspaceWithScenario()} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+        <ProjectionView />
+        <HiddenColumnsProbe />
+      </StoreProvider>,
+    );
+    // Default (no preference): null — absence is the unset default (the base).
+    expect(probeScenario()).toBeNull();
+    selectScenario("scen-a");
+    expect(probeScenario()).toBe("scen-a");
+    expect(dropdownValue()).toBe("scen-a");
+    // Choosing baseline persists the RAW empty option "" — an EXPLICIT base
+    // choice (the null action is reserved for clearing; it is never "base").
+    selectScenario("");
+    expect(probeScenario()).toBe("");
+    expect(dropdownValue()).toBe("");
+  });
+
+  it("mount restores a valid stored preference; an unknown (stale) id clears and falls back to baseline", () => {
+    const ws = makeWorkspaceWithScenario();
+    ws.projectionScenarioId = "scen-b";
+    const first = render(
+      <StoreProvider initialWorkspace={ws} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+        <ProjectionView />
+        <HiddenColumnsProbe />
+      </StoreProvider>,
+    );
+    expect(dropdownValue()).toBe("scen-b");
+    expect(probeScenario()).toBe("scen-b");
+    first.unmount();
+
+    // Stale preference: the scenario no longer exists → baseline, and the dead
+    // id is persist-cleared.
+    ws.projectionScenarioId = "gone";
+    render(
+      <StoreProvider initialWorkspace={ws} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+        <ProjectionView />
+        <HiddenColumnsProbe />
+      </StoreProvider>,
+    );
+    expect(dropdownValue()).toBe("");
+    expect(probeScenario()).toBeNull();
+  });
+
+  it("choosing base is retained on remount even when the plan's most recent run is a saved-scenario run", async () => {
+    render(
+      <StoreProvider initialWorkspace={makeWorkspaceWithScenario()} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={resolvedRunner}>
+        <RemountableProjection />
+        <HiddenColumnsProbe />
+      </StoreProvider>,
+    );
+    selectScenario("scen-a");
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(document.querySelector(".run-stamp")?.textContent).toContain("Scenario A"));
+    expect(probeScenario()).toBe("scen-a");
+    // The user then explicitly chooses the baseline: persisted as the RAW
+    // empty option "" (explicit base, not an absence/clear).
+    selectScenario("");
+    expect(probeScenario()).toBe("");
+    // Remount (fresh view instance): the derived selection never invents a
+    // fallback to the older saved-scenario run — an explicit preference stands.
+    fireEvent.click(screen.getByRole("button", { name: "Remount projection" }));
+    expect(dropdownValue()).toBe("");
+    expect(probeScenario()).toBe("");
+  });
+
+  it("a workspace import replacement adopts the imported preference (valid id), or baseline when absent", () => {
+    let dispatchRef: ((action: Parameters<ReturnType<typeof useWorkspace>["dispatch"]>[0]) => void) | undefined;
+    function DispatchProbe() {
+      const ws = useWorkspace();
+      dispatchRef = ws.dispatch;
+      return null;
+    }
+    render(
+      <StoreProvider initialWorkspace={makeWorkspaceWithScenario()} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+        <ProjectionView />
+        <DispatchProbe />
+        <HiddenColumnsProbe />
+      </StoreProvider>,
+    );
+    selectScenario("scen-a");
+    expect(probeScenario()).toBe("scen-a");
+    // Import a workspace whose own preference is Scenario B — the view reads the
+    // NEW preference, not the old local state.
+    const imported = makeWorkspaceWithScenario();
+    imported.projectionScenarioId = "scen-b";
+    act(() => { dispatchRef?.({ type: "workspace/loaded", workspace: imported }); });
+    expect(dropdownValue()).toBe("scen-b");
+    expect(probeScenario()).toBe("scen-b");
+    // An import WITHOUT a preference falls back to baseline.
+    const importedPlain = makeWorkspaceWithScenario();
+    act(() => { dispatchRef?.({ type: "workspace/loaded", workspace: importedPlain }); });
+    expect(dropdownValue()).toBe("");
+    expect(probeScenario()).toBeNull();
+  });
+
+  it("deleting the selected scenario while mounted clears the stale preference and falls back to baseline", async () => {
+    const workspace = makeWorkspaceWithScenario();
+    let dispatchRef: ((action: Parameters<ReturnType<typeof useWorkspace>["dispatch"]>[0]) => void) | undefined;
+    function DispatchProbe() {
+      const ws = useWorkspace();
+      dispatchRef = ws.dispatch;
+      return null;
+    }
+    render(
+      <StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+        <ProjectionView />
+        <DispatchProbe />
+        <HiddenColumnsProbe />
+      </StoreProvider>,
+    );
+    selectScenario("scen-a");
+    expect(probeScenario()).toBe("scen-a");
+    act(() => { dispatchRef?.({ type: "scenario/remove", delta: workspace.scenarios[0]! }); });
+    // Deleting the selected scenario falls back to the base — and the backend
+    // records that fallback as an EXPLICIT base choice ("", not a clear), so it
+    // survives remounts like any other deliberate selection.
+    expect(dropdownValue()).toBe("");
+    expect(probeScenario()).toBe("");
+  });
+});
+
+describe("run analysis summary collapse persistence (projectionRunSummaryCollapsed)", () => {
+  const probeCollapsed = () => JSON.parse(screen.getByTestId("run-summary-collapsed-state").textContent ?? "null");
+  const summaryDetails = () => document.querySelector("details.run-summary-collapse") as HTMLDetailsElement;
+
+  function renderHistorical(collapsed?: boolean) {
+    const plan = makeSamplePlan();
+    plan.profile.endAge = plan.profile.currentAge + 1;
+    const base = { ...DEFAULT_SCENARIO_BASE, simMode: "historical" as const, historicalConfig: { startYear: 1872 } };
+    const ws = makeWorkspace(plan);
+    if (collapsed !== undefined) ws.projectionRunSummaryCollapsed = collapsed;
+    render(
+      <StoreProvider initialWorkspace={ws} initialBaseScenario={base}>
+        <ProjectionView />
+        <HiddenColumnsProbe />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    return waitFor(() => expect(summaryDetails()).toBeTruthy());
+  }
+
+  it("default (no preference): expanded, and mounting writes nothing (no initial clobber)", async () => {
+    await renderHistorical();
+    expect(summaryDetails().open).toBe(true);
+    expect(probeCollapsed()).toBeNull();
+  });
+
+  it("seeded collapsed preference: restored closed on mount without any write", async () => {
+    await renderHistorical(true);
+    expect(summaryDetails().open).toBe(false);
+    expect(probeCollapsed()).toBe(true);
+  });
+
+  it("toggling persists the actual state only when it changes: collapse writes true, expand writes false explicitly", async () => {
+    await renderHistorical();
+    const toggleSummary = () => {
+      // jsdom flips the native details state on summary click but does not emit
+      // the non-bubbling "toggle" event through React's listener — dispatch what
+      // the browser would fire (the guard makes a double dispatch harmless).
+      fireEvent.click(summaryDetails().querySelector("summary")!);
+      fireEvent(summaryDetails(), new Event("toggle"));
+    };
+    // Collapse → true.
+    toggleSummary();
+    expect(summaryDetails().open).toBe(false);
+    expect(probeCollapsed()).toBe(true);
+    // Expand → false persisted EXPLICITLY (not a clear-to-absent).
+    toggleSummary();
+    expect(summaryDetails().open).toBe(true);
+    expect(probeCollapsed()).toBe(false);
+    // No further changes → no further writes (guard re-dispatches are no-ops).
+    fireEvent(summaryDetails(), new Event("toggle"));
+    expect(probeCollapsed()).toBe(false);
+  });
+});
+
+describe("canonical column order: each named group's Total is last", () => {
+  const groupTotals: Record<string, string> = {
+    "Income": "Total income",
+    "Cash accounts": "Total interest",
+    "Tax": "Total",
+    "Withdrawals": "Total withdrawn",
+    "Contributions": "Total contributed",
+    "Balances": "Total assets",
+  };
+
+  it("canonical registry: every named group ends with its group-total column; groups stay contiguous; ids unchanged", () => {
+    const cols = columns();
+    let prevGroup: string | null = null;
+    const seen = new Set<string>();
+    const lastOfGroup = new Map<string, (typeof cols)[number]>();
+    for (const col of cols) {
+      if (col.group !== null) {
+        if (prevGroup !== col.group) expect(seen.has(col.group)).toBe(false);
+        seen.add(col.group);
+      }
+      prevGroup = col.group;
+      if (col.group !== null) lastOfGroup.set(col.group, col);
+    }
+    expect([...lastOfGroup.keys()]).toEqual(Object.keys(groupTotals));
+    for (const [group, col] of lastOfGroup) {
+      expect(col.total).toBe(true);
+      expect(col.label).toBe(groupTotals[group]);
+    }
+    // Tax: the Marginal-rate diagnostic precedes the Total so the total is the
+    // band's last column — stable ids, only the canonical order moved.
+    expect(cols.filter((col) => col.group === "Tax").map((col) => col.id)).toEqual([
+      "tax.federal", "tax.provincial", "tax.surtax", "tax.oasClawback", "tax.marginalRate", "tax.total",
+    ]);
+  });
+
+  it("column config list: each group's last checkbox is the total; no Show everything button", () => {
+    render(
+      <StoreProvider initialWorkspace={makeWorkspace()} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+        <ProjectionView />
+      </StoreProvider>,
+    );
+    fireEvent.click(document.querySelector(".projection-settings summary")!);
+    const groups = Array.from(document.querySelectorAll(".projection-settings-menu .settings-group"));
+    // "Other" holds the standalone Taxable column, which sits canonically between
+    // the Cash accounts and Tax groups.
+    expect(groups.map((group) => group.querySelector(".settings-group-name")!.textContent))
+      .toEqual(["Income", "Cash accounts", "Other", "Tax", "Withdrawals", "Contributions", "Balances"]);
+    for (const group of groups) {
+      const name = group.querySelector(".settings-group-name")!.textContent!;
+      const labels = Array.from(group.querySelectorAll("label")).map((label) => label.textContent!.trim());
+      if (groupTotals[name] !== undefined) expect(labels.at(-1)).toBe(groupTotals[name]);
+    }
+    expect(screen.queryByRole("button", { name: "Show everything" })).toBeNull();
+  });
+
+  it("rendered table: the Tax band's last column header is the Total, Marginal right before it; Income band likewise", async () => {
+    renderView();
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(document.querySelector(".projection-table")).toBeTruthy());
+    const results = screen.getByRole("region", { name: "Year-by-year projection results" });
+    const groupHeaders = Array.from(results.querySelectorAll("thead tr:first-child th"));
+    const dataHeaders = Array.from(results.querySelectorAll("thead tr:last-child th"));
+    const bandCells = (groupName: string, span: number) => {
+      const header = groupHeaders.find((th) => th.textContent === groupName);
+      expect(header?.getAttribute("colspan")).toBe(String(span));
+      // Body columns start at the age-toggle column; the first two data headers
+      // (Age, Household calendar year) are covered by the leading empty spans.
+      let start = 0;
+      for (const th of groupHeaders) {
+        if (th === header) break;
+        start += Number(th.getAttribute("colspan") ?? 1);
+      }
+      return dataHeaders.slice(start, start + span);
+    };
+    // Income: the band's last header is the Total (described-by its note).
+    expect(bandCells("Income", 6).at(-1)!.getAttribute("aria-describedby")).toBe("col-note-income.total");
+    // Tax: Marginal rate comes right before the Total, which ends the band.
+    expect(bandCells("Tax", 6).at(-1)!.getAttribute("aria-describedby")).toBe("col-note-tax.total");
+    expect(bandCells("Tax", 6).at(-2)!.textContent).toBe("Marginal");
   });
 });
 

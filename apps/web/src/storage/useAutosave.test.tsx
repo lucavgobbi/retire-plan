@@ -30,6 +30,41 @@ function deferredProvider() {
 const ws = (name: string): Workspace => makeSampleWorkspace({ name, id: `id-${name}` });
 
 describe("useAutosave serialization (stale-completion blocker regression)", () => {
+  it("autosaves projection preferences and configured account values for reload and export", async () => {
+    const backend = createMemoryRowDb();
+    const provider = createRowBackedStorageProvider(backend);
+    const original = ws("Projection preferences");
+    const hook = renderHook(
+      ({ value }: { value: Workspace }) => useAutosave(value, { storage: provider, delayMs: 1 }),
+      { initialProps: { value: original } },
+    );
+    await waitFor(() => expect(hook.result.current.isCurrentSaved).toBe(true));
+
+    const updated: Workspace = {
+      ...original,
+      plan: {
+        ...original.plan,
+        accounts: [...original.plan.accounts, { id: "cash", name: "Savings", type: "cash", balance: 9_250, interestRate: 0.03 }],
+      },
+      projectionScenarioId: "sample",
+      projectionRunSummaryCollapsed: true,
+      hiddenProjectionColumns: ["tax.total"],
+      hiddenProjectionCharts: ["net-worth"],
+    };
+    act(() => hook.rerender({ value: updated }));
+    await waitFor(() => expect(hook.result.current.isCurrentSaved).toBe(true));
+
+    const restored = await provider.load();
+    expect(restored.kind).toBe("loaded");
+    if (restored.kind === "loaded") {
+      expect(restored.workspace.projectionScenarioId).toBe("sample");
+      expect(restored.workspace.projectionRunSummaryCollapsed).toBe(true);
+      expect(restored.workspace.plan.accounts.find((account) => account.type === "cash")).toMatchObject({ balance: 9_250, interestRate: 0.03 });
+      expect(restored.workspace.hiddenProjectionColumns).toEqual(["tax.total"]);
+      expect(restored.workspace.hiddenProjectionCharts).toEqual(["net-worth"]);
+    }
+  });
+
   it("never reports a newer editing snapshot as saved when an older write completes during its debounce", async () => {
     const { provider, releases } = deferredProvider();
     const hook = renderHook(({ value }: { value: Workspace }) => useAutosave(value, { storage: provider, delayMs: 60_000 }), { initialProps: { value: ws("Old") } });

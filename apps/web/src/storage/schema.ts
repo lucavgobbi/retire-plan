@@ -451,6 +451,12 @@ export function validateWorkspace(value: unknown): string[] {
       errors.push("Workspace hiddenProjectionCharts must be a list of chart identifiers when present.");
     }
   }
+  if (value.projectionScenarioId !== undefined && !isString(value.projectionScenarioId)) {
+    errors.push("Workspace projectionScenarioId must be a scenario id when present.");
+  }
+  if (value.projectionRunSummaryCollapsed !== undefined && typeof value.projectionRunSummaryCollapsed !== "boolean") {
+    errors.push("Workspace projectionRunSummaryCollapsed must be a boolean when present.");
+  }
   if (value.baseScenario !== undefined) errors.push(...validateBaseScenario(value.baseScenario));
   errors.push(...validatePlanShape(value.plan).map((e) => `Workspace plan: ${e}`));
   if (!Array.isArray(value.scenarios)) {
@@ -484,6 +490,12 @@ export function validatePlanFile(value: unknown): string[] {
     if (!Array.isArray(hidden) || !hidden.every((id) => isNonEmptyString(id))) {
       errors.push(`File hiddenProjectionCharts must be a list of chart identifiers when present.`);
     }
+  }
+  if (value.projectionScenarioId !== undefined && !isString(value.projectionScenarioId)) {
+    errors.push("File projectionScenarioId must be a scenario id when present.");
+  }
+  if (value.projectionRunSummaryCollapsed !== undefined && typeof value.projectionRunSummaryCollapsed !== "boolean") {
+    errors.push("File projectionRunSummaryCollapsed must be a boolean when present.");
   }
   value.plans.forEach((p, i) => {
     if (!isRecord(p) || p.meta === undefined || p.plan === undefined) {

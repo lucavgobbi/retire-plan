@@ -38,9 +38,11 @@ export function columns(): Column[] {
     flow("tax.taxableIncome", null, "Taxable", (y) => y.taxableIncome), flow("tax.federal", "Tax", "Federal", (y) => y.tax.federal),
     flow("tax.provincial", "Tax", "Provincial", (y) => y.tax.provincial), flow("tax.surtax", "Tax", "Surtax", (y) => y.tax.surtax),
     flow("tax.oasClawback", "Tax", "OAS claw", (y) => y.tax.oasClawback),
+    { id: "tax.marginalRate", group: "Tax", label: "Marginal", value: (y) => y.tax.marginalRate, summary: "rate", percent: true },
+    // The Tax group's total is its LAST column — same "total last" position as every
+    // other named group (the marginal rate is a diagnostic rate, not the sum).
     { id: "tax.total", group: "Tax", label: "Total", value: (y) => y.tax.total, summary: "flow", total: true,
       note: "Total tax charged for this year, with the components shown separately" },
-    { id: "tax.marginalRate", group: "Tax", label: "Marginal", value: (y) => y.tax.marginalRate, summary: "rate", percent: true },
     flow("withdrawals.tfsa", "Withdrawals", "TFSA", (y) => y.withdrawals.tfsa), flow("withdrawals.rrsp", "Withdrawals", "RRSP", (y) => y.withdrawals.rrsp),
     flow("withdrawals.nonreg", "Withdrawals", "Non-reg", (y) => y.withdrawals.nonreg), flow("withdrawals.cash", "Withdrawals", "Cash", (y) => y.withdrawals.cash ?? 0),
     { id: "withdrawals.total", group: "Withdrawals", label: "Total withdrawn", value: (y) => y.withdrawals.tfsa + y.withdrawals.rrsp + y.withdrawals.nonreg + (y.withdrawals.cash ?? 0), summary: "flow", total: true,

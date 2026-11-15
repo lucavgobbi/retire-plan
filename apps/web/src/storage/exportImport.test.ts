@@ -74,16 +74,20 @@ describe("parsePlanFile", () => {
     }
   });
 
-  it("round-trips hiddenProjectionColumns and hiddenProjectionCharts; old JSON without the fields imports as absent (all visible)", () => {
+  it("round-trips projection preferences; legacy JSON without them keeps defaults", () => {
     const ws = makeSampleWorkspace();
     ws.hiddenProjectionColumns = ["income.employment", "stale.id"];
     ws.hiddenProjectionCharts = ["tax", "stale.chart"];
+    ws.projectionScenarioId = "sample";
+    ws.projectionRunSummaryCollapsed = true;
     const parsed = parsePlanFile(JSON.parse(workspaceToText(ws)));
     expect(parsed.ok).toBe(true);
     if (parsed.ok) {
       // Both fields round-trip verbatim; stale ids are filtered only at display time.
       expect(parsed.workspace.hiddenProjectionColumns).toEqual(["income.employment", "stale.id"]);
       expect(parsed.workspace.hiddenProjectionCharts).toEqual(["tax", "stale.chart"]);
+      expect(parsed.workspace.projectionScenarioId).toBe("sample");
+      expect(parsed.workspace.projectionRunSummaryCollapsed).toBe(true);
     }
     // Backward compatibility: a legacy file without the fields loads with them absent.
     const legacy = parsePlanFile(JSON.parse(workspaceToText(makeSampleWorkspace())));
@@ -91,6 +95,82 @@ describe("parsePlanFile", () => {
     if (legacy.ok) {
       expect(legacy.workspace.hiddenProjectionColumns).toBeUndefined();
       expect(legacy.workspace.hiddenProjectionCharts).toBeUndefined();
+      expect(legacy.workspace.projectionScenarioId).toBeUndefined();
+      expect(legacy.workspace.projectionRunSummaryCollapsed).toBeUndefined();
+    }
+    const baseSelectionFile = buildPlanFile(makeSampleWorkspace());
+    baseSelectionFile.projectionScenarioId = "";
+    const baseSelection = parsePlanFile(baseSelectionFile);
+    expect(baseSelection.ok).toBe(true);
+    if (baseSelection.ok) expect(baseSelection.workspace.projectionScenarioId).toBe("");
+
+    const collisionFile = buildPlanFile(makeSampleWorkspace());
+    collisionFile.scenarios.push({ id: "base", name: "Scenario named base", basePlanId: collisionFile.plans[0]!.meta.id, simMode: "deterministic", overrides: {} });
+    collisionFile.projectionScenarioId = "base";
+    const collision = parsePlanFile(collisionFile);
+    expect(collision.ok).toBe(true);
+    if (collision.ok) expect(collision.workspace.projectionScenarioId).toBe("base");
+
+    const expandedWorkspace = makeSampleWorkspace();
+    expandedWorkspace.projectionRunSummaryCollapsed = false;
+    const expandedFile = buildPlanFile(expandedWorkspace);
+    expect(expandedFile.projectionRunSummaryCollapsed).toBe(false);
+    const expanded = parsePlanFile(expandedFile);
+    expect(expanded.ok).toBe(true);
+    if (expanded.ok) expect(expanded.workspace.projectionRunSummaryCollapsed).toBe(false);
+  });
+
+  it("maps a stale imported projection scenario id to explicit baseline", () => {
+    const file = buildPlanFile(makeSampleWorkspace());
+    file.projectionScenarioId = "removed-scenario";
+    const parsed = parsePlanFile(file);
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) expect(parsed.workspace.projectionScenarioId).toBe("");
+  });
+
+  it("exports valid plan, account, base, scenario, mode and projection configuration together", () => {
+    const ws = makeSampleWorkspace({ id: "prefs-plan" });
+    const nonreg = ws.plan.accounts.find(account => account.type === "nonreg")!;
+    nonreg.name = "Joint investments";
+    nonreg.bookValue = 21_500;
+    nonreg.assetMix = { equity: 0.55, bond: 0.35, cash: 0.1 };
+    ws.plan.accounts.push({ id: "cash-savings", name: "Savings", type: "cash", balance: 12_500, interestRate: 0.035 });
+    ws.plan.assets[0]!.sellEvent = { age: 72, costsPct: 0.025 };
+    ws.plan.debts[0]!.paymentFrequency = "biweekly";
+    const employment = ws.plan.incomes.find(income => income.kind === "employment")!;
+    employment.name = "Work income";
+    employment.endAge = 64;
+    ws.plan.expenses[0]!.endAge = 94;
+    ws.plan.savingsPolicy[0]!.untilAge = 64;
+    ws.baseScenario = {
+      simMode: "montecarlo", retirementAge: 62,
+      returnAssumptions: { equity: 0.045, bond: 0.018, cash: 0.005 },
+      withdrawalOrder: ["cash", "tfsa", "nonreg", "rrsp"],
+      mcConfig: { runs: 250, stdDev: { equity: 0.16, bond: 0.05, cash: 0.01 }, seed: 1872 },
+      benefits: { cpp: false, oas: true, gis: false }, withdrawalStrategy: "tax-minimizing",
+    };
+    ws.scenarios[0] = {
+      ...ws.scenarios[0]!, simMode: "montecarlo", mcConfig: { runs: 500, stdDev: { equity: 0.18, bond: 0.06, cash: 0.01 }, seed: 91_827 },
+      benefits: { cpp: true, oas: true, gis: true }, withdrawalStrategy: "manual",
+      overrides: { retirementAge: 64, withdrawalOrder: ["tfsa", "cash", "nonreg", "rrsp"] },
+    };
+    ws.scenarios.push({
+      id: "history", name: "Historical windows", basePlanId: "prefs-plan", simMode: "historical",
+      historicalConfig: { startYear: 1929 }, benefits: { cpp: false, oas: true, gis: false },
+      withdrawalStrategy: "tax-minimizing", overrides: { returnAssumptions: { equity: 0.04, bond: 0.015, cash: 0 } },
+    });
+    ws.projectionScenarioId = "sample";
+    ws.projectionRunSummaryCollapsed = true;
+    ws.hiddenProjectionColumns = ["tax.total"];
+    ws.hiddenProjectionCharts = ["net-worth"];
+
+    const text = workspaceToText(ws);
+    const parsed = parsePlanFile(JSON.parse(text));
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(buildPlanFile(parsed.workspace)).toEqual(buildPlanFile(ws));
+      expect(parsed.workspace.plan.accounts.find(account => account.type === "cash")).toMatchObject({ balance: 12_500, interestRate: 0.035 });
+      expect(parsed.workspace.plan.accounts.find(account => account.type === "nonreg")).toMatchObject({ bookValue: 21_500, assetMix: { equity: 0.55, bond: 0.35, cash: 0.1 } });
     }
   });
 

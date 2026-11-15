@@ -47,7 +47,13 @@ export function reducer(state: StoreState, action: Action): StoreState {
     }
     case "scenario/add": return { ...state, workspace: { ...workspace, scenarios: [...workspace.scenarios, structuredClone(action.delta)] } };
     case "scenario/update": return { ...state, workspace: { ...workspace, scenarios: workspace.scenarios.map(delta => delta.id === action.delta.id ? structuredClone(action.delta) : delta) } };
-    case "scenario/remove": return { ...state, workspace: { ...workspace, scenarios: workspace.scenarios.filter(delta => delta.id !== action.delta.id) } };
+    case "scenario/remove": {
+      const scenarios = workspace.scenarios.filter(delta => delta.id !== action.delta.id);
+      if (workspace.projectionScenarioId === action.delta.id) {
+        return { ...state, workspace: { ...workspace, projectionScenarioId: "", scenarios } };
+      }
+      return { ...state, workspace: { ...workspace, scenarios } };
+    }
     case "scenario/setBase": return { ...state, workspace: { ...workspace, baseScenario: { ...(workspace.baseScenario ?? DEFAULT_SCENARIO_BASE), ...structuredClone(action.patch) } } };
     case "workspace/loaded": return { workspace: structuredClone(action.workspace), runs: [] };
     case "projection/setHiddenColumns": {
@@ -64,6 +70,20 @@ export function reducer(state: StoreState, action: Action): StoreState {
         return { ...state, workspace: rest };
       }
       return { ...state, workspace: { ...workspace, hiddenProjectionCharts: [...action.hiddenChartIds] } };
+    }
+    case "projection/setScenarioId": {
+      if (action.scenarioId === null) {
+        const { projectionScenarioId: _removed, ...rest } = workspace;
+        return { ...state, workspace: rest };
+      }
+      return { ...state, workspace: { ...workspace, projectionScenarioId: action.scenarioId } };
+    }
+    case "projection/setRunSummaryCollapsed": {
+      if (action.collapsed === null) {
+        const { projectionRunSummaryCollapsed: _removed, ...rest } = workspace;
+        return { ...state, workspace: rest };
+      }
+      return { ...state, workspace: { ...workspace, projectionRunSummaryCollapsed: action.collapsed } };
     }
     case "run/store": return { ...state, runs: [...state.runs.filter(run => run.id !== action.record.id), deepFreeze(structuredClone(action.record))].slice(-20) };
     default: return assertNever(action);

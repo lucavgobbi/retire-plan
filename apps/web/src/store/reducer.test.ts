@@ -40,6 +40,27 @@ describe("workspace reducer", () => {
     state = reducer(state, { type: "projection/setHiddenColumns", hiddenColumnIds: null });
     expect("hiddenProjectionColumns" in state.workspace).toBe(false);
   });
+  it("stores and clears projection scenario and run-summary preferences", () => {
+    let state: StoreState = { workspace: createEmptyWorkspace(), runs: [] };
+    state = reducer(state, { type: "projection/setScenarioId", scenarioId: "scenario-a" });
+    state = reducer(state, { type: "projection/setRunSummaryCollapsed", collapsed: true });
+    expect(state.workspace).toMatchObject({ projectionScenarioId: "scenario-a", projectionRunSummaryCollapsed: true });
+    state = reducer(state, { type: "projection/setScenarioId", scenarioId: "" });
+    expect(state.workspace.projectionScenarioId).toBe("");
+    state = reducer(state, { type: "projection/setScenarioId", scenarioId: null });
+    state = reducer(state, { type: "projection/setRunSummaryCollapsed", collapsed: null });
+    expect("projectionScenarioId" in state.workspace).toBe(false);
+    expect("projectionRunSummaryCollapsed" in state.workspace).toBe(false);
+  });
+  it("returns the selected projection to baseline when that scenario is removed", () => {
+    const workspace = createEmptyWorkspace();
+    const delta = { id: "chosen", name: "Chosen", basePlanId: "plan", simMode: "deterministic" as const, overrides: {} };
+    workspace.scenarios = [delta];
+    workspace.projectionScenarioId = delta.id;
+    const state = reducer({ workspace, runs: [] }, { type: "scenario/remove", delta });
+    expect(state.workspace.scenarios).toEqual([]);
+    expect(state.workspace.projectionScenarioId).toBe("");
+  });
   it("keeps the newest twenty immutable run snapshots and clears runs on workspace replacement", () => {    let state: StoreState = { workspace: createEmptyWorkspace(), runs: [] };
     let last!: RunRecord;
     for (let i = 0; i < 22; i++) {

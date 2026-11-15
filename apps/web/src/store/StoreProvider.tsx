@@ -110,6 +110,10 @@ export function StoreProvider({ children, initialWorkspace, initialBaseScenario,
         !scenario.withdrawalOrder.every(type => ["tfsa", "nonreg", "rrsp", "cash"].includes(type))) {
         throw new Error("Choose each investment withdrawal account exactly once, with optional cash.");
       }
+      // The valid requested target is now known. Persist it before starting work so
+      // Run buttons elsewhere (including saved-scenario cards) update the same
+      // workspace preference as the Projection selector.
+      dispatch({ type: "projection/setScenarioId", scenarioId: delta?.id ?? "" });
       const plan = structuredClone(state.workspace.plan);
       const controller = new AbortController();
       currentRun.current = { sequence: runSequence, controller };

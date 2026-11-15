@@ -13,8 +13,65 @@ function Probe() {
   return <><button onClick={() => { void runProjection(); }}>Run</button><button onClick={cancelRun}>Cancel</button>
     <output>{runs.length}</output>{isRunning && <p>Running projection</p>}{runCancelled && <p>Projection cancelled.</p>}{runError && <p role="alert">{runError}</p>}</>;
 }
+function TargetRunProbe({ delta }: { delta?: import("../domain/types").ScenarioDelta }) {
+  const { runProjection, workspace, baseScenario } = useWorkspace();
+  const runs = useRuns();
+  return <><button onClick={() => { void runProjection(delta ?? null); }}>Run requested target</button>
+    <output data-testid="target-state">{JSON.stringify({
+      selected: workspace.projectionScenarioId,
+      planAge: workspace.plan.profile.currentAge,
+      baseRetirementAge: baseScenario.retirementAge,
+      runIds: runs.map(run => ({ scenarioId: run.scenarioId, resolvedId: run.scenario.id })),
+    })}</output></>;
+}
 const emptyOutcome = { result: { years: [], summary: { success: true, finalNetWorth: 0 } } } as RunOutcome;
 describe("store run flow", () => {
+  it("persists the requested saved scenario before running and leaves plan/base values intact", async () => {
+    const workspace = createEmptyWorkspace();
+    workspace.projectionScenarioId = "base";
+    const delta = { id: "base", name: "Saved choice", basePlanId: "unsaved", simMode: "deterministic" as const, overrides: { retirementAge: 63 } };
+    workspace.scenarios = [delta];
+    const originalPlan = structuredClone(workspace.plan);
+    const simulationRunner: SimulationRunner = async (_plan, scenario) => {
+      expect(scenario.id).toBe("base");
+      return emptyOutcome;
+    };
+    render(<StoreProvider initialWorkspace={workspace} simulationRunner={simulationRunner} makeId={() => "scenario-run"}><TargetRunProbe delta={delta} /></StoreProvider>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Run requested target" }));
+    await waitFor(() => {
+      const state = JSON.parse(screen.getByTestId("target-state").textContent ?? "{}");
+      expect(state.runIds).toEqual([{ scenarioId: "base", resolvedId: "base" }]);
+    });
+    const state = JSON.parse(screen.getByTestId("target-state").textContent ?? "{}");
+    expect(state.selected).toBe("base");
+    expect(state.planAge).toBe(originalPlan.profile.currentAge);
+    expect(state.baseRetirementAge).toBe(65);
+  });
+
+  it("persists the baseline scenario id when a base projection is requested", async () => {
+    const workspace = createEmptyWorkspace();
+    workspace.projectionScenarioId = "previous-scenario";
+    const initialBaseScenario = { ...DEFAULT_SCENARIO_BASE, retirementAge: 67 };
+    const simulationRunner: SimulationRunner = async (_plan, scenario) => {
+      expect(scenario.id).toBe("base");
+      expect(scenario.retirementAge).toBe(67);
+      return emptyOutcome;
+    };
+    render(<StoreProvider initialWorkspace={workspace} initialBaseScenario={initialBaseScenario} simulationRunner={simulationRunner}>
+      <TargetRunProbe />
+    </StoreProvider>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Run requested target" }));
+    await waitFor(() => {
+      const state = JSON.parse(screen.getByTestId("target-state").textContent ?? "{}");
+      expect(state.runIds).toEqual([{ scenarioId: null, resolvedId: "base" }]);
+    });
+    const state = JSON.parse(screen.getByTestId("target-state").textContent ?? "{}");
+    expect(state.selected).toBe("");
+    expect(state.baseRetirementAge).toBe(67);
+  });
+
   it("stores successful runs through the shared UI contract", async () => {
     render(<StoreProvider makeId={() => "run"} now={() => "2026-11-10T00:00:00Z"}><Probe /></StoreProvider>);
     fireEvent.click(screen.getByRole("button", { name: "Run" }));

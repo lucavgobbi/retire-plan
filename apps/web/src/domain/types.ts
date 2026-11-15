@@ -25,7 +25,20 @@ export interface ScenarioDelta {
   withdrawalStrategy?: WithdrawalStrategy;
   overrides: Partial<Pick<ScenarioBase, "retirementAge" | "returnAssumptions" | "withdrawalOrder">>;
 }
-export interface Workspace { meta: PlanMeta | null; plan: Plan; scenarios: ScenarioDelta[]; baseScenario?: ScenarioBase; /** Hidden projection-table data-column ids (stable); absent or empty = all visible, so columns added later default visible. */ hiddenProjectionColumns?: string[]; /** Hidden dashboard chart ids; absent or empty = all charts visible. */ hiddenProjectionCharts?: string[] }
+export interface Workspace {
+  meta: PlanMeta | null;
+  plan: Plan;
+  scenarios: ScenarioDelta[];
+  baseScenario?: ScenarioBase;
+  /** Hidden projection-table data-column ids (stable); absent or empty = all visible, so columns added later default visible. */
+  hiddenProjectionColumns?: string[];
+  /** Hidden dashboard chart ids; absent or empty = all charts visible. */
+  hiddenProjectionCharts?: string[];
+  /** Selected projection scenario: "" is explicit baseline; absent is legacy/default baseline. */
+  projectionScenarioId?: string;
+  /** Run analysis disclosure preference; absent/false means expanded. */
+  projectionRunSummaryCollapsed?: boolean;
+}
 export interface PlanFile {
   schemaVersion: number;
   plans: { meta: PlanMeta; plan: Plan }[];
@@ -33,6 +46,8 @@ export interface PlanFile {
   baseScenario?: ScenarioBase;
   hiddenProjectionColumns?: string[];
   hiddenProjectionCharts?: string[];
+  projectionScenarioId?: string;
+  projectionRunSummaryCollapsed?: boolean;
 }
 export type RunId = string;
 export interface RunRecord {
