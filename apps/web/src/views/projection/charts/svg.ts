@@ -126,3 +126,47 @@ function bandPath(topPoints: string[], bottomPoints: string[]): string {
   const reversed = [...bottomPoints].reverse();
   return `M${topPoints.join(" L")} L${reversed.join(" L")} Z`;
 }
+
+/**
+ * Filled band BETWEEN two series lines (not stacked from zero) — used by the
+ * Monte Carlo percentile fan (p90 top / p10 bottom) and the shortfall-risk area.
+ * Non-finite values on either edge are GAPS: the band splits into contiguous
+ * segments and never invents coverage; an isolated single point renders a 3px
+ * sliver spanning its own top→bottom slice (same honesty rules as
+ * `stackedBandPaths`). Returns one SVG path `d` string for all segments.
+ */
+export function bandBetweenPaths(xs: number[], top: number[], bottom: number[], yDomain: [number, number]): string {
+  const firstX = xs[0];
+  const lastX = xs[xs.length - 1];
+  if (firstX === undefined || lastX === undefined) return "";
+  const xDomain: [number, number] = [firstX, lastX];
+  const segments: string[] = [];
+  let open: { top: string; bottom: string }[] = [];
+  const flush = () => {
+    if (open.length > 1) {
+      segments.push(bandPath(open.map((point) => point.top), open.map((point) => point.bottom)));
+    } else if (open.length === 1) {
+      const px = open[0]!.bottom.split(",")[0] ?? "0";
+      const topY = open[0]!.top.split(",")[1] ?? "0";
+      const bottomY = open[0]!.bottom.split(",")[1] ?? "0";
+      segments.push(`M${px},${bottomY} L${px},${topY} L${Number(px) + 3},${topY} L${Number(px) + 3},${bottomY} Z`);
+    }
+    open = [];
+  };
+  for (let i = 0; i < xs.length; i++) {
+    const up = top[i];
+    const low = bottom[i];
+    const x = xs[i];
+    if (x !== undefined && up !== undefined && low !== undefined && Number.isFinite(up) && Number.isFinite(low)) {
+      const px = xScale(x, xDomain).toFixed(1);
+      open.push({
+        top: `${px},${yScale(up, yDomain).toFixed(1)}`,
+        bottom: `${px},${yScale(low, yDomain).toFixed(1)}`,
+      });
+    } else {
+      flush();
+    }
+  }
+  flush();
+  return segments.join(" ");
+}

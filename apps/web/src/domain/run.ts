@@ -6,6 +6,20 @@ export interface MonteCarloAnalysis {
   successRate: number;
   percentileNetWorth: { p10: number; p50: number; p90: number };
   representativeRun: number;
+  /**
+   * Per-age statistics aggregated from ACTUAL simulated paths (never the
+   * representative path or synthetic percentile paths); absent for MC runs
+   * made before the capture — the dashboard then shows an honest rerun note.
+   * Shape mirrors the engine's MonteCarloSummary.annualStats.
+   */
+  annualStats?: {
+    age: number;
+    netWorth: { p10: number; p50: number; p90: number };
+    /** Cumulative fraction (0–1) of paths with any positive shortfall year through this age. */
+    shortfallRate: number;
+    /** Actual simulated paths that returned a row for this age. */
+    sampleCount: number;
+  }[];
 }
 
 export interface HistoricalAnalysis {
@@ -48,6 +62,9 @@ export function runScenario(plan: Plan, scenario: Scenario): RunOutcome {
         successRate: summary.successRate,
         percentileNetWorth: summary.percentileNetWorth,
         representativeRun: summary.representativeRun,
+        // Forward the per-age ensemble stats verbatim — the MC charts read them;
+        // dropping them here would leave every dashboard MC chart empty.
+        ...(summary.annualStats !== undefined ? { annualStats: summary.annualStats } : {}),
       },
     };
   }

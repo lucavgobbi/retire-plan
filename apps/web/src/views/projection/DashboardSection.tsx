@@ -4,9 +4,14 @@ import {
   accountFlowsSeries,
   contributionRoomSeries,
   drawdownSeries,
+  expenseBreakdownSeries,
   incomeSpendSeries,
   incomeSourcesSeries,
   netWorthBarSeries,
+  oasKeptSeries,
+  ensembleStatPoints,
+  rrifWithdrawalSeries,
+  runCapturesRrifMinimum,
   taxStackSeries,
 } from "./charts/adapters";
 import { PALETTE, STACK_COLORS } from "./charts/palette";
@@ -18,13 +23,23 @@ import { IncomeSourcesChart } from "./charts/IncomeSourcesChart";
 import { IncomeSpendChart } from "./charts/IncomeSpendChart";
 import { NetWorthChart } from "./charts/NetWorthChart";
 import { TaxStackChart } from "./charts/TaxStackChart";
+import { SpendingBreakdownChart } from "./charts/SpendingBreakdownChart";
+import { RrifWithdrawalsChart } from "./charts/RrifWithdrawalsChart";
+import { OasClawbackChart } from "./charts/OasClawbackChart";
+import { EnsembleFanChart } from "./charts/EnsembleFanChart";
+import { ShortfallRiskChart } from "./charts/ShortfallRiskChart";
 import {
   ACCOUNT_FLOWS_HELP,
   CONTRIBUTION_ROOM_HELP,
   DRAWDOWN_HELP,
   INCOME_SOURCES_HELP,
   INCOME_SPEND_HELP,
+  MC_FAN_HELP,
   NET_WORTH_HELP,
+  OAS_KEPT_HELP,
+  RRIF_RRSP_HELP,
+  SHORTFALL_RISK_HELP,
+  SPENDING_BREAKDOWN_HELP,
   TAX_HELP,
 } from "./charts/chartHelpContent";
 import { sanitizeHiddenIds } from "./hiddenIds";
@@ -38,6 +53,11 @@ export const PROJECTION_CHARTS: { id: string; title: string }[] = [
   { id: "account-flows", title: "Contributions vs withdrawals" },
   { id: "drawdown", title: "Account drawdown" },
   { id: "contribution-room", title: "Contribution room" },
+  { id: "spending-breakdown", title: "Spending breakdown" },
+  { id: "rrif-rrsp", title: "RRIF vs RRSP withdrawals" },
+  { id: "oas-clawback", title: "OAS kept vs clawback" },
+  { id: "mc-fan", title: "Net worth range (Monte Carlo)" },
+  { id: "shortfall-risk", title: "Shortfall risk by age (Monte Carlo)" },
 ];
 
 /** Dashboard charts above the year table; each chart reads its data via an adapter. */
@@ -67,6 +87,42 @@ export function DashboardSection({ result }: { result?: SimulationResult }) {
   const hiddenCharts = sanitizeHiddenIds(workspace.hiddenProjectionCharts, PROJECTION_CHARTS.map((chart) => chart.id));
 
   // Non-finite values anywhere already degrade to null points inside the adapters.
+  // Per-chart applicability: breakdown/RRIF charts degrade to honest rerun notes for
+  // legacy runs; the two ensemble charts only exist for Monte Carlo runs with
+  // per-age annual stats (deterministic/historical runs never show empty MC charts).
+  const breakdown = expenseBreakdownSeries(result.years);
+  const rrifPoints = rrifWithdrawalSeries(result.years);
+  const oasPoints = oasKeptSeries(result.years);
+  const mcAnalysis = run?.analysis?.mode === "montecarlo" ? run.analysis : undefined;
+  const mcStats = ensembleStatPoints(mcAnalysis);
+  const rerun = (message: string) => <p className="hint" data-chart-state="rerun">{message}</p>;
+  const mcCharts = mcAnalysis === undefined ? [] : [
+    {
+      id: "mc-fan",
+      title: "Net worth range (Monte Carlo)",
+      subtitle: "p10–p90 band across simulated paths; dashed median (ensemble, not one path)",
+      ariaLabel: "Monte Carlo net worth range chart",
+      legend: [
+        { label: "Middle 80% of paths (p10–p90)", color: "rgba(37, 99, 235, 0.35)" },
+        { label: "Median path (p50)", color: PALETTE.color1 },
+      ],
+      help: MC_FAN_HELP,
+      body: mcStats
+        ? <EnsembleFanChart points={mcStats} />
+        : rerun("This Monte Carlo run predates per-age statistics. Run the projection again to see the range across simulated paths."),
+    },
+    {
+      id: "shortfall-risk",
+      title: "Shortfall risk by age (Monte Carlo)",
+      subtitle: "Share of simulated paths with any shortfall so far (0–100% fixed axis)",
+      ariaLabel: "Monte Carlo shortfall risk chart",
+      legend: [{ label: "Cumulative shortfall risk", color: PALETTE.color3 }],
+      help: SHORTFALL_RISK_HELP,
+      body: mcStats
+        ? <ShortfallRiskChart points={mcStats} />
+        : rerun("This Monte Carlo run predates per-age statistics. Run the projection again to see the cumulative shortfall risk."),
+    },
+  ];
   const charts = [
     {
       id: "net-worth",
@@ -139,6 +195,40 @@ export function DashboardSection({ result }: { result?: SimulationResult }) {
       help: CONTRIBUTION_ROOM_HELP,
       body: <ContributionRoomChart points={contributionRoomSeries(result.years)} />,
     },
+    {
+      id: "spending-breakdown",
+      title: "Spending breakdown",
+      subtitle: "Annual spending split by expense item (stacked)",
+      ariaLabel: "Spending breakdown chart",
+      legend: breakdown ? breakdown.items.map((item, i) => ({ label: item.name, color: STACK_COLORS[i % STACK_COLORS.length]! })) : [],
+      help: SPENDING_BREAKDOWN_HELP,
+      body: breakdown
+        ? (breakdown.items.length === 0
+          ? <p className="hint" data-chart-state="no-expenses">This plan records no expense items, so there is nothing to break down.</p>
+          : <SpendingBreakdownChart series={breakdown} />)
+        : rerun("This run predates per-item spending capture. Run the projection again to split spending by expense item."),
+    },
+    {
+      id: "rrif-rrsp",
+      title: "RRIF vs RRSP withdrawals",
+      subtitle: "Actual RRSP withdrawals against the mandatory RRIF minimum",
+      ariaLabel: "RRIF versus RRSP withdrawals chart",
+      legend: [{ label: "Actual RRSP withdrawals", color: PALETTE.color2 }, { label: "RRIF minimum", color: PALETTE.color1 }],
+      help: RRIF_RRSP_HELP,
+      body: runCapturesRrifMinimum(result.years)
+        ? <RrifWithdrawalsChart points={rrifPoints} />
+        : rerun("This run predates RRIF minimum capture. Run the projection again to compare the required minimum with actual withdrawals."),
+    },
+    {
+      id: "oas-clawback",
+      title: "OAS kept vs clawback",
+      subtitle: "OAS received split into kept and recovery tax; kept + clawback = gross",
+      ariaLabel: "OAS kept versus clawback chart",
+      legend: [{ label: "OAS kept", color: PALETTE.color2 }, { label: "OAS clawback", color: PALETTE.color4 }],
+      help: OAS_KEPT_HELP,
+      body: <OasClawbackChart points={oasPoints} />,
+    },
+    ...mcCharts,
   ].filter((chart) => !hiddenCharts?.includes(chart.id));
 
   return (

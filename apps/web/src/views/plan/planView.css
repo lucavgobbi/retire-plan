@@ -27,6 +27,19 @@
 .plan-summary-details dd{margin:.1rem 0 0;font-size:.87rem;font-weight:600;font-variant-numeric:tabular-nums}
 .plan-item-actions{display:flex;gap:.4rem;align-items:center}
 .plan-item-form{margin-top:8px}
+.benefit-amount-guide{grid-column:1/-1;min-width:0;border:1px solid var(--border);border-radius:7px;background:#f6f8f5;padding:.75rem .9rem}
+.benefit-amount-guide>summary{cursor:pointer;font-weight:650;color:#315747}
+.benefit-amount-guide>summary:focus-visible{outline:2px solid #24665a;outline-offset:3px;border-radius:3px}
+.benefit-amount-guide-content{display:grid;gap:.65rem;margin-top:.75rem;min-width:0}
+.benefit-amount-guide-content p{margin:0;line-height:1.45}
+.benefit-guide-field{display:grid;gap:.3rem;font-size:.82rem;font-weight:600;max-width:24rem}
+.benefit-amount-guide-content h4{margin:.8rem 0 .25rem;font-size:.9rem}
+.benefit-guide-field input{width:100%;height:40px}
+.benefit-guide-preview{font-weight:700;font-variant-numeric:tabular-nums}
+.benefit-guide-note{font-size:.8rem;color:var(--muted)}
+.benefit-guide-actions{display:flex;flex-wrap:wrap;gap:.5rem}
+.benefit-guide-actions button{min-height:40px}
+@media(max-width:480px){.benefit-amount-guide{padding:.7rem}.benefit-guide-field{max-width:100%}}
 @media(max-width:600px){.plan-summary-card{grid-template-columns:1fr}.plan-summary-heading{grid-column:auto;align-items:flex-start}.plan-summary-details{justify-content:flex-start}.plan-summary-details>div{flex:1 1 7rem}}
 @media(max-width:480px){.plan-fields{grid-template-columns:1fr}.plan-actions>button{flex:1 1 140px}.plan-panel{padding:14px}.plan-tabs{max-width:100%}}
 @media(max-width:650px){.plan-tabs{flex-wrap:wrap;overflow:visible;gap:5px;padding-bottom:5px}.plan-tabs button{flex:0 0 auto;max-width:100%;border-radius:5px}}

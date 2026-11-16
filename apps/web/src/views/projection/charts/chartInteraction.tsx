@@ -15,14 +15,17 @@
  */
 import { useLayoutEffect, useRef, useState } from "react";
 import type { ComponentPropsWithoutRef } from "react";
-import { fmtMoney } from "../fmt";
+import { fmtMoney, fmtPercent } from "../fmt";
 import { H, PAD, W } from "./svg";
 import "./chartInteraction.css";
 
-/** One tooltip row: raw series value (formatted with fmtMoney — accurate zeros, negatives and currency units). */
+/** One tooltip row: the raw series value formatted per `format` — "money" (default;
+ * accurate zeros, negatives and currency units), "percent" (0..1 fractions) or
+ * "count" (plain integer, e.g. simulated path counts). */
 export interface TooltipRow {
   label: string;
   value: number;
+  format?: "money" | "percent" | "count";
 }
 
 const PLOT_WIDTH = W - PAD.left - PAD.right;
@@ -182,7 +185,10 @@ export function ChartTooltip({
 }) {
   const tipRef = useRef<HTMLDivElement | null>(null);
   const title = `Age ${age}`;
-  const text = (row: TooltipRow) => fmtMoney(row.value);
+  const text = (row: TooltipRow) =>
+    row.format === "percent" ? fmtPercent(row.value)
+    : row.format === "count" ? (Number.isFinite(row.value) ? `${row.value}` : "—")
+    : fmtMoney(row.value);
 
   useLayoutEffect(() => {
     const el = tipRef.current;

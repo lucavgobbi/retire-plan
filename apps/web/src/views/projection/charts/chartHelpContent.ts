@@ -3,6 +3,7 @@
  * Concise and accurate: what the chart shows and how to interpret it —
  * not raw data (the plots keep their own accessible labels and ticks).
  */
+
 export const NET_WORTH_HELP =
   "Stacked bars of what the household OWNS at each age, by account and asset type: registered and " +
   "non-registered investments, total cash (named accounts + reserve), home and other assets. This " +
@@ -50,3 +51,36 @@ export const CONTRIBUTION_ROOM_HELP =
   "contribution-room rules. A line reaching zero means the room is fully used. TFSA withdrawals " +
   "restore that room the FOLLOWING year; RRSP withdrawals do NOT restore room — RRSP room only " +
   "grows from new earned income or unused carry-forward, and contributions consume it.";
+
+export const SPENDING_BREAKDOWN_HELP =
+  "How the annual spending total splits across the expense items in your plan, one stacked band " +
+  "per item at each age. Each item keeps its own colour from the first year onward. A run made " +
+  "before per-item amounts were captured cannot be split honestly — it shows a run-again note " +
+  "instead of invented data.";
+
+export const RRIF_RRSP_HELP =
+  "Compares the RRSP withdrawals actually taken each year with the mandatory RRIF minimum the " +
+  "engine applies once minimums are active. Before that there is no minimum line — the gap is " +
+  "real, not missing data. When the required minimum rises above what you would choose to draw, " +
+  "the two lines converge: withdrawals become forced. Descriptive only — it does not recommend a " +
+  "withdrawal amount.";
+
+export const OAS_KEPT_HELP =
+  "Old Age Security split into what you keep and what is charged back. Gross OAS is the benefit " +
+  "as received; the OAS clawback (recovery tax) is charged when net income is above the recovery " +
+  "threshold; what remains is the OAS you keep. Kept plus clawback always equals the gross OAS, " +
+  "and the clawback never exceeds the OAS received. GIS is not shown because a GIS charge-back " +
+  "amount is not recorded.";
+
+export const MC_FAN_HELP =
+  "Monte Carlo only. The shaded band spans the 10th to 90th percentile of net worth across ALL " +
+  "simulated market paths at each age — not one path — and the dashed line inside is the median " +
+  "(50th percentile). A wider band means outcomes differ more between paths. This is a range " +
+  "across simulations, not a guarantee for any single future. A run made before per-age " +
+  "statistics were captured shows a run-again note instead of a synthetic range.";
+
+export const SHORTFALL_RISK_HELP =
+  "Monte Carlo only. At each age, the share of simulated paths that have run a shortfall — spent " +
+  "more money than they had — in that year or any earlier year. The axis is fixed from 0% to " +
+  "100% and the value only ever rises with age. It describes the simulated paths, not advice, " +
+  "and the tooltip shows how many paths were simulated at that age.";

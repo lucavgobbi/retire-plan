@@ -10,6 +10,11 @@ import {
   accountFlowsSeries,
   contributionRoomSeries,
   dropNonFinite,
+  expenseBreakdownSeries,
+  rrifWithdrawalSeries,
+  runCapturesRrifMinimum,
+  oasKeptSeries,
+  ensembleStatPoints,
 } from "./adapters";
 
 const year = (age: number, partial: Partial<YearResult> = {}): YearResult => ({
@@ -130,5 +135,114 @@ describe("chart adapters", () => {
   it("contributionRoomSeries passes the engine room values through untouched", () => {
     const [p] = contributionRoomSeries([year(71, { tfsaRoom: 7000, rrspRoom: 12345 })]);
     expect(p).toEqual({ x: 71, tfsaRoom: 7000, rrspRoom: 12345 });
+  });
+});
+
+describe("expenseBreakdownSeries", () => {
+  it("maps per-item amounts exactly, items in first-seen (plan) order with stable names", () => {
+    const series = expenseBreakdownSeries([
+      year(60, { expenseBreakdown: [{ id: "e1", name: "Food", amount: 100 }, { id: "e2", amount: 50 }], expenses: 150 }),
+      year(61, { expenseBreakdown: [{ id: "e1", name: "Food", amount: 110 }, { id: "e2", amount: 60 }], expenses: 170 }),
+    ]);
+    expect(series).not.toBeNull();
+    expect(series!.items).toEqual([{ id: "e1", name: "Food" }, { id: "e2", name: "e2" }]); // unnamed → id as label
+    expect(series!.points[0]!.amounts).toEqual([100, 50]);
+    expect(series!.points[1]!.amounts).toEqual([110, 60]);
+    expect(series!.points[0]!.total).toBe(150); // authoritative engine total
+  });
+
+  it("an item present only in later years contributes 0 before it starts (never fabricated)", () => {
+    const series = expenseBreakdownSeries([
+      year(60, { expenseBreakdown: [{ id: "e1", name: "Food", amount: 100 }], expenses: 100 }),
+      year(61, { expenseBreakdown: [{ id: "e1", name: "Food", amount: 100 }, { id: "travel", name: "Travel", amount: 300 }], expenses: 400 }),
+    ]);
+    expect(series!.points[0]!.amounts).toEqual([100, 0]);
+    expect(series!.points[1]!.amounts).toEqual([100, 300]);
+  });
+
+  it("returns null when ANY year lacks the breakdown (legacy runs) — no fake split", () => {
+    expect(expenseBreakdownSeries([])).toBeNull();
+    expect(expenseBreakdownSeries([
+      year(60, { expenseBreakdown: [{ id: "a", amount: 1 }], expenses: 1 }),
+      year(61, {}), // legacy year without per-item capture
+    ])).toBeNull();
+  });
+
+  it("a recorded-but-EMPTY breakdown is a real empty series (fresh run, no expenses) — never a legacy null", () => {
+    const series = expenseBreakdownSeries([
+      year(60, { expenseBreakdown: [], expenses: 0 }),
+      year(61, { expenseBreakdown: [], expenses: 0 }),
+    ]);
+    expect(series).not.toBeNull();
+    expect(series!.items).toEqual([]);
+    expect(series!.points).toEqual([
+      { x: 60, total: 0, amounts: [] },
+      { x: 61, total: 0, amounts: [] },
+    ]);
+  });
+});
+
+describe("rrifWithdrawalSeries", () => {
+  it("minimum from the field (null before RRIF minimums begin), actual from withdrawals.rrsp, planned defaults 0", () => {
+    const points = rrifWithdrawalSeries([
+      year(60, { withdrawals: { tfsa: 0, rrsp: 1200, nonreg: 0 } }),
+      year(72, { withdrawals: { tfsa: 0, rrsp: 2500, nonreg: 0 }, rrifMinimumWithdrawal: 2000, plannedRrspDraw: 500 }),
+    ]);
+    expect(points[0]).toEqual({ x: 60, minimum: null, actual: 1200, planned: 0 });
+    expect(points[1]).toEqual({ x: 72, minimum: 2000, actual: 2500, planned: 500 });
+  });
+
+  it("runCapturesRrifMinimum: false for legacy runs lacking the field, true when any year has it", () => {
+    expect(runCapturesRrifMinimum([year(60, {}), year(61, {})])).toBe(false);
+    expect(runCapturesRrifMinimum([year(60, {}), year(72, { rrifMinimumWithdrawal: 2000 })])).toBe(true);
+  });
+
+  it("an EXPLICIT 0 minimum is captured fresh data (pre-71 / no-RRSP run), not a legacy gap", () => {
+    // Fresh run, RRIF minimums not yet active: the engine records 0 to identify fresh data.
+    expect(rrifWithdrawalSeries([year(60, { rrifMinimumWithdrawal: 0, withdrawals: { tfsa: 0, rrsp: 0, nonreg: 0 } })])[0]!.minimum).toBe(0);
+    expect(runCapturesRrifMinimum([year(60, { rrifMinimumWithdrawal: 0 }), year(61, { rrifMinimumWithdrawal: 0 })])).toBe(true);
+    // Genuine legacy capture: the field is missing entirely.
+    expect(runCapturesRrifMinimum([year(60, {}), year(61, {})])).toBe(false);
+  });
+});
+
+describe("oasKeptSeries", () => {
+  it("kept + clawback = gross exactly (the engine caps the clawback at the OAS received)", () => {
+    const [p] = oasKeptSeries([year(70, {
+      income: { employment: 0, cpp: 0, oas: 750, gis: 0, other: 0 },
+      tax: { federal: 0, provincial: 0, surtax: 0, oasClawback: 212.4, total: 0, marginalRate: 0 },
+    })]);
+    expect(p!.gross).toBe(750);
+    expect(p!.clawback).toBe(212.4);
+    expect(p!.kept).toBeCloseTo(537.6);
+    expect(p!.kept + p!.clawback).toBe(p!.gross); // mapping identity
+  });
+
+  it("zero clawback keeps the full OAS; GIS is never part of this series", () => {
+    const [p] = oasKeptSeries([year(66, { income: { employment: 0, cpp: 0, oas: 730, gis: 500, other: 0 } })]);
+    expect(p!.kept).toBe(730);
+    expect(p!.clawback).toBe(0);
+  });
+});
+
+describe("ensembleStatPoints", () => {
+  const stats = [
+    { age: 65, netWorth: { p10: 100, p50: 200, p90: 300 }, shortfallRate: 0, sampleCount: 500 },
+    { age: 66, netWorth: { p10: 90, p50: 180, p90: 280 }, shortfallRate: 0.12, sampleCount: 500 },
+  ];
+
+  it("maps the analysis annualStats through with values untouched", () => {
+    const points = ensembleStatPoints({ mode: "montecarlo", annualStats: stats });
+    expect(points).toEqual([
+      { age: 65, netWorth: { p10: 100, p50: 200, p90: 300 }, shortfallRate: 0, sampleCount: 500 },
+      { age: 66, netWorth: { p10: 90, p50: 180, p90: 280 }, shortfallRate: 0.12, sampleCount: 500 },
+    ]);
+  });
+
+  it("returns null without annual stats (legacy MC runs) or for non-MC analyses — no synthetic fan", () => {
+    expect(ensembleStatPoints(undefined)).toBeNull();
+    expect(ensembleStatPoints({ mode: "montecarlo" })).toBeNull(); // legacy MC analysis
+    expect(ensembleStatPoints({ mode: "historical" })).toBeNull(); // deterministic/historical never show MC charts
+    expect(ensembleStatPoints({ mode: "montecarlo", annualStats: [] })).toBeNull();
   });
 });

@@ -12,6 +12,7 @@ import { calculateCurrentAge, useWorkspace } from "../../store/api";
 import { NumberTextInput } from "../../components/NumberTextInput";
 import { InlineEditorPanel } from "../../components/InlineEditorPanel";
 import { fmtMoney, fmtPercent } from "../projection/fmt";
+import { BenefitAmountGuide } from "./BenefitAmountGuide";
 import "./planView.css";
 
 type Tab = "Profile" | "Accounts" | "Assets & debts" | "Income" | "Expenses" | "Savings";
@@ -286,6 +287,7 @@ function IncomeForm({ income, onApply, onRemove, onClose }: { income: IncomePlan
     <SelectField label="Income type" value={draft.kind} choices={["employment", "cpp", "oas", "other"] as const} labels={INCOME_LABELS} onChange={kind => change({ kind, ...(kind === "employment" ? {} : { endAge: "" }) })} />
     <TextInput label="Annual amount ($)" value={draft.annualAmount} min="0" onChange={annualAmount => change({ annualAmount })} />
     <TextInput label="Start age" value={draft.startAge} min="1" step="1" onChange={startAge => change({ startAge })} />
+    {(draft.kind === "cpp" || draft.kind === "oas") && <BenefitAmountGuide kind={draft.kind} startAge={draft.startAge} onUseAnnualAmount={annualAmount => change({ annualAmount: annualAmount.toFixed(2) })} />}
     <TextInput label="End age" value={draft.endAge} min="1" step="1" optional onChange={endAge => change({ endAge })} />
     <TextInput label="Annual raise / indexing (%)" value={draft.raiseRate} onChange={raiseRate => change({ raiseRate })} />
     <ApplyNotice errors={errors} />

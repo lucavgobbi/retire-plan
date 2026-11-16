@@ -237,6 +237,84 @@ describe("PlanView", () => {
     expect(screen.queryByRole("button", { name: /save|add item/i })).toBeNull();
   });
 
+  it("uses CPP and OAS guides to apply one gross annual amount at the configured start age", () => {
+    const workspace = createEmptyWorkspace();
+    workspace.plan.incomes = [
+      { id: "cpp", kind: "cpp", annualAmount: 0, startAge: 60, raiseRate: 0.02 },
+      { id: "oas", kind: "oas", annualAmount: 0, startAge: 70, raiseRate: 0 },
+    ];
+    renderPlan(undefined, workspace);
+    fireEvent.click(screen.getByRole("tab", { name: "Income" }));
+
+    const cppCard = screen.getByRole("region", { name: "CPP summary" });
+    fireEvent.click(within(cppCard).getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByText("Help estimate your CPP amount"));
+    expect(screen.getByText(/if you expect to stop or reduce work before CPP starts, use an estimate that reflects that expectation/i)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Personal CPP monthly estimate at age 65 ($)"), { target: { value: "1000" } });
+    expect(screen.getByText(/Preview: \$640\.00 per month, or \$7,680\.00 per year/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Use age-65 CPP estimate × 12" }));
+    expect(planState().incomes[0]).toMatchObject({ annualAmount: 7_680, startAge: 60, raiseRate: 0.02 });
+    fireEvent.click(screen.getByRole("button", { name: "Close editor" }));
+
+    const oasCard = screen.getByRole("region", { name: "OAS summary" });
+    fireEvent.click(within(oasCard).getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByText("Help estimate your OAS amount"));
+    fireEvent.change(screen.getByLabelText("Full OAS monthly amount at ages 65 to 74 before residence adjustment ($)"), { target: { value: "800" } });
+    fireEvent.change(screen.getByLabelText("Eligible years lived in Canada after age 18"), { target: { value: "20" } });
+    expect(screen.getByText(/Rough preview: \$544\.00 per month, or \$6,528\.00 per year/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Use rough OAS preview × 12" }));
+    expect(planState().incomes[1]).toMatchObject({ annualAmount: 6_528, startAge: 70, raiseRate: 0 });
+    expect(screen.getByRole("link", { name: "official OAS amount page" }).getAttribute("href")).toBe("https://www.canada.ca/en/services/benefits/publicpensions/old-age-security/benefit-amount.html");
+    expect(screen.getByRole("link", { name: "official OAS Benefits Estimator" }).getAttribute("href")).toBe("https://estimateursv-oasestimator.service.canada.ca/en");
+    expect(screen.getByText(/at least 10 years of residence if you live in Canada when you apply, or 20 years if you live outside Canada/i)).toBeTruthy();
+    expect(screen.getByText(/you cannot receive GIS during the delay, and GIS does not increase.*model may still show GIS from age 65.*cost of deferring OAS is not fully modeled/i)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "official OAS start guidance" }).getAttribute("href")).toBe("https://www.canada.ca/en/services/benefits/publicpensions/old-age-security/when-start.html");
+    expect(screen.getByText(/does not add the separate 10% increase at 75/i)).toBeTruthy();
+  });
+
+  it("uses already-adjusted CPP and OAS amounts at post-70 ages without applying another factor", () => {
+    const workspace = createEmptyWorkspace();
+    workspace.plan.incomes = [
+      { id: "cpp", kind: "cpp", annualAmount: 0, startAge: 75, raiseRate: 0 },
+      { id: "oas", kind: "oas", annualAmount: 0, startAge: 75, raiseRate: 0 },
+    ];
+    renderPlan(undefined, workspace);
+    fireEvent.click(screen.getByRole("tab", { name: "Income" }));
+    const cppCard = screen.getByRole("region", { name: "CPP summary" });
+    fireEvent.click(within(cppCard).getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByText("Help estimate your CPP amount"));
+    fireEvent.change(screen.getByLabelText("Personal CPP monthly estimate at age 65 ($)"), { target: { value: "1000" } });
+    expect((screen.getByRole("button", { name: "Use age-65 CPP estimate × 12" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/use the already-adjusted amount method above/i)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Current or personal CPP monthly amount for this Start age ($)"), { target: { value: "1200" } });
+    const cppDirectApply = screen.getByRole("button", { name: "Use adjusted CPP amount × 12" }) as HTMLButtonElement;
+    fireEvent.change(screen.getByLabelText("Start age"), { target: { value: "59" } });
+    expect(cppDirectApply.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Start age"), { target: { value: "60" } });
+    expect(cppDirectApply.disabled).toBe(false);
+    fireEvent.change(screen.getByLabelText("Start age"), { target: { value: "75" } });
+    fireEvent.click(cppDirectApply);
+    expect(planState().incomes[0]).toMatchObject({ annualAmount: 14_400, startAge: 75 });
+    fireEvent.click(screen.getByRole("button", { name: "Close editor" }));
+
+    const oasCard = screen.getByRole("region", { name: "OAS summary" });
+    fireEvent.click(within(oasCard).getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByText("Help estimate your OAS amount"));
+    fireEvent.change(screen.getByLabelText("Full OAS monthly amount at ages 65 to 74 before residence adjustment ($)"), { target: { value: "800" } });
+    fireEvent.change(screen.getByLabelText("Eligible years lived in Canada after age 18"), { target: { value: "40" } });
+    expect((screen.getByRole("button", { name: "Use rough OAS preview × 12" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Current or personal OAS monthly amount for this Start age ($)"), { target: { value: "600" } });
+    const oasDirectApply = screen.getByRole("button", { name: "Use adjusted OAS amount × 12" }) as HTMLButtonElement;
+    fireEvent.change(screen.getByLabelText("Start age"), { target: { value: "64" } });
+    expect(oasDirectApply.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Start age"), { target: { value: "65" } });
+    expect(oasDirectApply.disabled).toBe(false);
+    fireEvent.change(screen.getByLabelText("Start age"), { target: { value: "75" } });
+    fireEvent.click(oasDirectApply);
+    expect(planState().incomes[1]).toMatchObject({ annualAmount: 7_200, startAge: 75 });
+    expect(screen.getByText(/If you enter a current payment at 75 or older, it will not add another age adjustment/i)).toBeTruthy();
+  });
+
   it("shows engine plan validation errors inline", () => {
     renderPlan();
     fireEvent.click(screen.getByRole("tab", { name: "Accounts" }));

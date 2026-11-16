@@ -136,7 +136,7 @@ export interface YearResult {
   contributions: { tfsa: number; rrsp: number; nonreg: number; cash?: number };
   savings: { tfsa: number; rrsp: number; nonreg: number; cash?: number; mortgage: number };
   expenses: number;
-  /** Actual required minimum included in RRSP withdrawals; optional for legacy runs and pre-RRIF ages. */
+  /** Actual required minimum included in RRSP withdrawals; absent only in legacy results, zero when no minimum is due. */
   rrifMinimumWithdrawal?: number;
   /** Per-item expense amounts before the annual total is rounded; optional for stored legacy runs. */
   expenseBreakdown?: { id: string; name?: string; amount: number }[];

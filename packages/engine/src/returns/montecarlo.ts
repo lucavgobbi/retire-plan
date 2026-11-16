@@ -64,9 +64,23 @@ function percentile(sorted: number[], p: number): number {
   return sorted[idx]!;
 }
 
+export interface MonteCarloAnnualStat {
+  age: number;
+  netWorth: { p10: number; p50: number; p90: number };
+  /** Cumulative fraction (0–1) of sampled paths with positive shortfall by this age. */
+  shortfallRate: number;
+  /** Number of actual simulated paths with a year row for this age. */
+  sampleCount: number;
+}
+
 export type MonteCarloSummary = {
   successRate: number;
   percentileNetWorth: { p10: number; p50: number; p90: number };
+  /**
+   * Per-age statistics aggregated from actual simulated paths. Net-worth percentiles
+   * use the same nearest-rank convention as the terminal summary.
+   */
+  annualStats?: MonteCarloAnnualStat[];
   sampleFailureAge: number | null;
   /** One actual simulated result nearest the median final net worth; never a percentile path. */
   representativeResult: SimulationResult;
@@ -139,6 +153,40 @@ export function runMonteCarlo(
   const finals = sorted.map((item) => item.result.summary.finalNetWorth);
   const median = sorted[Math.floor(0.5 * (sorted.length - 1))]!;
   const successCount = results.filter((item) => item.result.summary.success).length;
+  // Aggregate from every actual simulated year row, not the representative
+  // path or synthetic percentile paths. The real stepper always runs through
+  // endAge after shortfalls; sampleCount remains explicit for injected runners
+  // that may return only a subset of ages.
+  const annualSamples = new Map<number, { netWorth: number[]; cumulativeShortfallRuns: number; sampleCount: number }>();
+  for (const { result } of results) {
+    let hasShortfall = false;
+    for (const year of result.years) {
+      if (year.shortfall > 0) hasShortfall = true;
+      let sample = annualSamples.get(year.age);
+      if (!sample) {
+        sample = { netWorth: [], cumulativeShortfallRuns: 0, sampleCount: 0 };
+        annualSamples.set(year.age, sample);
+      }
+      sample.netWorth.push(year.netWorth);
+      sample.sampleCount++;
+      if (hasShortfall) sample.cumulativeShortfallRuns++;
+    }
+  }
+  const annualStats = [...annualSamples.entries()]
+    .sort(([ageA], [ageB]) => ageA - ageB)
+    .map(([age, sample]) => {
+      const sortedNetWorth = [...sample.netWorth].sort((a, b) => a - b);
+      return {
+        age,
+        netWorth: {
+          p10: percentile(sortedNetWorth, 0.1),
+          p50: percentile(sortedNetWorth, 0.5),
+          p90: percentile(sortedNetWorth, 0.9),
+        },
+        shortfallRate: sample.cumulativeShortfallRuns / sample.sampleCount,
+        sampleCount: sample.sampleCount,
+      };
+    });
   return {
     successRate: successCount / results.length,
     percentileNetWorth: {
@@ -146,6 +194,7 @@ export function runMonteCarlo(
       p50: percentile(finals, 0.5),
       p90: percentile(finals, 0.9),
     },
+    annualStats,
     sampleFailureAge: results.find((item) => !item.result.summary.success)?.result.summary.failureAge ?? null,
     representativeResult: withdrawalPlan
       ? { ...median.result, withdrawalPlan } // the SAME planning metadata, attached once

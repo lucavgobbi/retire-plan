@@ -442,8 +442,9 @@ describe("projection table column selector", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
     await waitFor(() => expect(document.querySelector(".projection-table")).toBeTruthy());
-    // Default: all seven dashboard charts visible, nothing persisted.
-    expect(screen.getAllByRole("figure").length).toBe(7);
+    // Default: all ten dashboard charts visible (deterministic run: the two MC
+    // charts don't apply and are omitted), nothing persisted.
+    expect(screen.getAllByRole("figure").length).toBe(10);
     expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toBeNull();
 
     // The gear trigger is a native disclosure summary: keyboard-activatable with
@@ -462,7 +463,7 @@ describe("projection table column selector", () => {
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Tax by component" }));
     expect(screen.queryByRole("figure", { name: "Tax by component chart" })).toBeNull();
-    expect(screen.getAllByRole("figure").length).toBe(6);
+    expect(screen.getAllByRole("figure").length).toBe(9);
     expect(JSON.parse(screen.getByTestId("hidden-charts-state").textContent ?? "null")).toEqual(["tax"]);
 
     // The chart's own checkbox restores it (no separate "Show everything" reset);
@@ -488,7 +489,7 @@ describe("projection table column selector", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
     await waitFor(() => expect(document.querySelector(".projection-table")).toBeTruthy());
-    expect(screen.getAllByRole("figure").length).toBe(6);
+    expect(screen.getAllByRole("figure").length).toBe(9);
     expect(screen.queryByRole("figure", { name: "Income versus spending chart" })).toBeNull();
     expect(screen.getByRole("figure", { name: "Tax by component chart" })).toBeTruthy();
   });

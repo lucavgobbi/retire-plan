@@ -728,7 +728,7 @@ export function simulate(
         mortgage: roundCent(mortgagePrepay),
       },
       expenses: roundCent(expenses),
-      ...(rrifDue > 0 ? { rrifMinimumWithdrawal: roundCent(rrifDue) } : {}),
+      rrifMinimumWithdrawal: roundCent(rrifDue),
       expenseBreakdown,
       shortfall: roundCent(shortfall),
       balances: {

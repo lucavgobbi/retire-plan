@@ -520,10 +520,10 @@ describe("simulate — focused, hand-checked cases", () => {
     expect(y71.contributions.tfsa + y71.contributions.nonreg).toBe(0);
   });
 
-  it("omits the RRIF minimum detail before age 71", () => {
-    const p = plan((x) => {
-      x.profile.currentAge = 70;
-      x.profile.endAge = 71;
+  it("records zero RRIF minimums on fresh rows before age 71 and when no RRSP balance exists", () => {
+    const pre71 = plan((x) => {
+      x.profile.currentAge = 69;
+      x.profile.endAge = 70;
       x.accounts = [{ id: "rrsp", type: "rrsp", balance: 400_000, assetMix: { equity: 0, bond: 0, cash: 1 } }];
       x.assets = [];
       x.debts = [];
@@ -531,8 +531,19 @@ describe("simulate — focused, hand-checked cases", () => {
       x.expenses = [{ id: "life", name: "Life", annualAmount: 12_000, startAge: 70, inflationRate: 0 }];
       x.savingsPolicy = [];
     });
+    const noRrsp = plan((x) => {
+      x.profile.currentAge = 70;
+      x.profile.endAge = 72;
+      x.accounts = [];
+      x.assets = [];
+      x.debts = [];
+      x.incomes = [];
+      x.expenses = [];
+      x.savingsPolicy = [];
+    });
 
-    expect(run(p, detScenario(70)).years[0]!.rrifMinimumWithdrawal).toBeUndefined();
+    expect(run(pre71, detScenario(69)).years.map((year) => year.rrifMinimumWithdrawal)).toEqual([0, 0]);
+    expect(run(noRrsp, detScenario(70)).years.map((year) => year.rrifMinimumWithdrawal)).toEqual([0, 0, 0]);
   });
 });
 

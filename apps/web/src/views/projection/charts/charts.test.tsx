@@ -13,9 +13,16 @@ import { DrawDownChart } from "./DrawDownChart";
 import { IncomeSourcesChart } from "./IncomeSourcesChart";
 import { AccountFlowsChart } from "./AccountFlowsChart";
 import { ContributionRoomChart } from "./ContributionRoomChart";
+import { SpendingBreakdownChart } from "./SpendingBreakdownChart";
+import { RrifWithdrawalsChart } from "./RrifWithdrawalsChart";
+import { OasClawbackChart } from "./OasClawbackChart";
+import { EnsembleFanChart } from "./EnsembleFanChart";
+import { ShortfallRiskChart } from "./ShortfallRiskChart";
 import { incomeSpendSeries } from "./adapters";
+import { runDeterministic, runScenario } from "../../../domain/run";
+import { createDefaultPlan } from "../../../domain/defaults";
 import { yScale } from "./svg";
-import type { YearResult } from "@retire-plan/engine";
+import type { SimulationResult, YearResult } from "@retire-plan/engine";
 
 function renderView(workspace = makeWorkspace(), simulationRunner?: SimulationRunner) {
   return render(
@@ -25,7 +32,7 @@ function renderView(workspace = makeWorkspace(), simulationRunner?: SimulationRu
   );
 }
 
-const CHART_TITLES = [/net worth/i, /income vs spending/i, /income sources/i, /tax by component/i, /contributions vs withdrawals/i, /account drawdown/i, /contribution room/i];
+const CHART_TITLES = [/net worth/i, /income vs spending/i, /income sources/i, /tax by component/i, /contributions vs withdrawals/i, /account drawdown/i, /contribution room/i, /spending breakdown/i, /rrif vs rrsp withdrawals/i, /oas kept vs clawback/i];
 
 describe("DashboardSection (integration: plan → run → charts)", () => {
   it("shows shared busy state and disables its standalone run control", () => {
@@ -44,10 +51,10 @@ describe("DashboardSection (integration: plan → run → charts)", () => {
     expect(screen.getByText(/run the projection/i)).toBeTruthy();
   });
 
-  it("renders all seven chart titles after a run", async () => {
+  it("renders all ten chart titles after a deterministic run (MC charts omitted)", async () => {
     renderView();
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
-    await waitFor(() => expect(screen.getAllByRole("figure")).toHaveLength(7));
+    await waitFor(() => expect(screen.getAllByRole("figure")).toHaveLength(10));
     for (const title of CHART_TITLES) {
       // Title + hint may both mention the metric (e.g. "Net worth"); at least one card each.
       expect(screen.getAllByText(title).length).toBeGreaterThanOrEqual(1);
@@ -55,14 +62,206 @@ describe("DashboardSection (integration: plan → run → charts)", () => {
     // Every chart is an accessible figure with a labeled SVG.
     const svgs = screen.getAllByRole("figure").map((figure) => figure.querySelector("svg"));
     for (const svg of svgs) expect(svg?.getAttribute("aria-label")).toBeTruthy();
+    // Deterministic runs never clutter the dashboard with empty Monte Carlo charts.
+    expect(screen.queryAllByText(/Monte Carlo/i)).toHaveLength(0);
   });
 
   it("run-out plan still renders charts without NaN anywhere", async () => {
     renderView(makeWorkspace(makeRunOutPlan()));
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
-    await waitFor(() => expect(screen.getAllByRole("figure")).toHaveLength(7));
+    await waitFor(() => expect(screen.getAllByRole("figure")).toHaveLength(10));
     expect(screen.getAllByText(/net worth/i).length).toBeGreaterThanOrEqual(1);
     expect(document.body.textContent).not.toContain("NaN");
+  });
+});
+
+describe("legacy runs degrade honestly (no fabricated data)", () => {
+  function renderDashboard(result: SimulationResult) {
+    return render(
+      <StoreProvider initialWorkspace={makeWorkspace()} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={undefined}>
+        <DashboardSection result={result} />
+      </StoreProvider>,
+    );
+  }
+  const scenario = { id: "test", name: "Test", ...DEFAULT_SCENARIO_BASE, simMode: "deterministic" as const };
+
+  it("stored legacy years without per-item/RRIF capture show rerun notes, never fabricated charts", () => {
+    const result = runDeterministic(makeSamplePlan(), scenario);
+    const legacy: SimulationResult = {
+      ...result,
+      years: result.years.map(({ expenseBreakdown, rrifMinimumWithdrawal, ...year }) => year),
+    };
+    renderDashboard(legacy);
+    expect(screen.getAllByRole("figure")).toHaveLength(10); // deterministic: MC charts omitted entirely
+    // Exactly the two degraded charts carry an honest rerun note.
+    expect(screen.getAllByText(/run the projection again/i)).toHaveLength(2);
+    // No fabricated expense item bands anywhere.
+    expect(screen.queryByText("Living")).toBeNull();
+  });
+
+  it("fresh runs render real breakdown/RRIF/OAS charts with no rerun notes", () => {
+    renderDashboard(runDeterministic(makeSamplePlan(), scenario));
+    expect(screen.getAllByRole("figure")).toHaveLength(10);
+    expect(screen.queryAllByText(/run the projection again/i)).toHaveLength(0);
+    // The plan's expense item appears as a stable, colored legend entry.
+    expect(screen.getAllByText("Living").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("a fresh run with NO expenses shows a clear no-expenses display, not a rerun note", () => {
+    renderDashboard(runDeterministic(createDefaultPlan(), scenario));
+    expect(screen.getAllByRole("figure")).toHaveLength(10);
+    expect(screen.getAllByText(/no expense items/i)).toHaveLength(1); // real display, not a legacy rerun
+    expect(screen.queryAllByText(/run the projection again/i)).toHaveLength(0);
+  });
+
+  it("a fresh no-RRSP run records explicit 0 RRIF minimums — the RRIF chart renders, no legacy rerun note", () => {
+    renderDashboard(runDeterministic(makeRunOutPlan(), scenario));
+    expect(screen.getAllByRole("figure")).toHaveLength(10);
+    // Fresh capture (pre-71 / no-RRSP ⇒ recorded 0) never masquerades as a legacy run.
+    expect(screen.queryAllByText(/run the projection again/i)).toHaveLength(0);
+    expect(screen.getByRole("figure", { name: "RRIF versus RRSP withdrawals chart" })).toBeTruthy();
+  });
+});
+
+describe("Monte Carlo ensemble plumbing (production runner → charts)", () => {
+  const mcScenario = {
+    ...DEFAULT_SCENARIO_BASE,
+    simMode: "montecarlo" as const,
+    mcConfig: { runs: 12, stdDev: { equity: 0.17, bond: 0.06, cash: 0.01 }, seed: 42 },
+  };
+
+  it("runScenario forwards per-age annualStats on the analysis (not dropped in the adapter)", () => {
+    const outcome = runScenario(makeSamplePlan(), { id: "mc", name: "MC", ...mcScenario });
+    expect(outcome.analysis?.mode).toBe("montecarlo");
+    const analysis = outcome.analysis;
+    const stats = analysis?.mode === "montecarlo" ? analysis.annualStats : undefined;
+    expect(Array.isArray(stats)).toBe(true);
+    expect(stats!.length).toBeGreaterThanOrEqual(2);
+    for (const stat of stats!) {
+      expect(stat.netWorth.p10).toBeLessThanOrEqual(stat.netWorth.p50);
+      expect(stat.netWorth.p50).toBeLessThanOrEqual(stat.netWorth.p90);
+      expect(stat.shortfallRate).toBeGreaterThanOrEqual(0);
+      expect(stat.shortfallRate).toBeLessThanOrEqual(1);
+      expect(stat.sampleCount).toBeGreaterThan(0);
+    }
+    // The ensemble percentiles at the final age ARE the terminal percentiles (same paths).
+    const last = stats!.at(-1)!;
+    expect(last.netWorth.p10).toBeCloseTo(outcome.analysis!.percentileNetWorth.p10, 0);    expect(last.netWorth.p50).toBeCloseTo(outcome.analysis!.percentileNetWorth.p50, 0);
+    expect(last.netWorth.p90).toBeCloseTo(outcome.analysis!.percentileNetWorth.p90, 0);
+  });
+
+  it("dashboard renders BOTH ensemble charts from a real MC run through the store (no blank MC charts)", async () => {
+    const runner: SimulationRunner = async (plan, scenario) =>
+      runScenario(plan, { ...scenario, simMode: "montecarlo", mcConfig: mcScenario.mcConfig });
+    renderView(makeWorkspace(), runner);
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(screen.getAllByRole("figure")).toHaveLength(12));
+    expect(screen.getByText(/Net worth range \(Monte Carlo\)/)).toBeTruthy();
+    expect(screen.getByText(/Shortfall risk by age \(Monte Carlo\)/)).toBeTruthy();
+    expect(screen.queryAllByText(/run the projection again/i)).toHaveLength(0);
+    // Ensemble charts are visually marked as aggregates, distinct from single-path charts.
+    expect(document.querySelectorAll('svg[data-ensemble="true"]')).toHaveLength(2);
+  });
+
+  it("legacy MC analysis (no annual stats) shows honest rerun notes for both MC charts", async () => {
+    const result = runDeterministic(makeSamplePlan(), { id: "base", name: "Base", ...DEFAULT_SCENARIO_BASE, simMode: "deterministic" as const });
+    const runner: SimulationRunner = async () => ({
+      result,
+      analysis: { mode: "montecarlo", successRate: 0.9, percentileNetWorth: { p10: 100, p50: 200, p90: 300 }, representativeRun: 1 },
+    });
+    renderView(makeWorkspace(), runner);
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(screen.getAllByRole("figure")).toHaveLength(12));
+    // Exactly the two MC charts carry a run-again note; nothing is synthesized.
+    expect(screen.getAllByText(/run the projection again/i)).toHaveLength(2);
+    expect(document.querySelectorAll('svg[data-ensemble="true"]')).toHaveLength(0);
+  });
+});
+
+describe("new chart components (direct render)", () => {
+  it("SpendingBreakdownChart: one band per item; tooltip shows items plus the authoritative total", () => {
+    const series = {
+      items: [{ id: "e1", name: "Food" }, { id: "e2", name: "Travel" }],
+      points: [
+        { x: 60, total: 150.004, amounts: [100, 50] },
+        { x: 61, total: 170, amounts: [110, 60] },
+      ],
+    };
+    const { container } = render(<SpendingBreakdownChart series={series} />);
+    const bands = container.querySelectorAll("path[data-series]");
+    expect(bands).toHaveLength(2);
+    expect(bands[0]!.getAttribute("data-series")).toBe("Food");
+    expect(bands[1]!.getAttribute("data-series")).toBe("Travel");
+    const svg = container.querySelector("svg")!;
+    fireEvent.focus(svg); // keyboard interaction → age 60
+    fireEvent.keyDown(svg, { key: "ArrowRight" }); // → age 61
+    expect(container.textContent).toContain("Food");
+    expect(container.textContent).toContain("Travel");
+    expect(container.textContent).toContain("Total spending");
+    expect(container.textContent).toContain("170"); // authoritative engine total, not a recomputed sum
+  });
+
+  it("RrifWithdrawalsChart: actual vs minimum lines; tooltip includes the planned extra draw when present", () => {
+    const points = [
+      { x: 60, minimum: null, actual: 1200, planned: 0 },
+      { x: 72, minimum: 2000, actual: 2500, planned: 500 },
+    ];
+    const { container } = render(<RrifWithdrawalsChart points={points} />);
+    expect(container.querySelectorAll("polyline[data-series]")).toHaveLength(2);
+    expect(container.querySelector('polyline[data-series="RRIF minimum"]')).toBeTruthy();
+    expect(container.querySelector('polyline[data-series="Actual RRSP withdrawals"]')).toBeTruthy();
+    const svg = container.querySelector("svg")!;
+    fireEvent.focus(svg);
+    fireEvent.keyDown(svg, { key: "ArrowRight" }); // → age 72
+    expect(container.textContent).toContain("RRIF minimum");
+    expect(container.textContent).toContain("Planned extra draw");
+  });
+
+  it("OasClawbackChart: kept + clawback bands; tooltip rows prove the gross/kept/charge mapping", () => {
+    const points = [{ x: 70, gross: 750, kept: 537.6, clawback: 212.4 }];
+    const { container } = render(<OasClawbackChart points={points} />);
+    const bands = container.querySelectorAll("path[data-series]");
+    expect(bands).toHaveLength(2);
+    expect(bands[0]!.getAttribute("data-series")).toBe("OAS kept");
+    expect(bands[1]!.getAttribute("data-series")).toBe("OAS clawback");
+    const svg = container.querySelector("svg")!;
+    fireEvent.focus(svg);
+    expect(container.textContent).toContain("Gross OAS");
+    expect(container.textContent).toContain("OAS kept");
+    expect(container.textContent).toContain("OAS clawback");
+  });
+
+  it("EnsembleFanChart: p10–p90 band with dashed median, marked as an ensemble; tooltip counts paths", () => {
+    const points = [
+      { age: 65, netWorth: { p10: 100, p50: 200, p90: 300 }, shortfallRate: 0, sampleCount: 500 },
+      { age: 66, netWorth: { p10: 90, p50: 180, p90: 280 }, shortfallRate: 0.12, sampleCount: 500 },
+    ];
+    const { container } = render(<EnsembleFanChart points={points} />);
+    expect(container.querySelector('svg[data-ensemble="true"]')).toBeTruthy();
+    expect(container.querySelector('path[data-series="p10–p90 band"]')).toBeTruthy();
+    expect(container.querySelector('polyline[data-series="Median (p50)"]')).toBeTruthy();
+    const svg = container.querySelector("svg")!;
+    fireEvent.focus(svg);
+    fireEvent.keyDown(svg, { key: "ArrowRight" });
+    expect(container.textContent).toContain("Paths simulated");
+    expect(container.textContent).toContain("500");
+  });
+
+  it("ShortfallRiskChart: fixed 0–100% axis with percent ticks; tooltip is percent, never currency", () => {
+    const points = [
+      { age: 65, netWorth: { p10: 100, p50: 200, p90: 300 }, shortfallRate: 0, sampleCount: 500 },
+      { age: 66, netWorth: { p10: 90, p50: 180, p90: 280 }, shortfallRate: 0.125, sampleCount: 500 },
+    ];
+    const { container } = render(<ShortfallRiskChart points={points} />);
+    expect(container.querySelector('svg[data-ensemble="true"]')).toBeTruthy();
+    // Fixed percent axis: extreme ticks are exactly 0% and 100%.
+    expect(container.textContent).toContain("0%");
+    expect(container.textContent).toContain("100%");
+    const svg = container.querySelector("svg")!;
+    fireEvent.focus(svg);
+    fireEvent.keyDown(svg, { key: "ArrowRight" }); // → age 66, risk 0.125
+    expect(container.textContent).toContain("12.5%"); // percent row format
+    expect(container.textContent).not.toContain("$"); // never currency
   });
 });
 
@@ -333,6 +532,6 @@ describe("individual charts render as SVG", () => {
   it("charts render with the sample plan after a full run (smoke via view)", async () => {
     renderView(makeWorkspace(makeSamplePlan()));
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
-    await waitFor(() => expect(screen.getAllByRole("figure")).toHaveLength(7));
+    await waitFor(() => expect(screen.getAllByRole("figure")).toHaveLength(10));
   });
 });

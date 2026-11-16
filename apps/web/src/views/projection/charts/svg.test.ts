@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { domainOf, stackedBandPaths, yScale } from "./svg";
+import { bandBetweenPaths, domainOf, stackedBandPaths, yScale } from "./svg";
 
 /** Two positive stacked series at two x points — the minimal occlusion geometry. */
 const TWO_SERIES = {
@@ -64,3 +64,28 @@ describe("stackedBandPaths geometry", () => {
 function formatY(value: number, domain: [number, number]): string {
   return yScale(value, domain).toFixed(1); // mirrors the precision used inside stackedBandPaths
 }
+
+describe("bandBetweenPaths geometry (fan / risk bands)", () => {
+  const yDomain = domainOf([300]);
+
+  it("fills ONLY the slice between the two edges (never down to the zero baseline)", () => {
+    const path = bandBetweenPaths([0, 1], [300, 300], [100, 100], yDomain);
+    expect(path).toBeTruthy();
+    expect(path).not.toContain(formatY(0, yDomain)); // never anchors at the baseline
+    expect(path).toContain(formatY(100, yDomain)); // rides the lower edge
+    expect(path).toContain(formatY(300, yDomain)); // reaches the upper edge
+  });
+
+  it("a non-finite edge sample is a GAP: the band splits, never inventing coverage", () => {
+    const path = bandBetweenPaths([0, 1, 2], [300, NaN, 300], [100, 100, 100], yDomain);
+    const segments = path.split("M").filter((s) => s.trim() !== "");
+    expect(segments).toHaveLength(2); // one segment each side of the gap
+  });
+
+  it("an isolated single point renders a 3px sliver spanning its own top→bottom slice", () => {
+    const path = bandBetweenPaths([0, 1, 2], [NaN, 200, NaN], [NaN, 100, NaN], yDomain);
+    expect(path).toContain(formatY(100, yDomain));
+    expect(path).toContain(formatY(200, yDomain));
+    expect(path).not.toContain(formatY(0, yDomain));
+  });
+});
