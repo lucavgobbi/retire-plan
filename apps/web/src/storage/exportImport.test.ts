@@ -174,6 +174,33 @@ describe("parsePlanFile", () => {
     }
   });
 
+  it("round-trips an employment bonus rate; legacy files without it (or with an explicit 0) load unchanged", () => {
+    const ws = makeSampleWorkspace();
+    const salary = ws.plan.incomes.find(income => income.kind === "employment")!;
+    salary.bonusRate = 0.1;
+    const parsed = parsePlanFile(JSON.parse(workspaceToText(ws)));
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.workspace.plan.incomes.find(income => income.kind === "employment")?.bonusRate).toBe(0.1);
+      expect(buildPlanFile(parsed.workspace)).toEqual(buildPlanFile(ws));
+    }
+    // Legacy file: no bonusRate key anywhere — loads with the field absent.
+    const legacy = parsePlanFile(JSON.parse(workspaceToText(makeSampleWorkspace())));
+    expect(legacy.ok).toBe(true);
+    if (legacy.ok) {
+      const legacySalary = legacy.workspace.plan.incomes.find(income => income.kind === "employment")!;
+      expect("bonusRate" in legacySalary).toBe(false);
+    }
+    // Explicit zero is a valid stored value and survives the round trip.
+    const zero = makeSampleWorkspace();
+    (zero.plan.incomes.find(income => income.kind === "employment") as { bonusRate?: number }).bonusRate = 0;
+    const zeroParsed = parsePlanFile(JSON.parse(workspaceToText(zero)));
+    expect(zeroParsed.ok).toBe(true);
+    if (zeroParsed.ok) {
+      expect(zeroParsed.workspace.plan.incomes.find(income => income.kind === "employment")?.bonusRate).toBe(0);
+    }
+  });
+
   it("records migratedFrom for pre-versioning files", () => {
     const raw = JSON.parse(JSON.stringify(buildPlanFile(makeSampleWorkspace()))) as Record<string, unknown>;
     delete raw.schemaVersion;

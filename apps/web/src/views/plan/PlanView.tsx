@@ -11,7 +11,7 @@ import type {
 import { calculateCurrentAge, useWorkspace } from "../../store/api";
 import { NumberTextInput } from "../../components/NumberTextInput";
 import { InlineEditorPanel } from "../../components/InlineEditorPanel";
-import { fmtMoney, fmtPercent } from "../projection/fmt";
+import { fmtMoney, fmtPercent, fmtPercentInput } from "../projection/fmt";
 import { BenefitAmountGuide } from "./BenefitAmountGuide";
 import "./planView.css";
 
@@ -24,11 +24,11 @@ function makeId(prefix: string): string {
     : `${prefix}-${Date.now()}`;
 }
 
-function TextInput({ label, value, onChange, step, min, optional = false, group = true }: {
-  label: string; value: string; onChange: (value: string) => void; step?: string; min?: string; optional?: boolean; group?: boolean;
+function TextInput({ label, value, onChange, step, min, optional = false, group = true, keepInvalidDraft = false }: {
+  label: string; value: string; onChange: (value: string) => void; step?: string; min?: string; optional?: boolean; group?: boolean; keepInvalidDraft?: boolean;
 }) {
   return <label className="plan-field"><span className="field-label">{label}{optional && <span className="plan-optional"> · optional</span>}</span>
-    <NumberTextInput step={step ?? "any"} min={min} group={group} allowNegative={min === undefined || Number(min) < 0}
+    <NumberTextInput step={step ?? "any"} min={min} group={group} keepInvalidDraft={keepInvalidDraft} allowNegative={min === undefined || Number(min) < 0}
       value={value} onChange={onChange} />
   </label>;
 }
@@ -267,9 +267,9 @@ function DebtForm({ debt, onApply, onRemove, onClose }: { debt: DebtPlan; onAppl
   </ItemForm>;
 }
 
-interface IncomeDraft { id: string; name: string; kind: IncomePlan["kind"]; annualAmount: string; startAge: string; endAge: string; raiseRate: string }
-function incomeDraft(income: IncomePlan): IncomeDraft { return { id: income.id, name: income.name ?? "", kind: income.kind, annualAmount: String(income.annualAmount), startAge: String(income.startAge), endAge: income.endAge === undefined ? "" : String(income.endAge), raiseRate: String(income.raiseRate * 100) }; }
-function newIncomeDraft(kind: IncomePlan["kind"], currentAge: number, retirementAge: number): IncomeDraft { return { id: makeId("income"), name: "", kind, annualAmount: "0", startAge: String(currentAge), endAge: kind === "employment" ? String(Math.max(currentAge, retirementAge - 1)) : "", raiseRate: kind === "employment" ? "2" : "0" }; }
+interface IncomeDraft { id: string; name: string; kind: IncomePlan["kind"]; annualAmount: string; startAge: string; endAge: string; raiseRate: string; bonusRate: string }
+function incomeDraft(income: IncomePlan): IncomeDraft { return { id: income.id, name: income.name ?? "", kind: income.kind, annualAmount: String(income.annualAmount), startAge: String(income.startAge), endAge: income.endAge === undefined ? "" : String(income.endAge), raiseRate: String(income.raiseRate * 100), bonusRate: income.bonusRate === undefined ? "" : fmtPercentInput(income.bonusRate) }; }
+function newIncomeDraft(kind: IncomePlan["kind"], currentAge: number, retirementAge: number): IncomeDraft { return { id: makeId("income"), name: "", kind, annualAmount: "0", startAge: String(currentAge), endAge: kind === "employment" ? String(Math.max(currentAge, retirementAge - 1)) : "", raiseRate: kind === "employment" ? "2" : "0", bonusRate: "" }; }
 const INCOME_LABELS: Record<IncomePlan["kind"], string> = { employment: "Employment", cpp: "CPP", oas: "OAS", other: "Other" };
 function readIncomeDraft(draft: IncomeDraft): { errors: string[]; item: IncomePlan } {
   const errors: string[] = [];
@@ -277,19 +277,44 @@ function readIncomeDraft(draft: IncomeDraft): { errors: string[]; item: IncomePl
   const startAge = requiredInteger(draft.startAge, "Start age", errors, 1);
   const endAge = optionalInteger(draft.endAge, "End age", errors, 1);
   const raiseRate = requiredNumber(draft.raiseRate, "Annual raise (%)", errors) / 100;
+  // Bonus (employment only, fraction of the raised base): blank = intentional
+  // unset, so the patch always carries the key — an explicit `bonusRate: undefined`
+  // makes the plan/updateItem merge ({ ...stored, ...patch }) actually REMOVE a
+  // previously stored bonus, mirroring the planned-sale checkbox fix. (JSON
+  // autosave drops undefined; validation and the engine treat it as "no bonus".)
+  const bonusPct = draft.kind === "employment" ? optionalNumber(draft.bonusRate, "Annual bonus (%)", errors, 0) : undefined;
+  const bonusRate = bonusPct === undefined ? undefined : bonusPct / 100;
   if (endAge !== undefined && endAge < startAge) errors.push("End age must be on or after start age.");
-  return { errors, item: { id: draft.id, name: draft.name.trim() === "" ? undefined : draft.name.trim(), kind: draft.kind, annualAmount, startAge, ...(endAge === undefined ? {} : { endAge }), raiseRate } };
+  return { errors, item: { id: draft.id, name: draft.name.trim() === "" ? undefined : draft.name.trim(), kind: draft.kind, annualAmount, startAge, ...(endAge === undefined ? {} : { endAge }), raiseRate, bonusRate } };
+}
+/**
+ * Live preview of the STARTING annual pay: the configured annual amount is the
+ * base at the salary's start age (raises then apply by age, exactly as before),
+ * so the wording anchors to that start age rather than a projection-relative
+ * "year 1" — the stream may start in the future or already be running.
+ */
+function bonusPreview(draft: IncomeDraft): string | null {
+  if (draft.kind !== "employment") return null;
+  const base = Number(draft.annualAmount);
+  const pct = Number(draft.bonusRate);
+  if (draft.annualAmount.trim() === "" || draft.bonusRate.trim() === "" || !Number.isFinite(base) || !Number.isFinite(pct) || pct <= 0) return null;
+  const bonus = base * pct / 100;
+  return `Starting annual pay at age ${draft.startAge}: ${fmtMoney(base)} base + ${fmtMoney(bonus)} bonus = ${fmtMoney(base + bonus)}`;
 }
 function IncomeForm({ income, onApply, onRemove, onClose }: { income: IncomePlan; onApply: (item: IncomePlan) => void; onRemove: () => void; onClose: () => void }) {
   const { draft, change, errors } = useAutoApplyForm(income, incomeDraft, readIncomeDraft, onApply);
   return <ItemForm title={draft.name.trim() || INCOME_LABELS[draft.kind]} errors={errors} onRemove={onRemove} onClose={onClose}>
     <TextField label="Name" value={draft.name} onChange={name => change({ name })} optional />
-    <SelectField label="Income type" value={draft.kind} choices={["employment", "cpp", "oas", "other"] as const} labels={INCOME_LABELS} onChange={kind => change({ kind, ...(kind === "employment" ? {} : { endAge: "" }) })} />
+    <SelectField label="Income type" value={draft.kind} choices={["employment", "cpp", "oas", "other"] as const} labels={INCOME_LABELS} onChange={kind => change({ kind, ...(kind === "employment" ? {} : { endAge: "", bonusRate: "" }) })} />
     <TextInput label="Annual amount ($)" value={draft.annualAmount} min="0" onChange={annualAmount => change({ annualAmount })} />
     <TextInput label="Start age" value={draft.startAge} min="1" step="1" onChange={startAge => change({ startAge })} />
     {(draft.kind === "cpp" || draft.kind === "oas") && <BenefitAmountGuide kind={draft.kind} startAge={draft.startAge} onUseAnnualAmount={annualAmount => change({ annualAmount: annualAmount.toFixed(2) })} />}
     <TextInput label="End age" value={draft.endAge} min="1" step="1" optional onChange={endAge => change({ endAge })} />
     <TextInput label="Annual raise / indexing (%)" value={draft.raiseRate} onChange={raiseRate => change({ raiseRate })} />
+    {draft.kind === "employment" && <>
+      <TextInput label="Annual bonus (%)" value={draft.bonusRate} min="0" optional keepInvalidDraft onChange={bonusRate => change({ bonusRate })} />
+      {bonusPreview(draft) !== null && <p className="plan-help">{bonusPreview(draft)}</p>}
+    </>}
     <ApplyNotice errors={errors} />
   </ItemForm>;
 }
@@ -427,9 +452,11 @@ function DebtSummary({ debt, editing, onEdit }: { debt: DebtPlan; editing: boole
 
 function IncomeSummary({ income, editing, onEdit }: { income: IncomePlan; editing: boolean; onEdit: () => void }) {
   const kind = INCOME_LABELS[income.kind];
-  return <ReadOnlyItemCard title={income.name || kind} badge={kind} primaryLabel="Configured annual amount" primaryValue={fmtMoney(income.annualAmount)} details={[
-    ["Active ages", `${income.startAge}–${income.endAge ?? "ongoing"}`], ["Annual raise / indexing", fmtPercent(income.raiseRate)],
-  ]} editing={editing} onEdit={onEdit} />;
+  const details: [string, string][] = [["Active ages", `${income.startAge}–${income.endAge ?? "ongoing"}`], ["Annual raise / indexing", fmtPercent(income.raiseRate)]];
+  if (income.kind === "employment" && (income.bonusRate ?? 0) > 0) {
+    details.push(["Annual bonus", fmtPercent(income.bonusRate!)], ["Starting annual pay", fmtMoney(income.annualAmount * (1 + income.bonusRate!))]);
+  }
+  return <ReadOnlyItemCard title={income.name || kind} badge={kind} primaryLabel="Configured annual amount" primaryValue={fmtMoney(income.annualAmount)} details={details} editing={editing} onEdit={onEdit} />;
 }
 
 function ExpenseSummary({ expense, editing, onEdit }: { expense: ExpensePlan; editing: boolean; onEdit: () => void }) {

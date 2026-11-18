@@ -45,12 +45,22 @@ export function NumberTextInput({
   onChange,
   allowNegative = true,
   group = true,
+  keepInvalidDraft = false,
   ...props
 }: Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "value" | "onChange"> & {
   value: string;
   onChange: (value: string) => void;
   allowNegative?: boolean;
   group?: boolean;
+  /**
+   * Opt-in: when the typed/pasted text contains no numeric characters at all
+   * (e.g. a pasted "NaN"), the default cleaning collapses it to "", which the
+   * owning field cannot distinguish from an intentional blank. Passing the raw
+   * text through lets the field's own validation reject it as invalid instead
+   * of silently clearing a previously stored value. Off by default so every
+   * existing field keeps its cleaning behavior.
+   */
+  keepInvalidDraft?: boolean;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const pendingCaret = useRef<number | null>(null);
@@ -77,7 +87,7 @@ export function NumberTextInput({
       const caret = semanticLength(element.value, element.selectionStart ?? element.value.length);
       const clean = cleanNumericDraft(element.value, allowNegative);
       pendingCaret.current = caret;
-      onChange(clean);
+      onChange(keepInvalidDraft && element.value.trim() !== "" && clean === "" ? element.value : clean);
     }}
   />;
 }

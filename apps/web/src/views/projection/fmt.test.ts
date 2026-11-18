@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fmtMoney, fmtMoneyDetail, fmtPercent, yearForAge } from "./fmt";
+import { fmtMoney, fmtMoneyDetail, fmtPercent, fmtPercentInput, yearForAge } from "./fmt";
 
 describe("fmtMoney — never-NaN rule", () => {
   it("formats finite money with thousands separators, symbol, no decimals", () => {
@@ -29,6 +29,15 @@ describe("fmtPercent", () => {
   it("renders em dashes for non-finite fractions", () => {
     expect(fmtPercent(NaN)).toBe("—");
     expect(fmtPercent(Infinity)).toBe("—");
+  });
+});
+
+describe("fmtPercentInput — percent text for stored rates in editable drafts", () => {
+  it("removes float binary noise while preserving real decimal precision", () => {
+    expect(fmtPercentInput(0.07)).toBe("7");
+    expect(fmtPercentInput(0.1)).toBe("10");
+    expect(fmtPercentInput(0.055)).toBe("5.5");
+    expect(fmtPercentInput(0.0435)).toBe("4.35");
   });
 });
 

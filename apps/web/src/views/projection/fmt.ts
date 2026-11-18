@@ -35,6 +35,16 @@ export function fmtPercent(fraction: number | undefined | null): string {
     : "—";
 }
 
+/**
+ * Percent text for a stored rate in an editable draft, preserving decimal precision
+ * (5.5% stays "5.5", never rounds to "6"). Rounds away float binary noise
+ * (0.07→7.000000000000001) at the 10th decimal of the percent value — far below any
+ * meaningful input precision. Shared so every percent draft field reopens cleanly.
+ */
+export function fmtPercentInput(rate: number): string {
+  return String(Math.round(rate * 1e12) / 1e10);
+}
+
 /** YearResult carries no calendar year: the engine derives it as birthYear + age. */
 export function yearForAge(birthYear: number, age: number): number {
   return birthYear + age;

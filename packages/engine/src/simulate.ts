@@ -272,7 +272,16 @@ export function simulate(
     for (const s of plan.incomes) {
       if (!isActive(s)) continue;
       const amount = grown(s);
-      if (s.kind === "employment") employment += amount;
+      if (s.kind === "employment") {
+        // Annual bonus (optional fraction of the raised base, 10% = 0.1): paid the
+        // same year as the raised base — no separate payout date — and counted ONCE
+        // in this year's gross employment income, so the existing tax, GIS
+        // employment-income test, RRSP room earned, and surplus/savings allocation
+        // all see it through their normal paths. Absent/0 = no bonus (legacy).
+        const bonusRate = s.bonusRate ?? 0;
+        const bonus = bonusRate > 0 ? roundCent(amount * bonusRate) : 0;
+        employment += amount + bonus;
+      }
       else if (s.kind === "cpp" && benefits.cpp) cpp += amount;
       else if (s.kind === "oas" && benefits.oas) oas += amount;
       else if (s.kind === "other") otherPlan += amount;

@@ -361,4 +361,123 @@ describe("PlanView", () => {
     fireEvent.change(screen.getByLabelText("Payment frequency"), { target: { value: "monthly" } });
     expect(planState().debts[0]?.paymentFrequency).toBeUndefined();
   });
+
+  describe("employment bonus percentage", () => {
+    function salaryWorkspace() {
+      const workspace = createEmptyWorkspace();
+      workspace.plan.incomes = [
+        { id: "salary", name: "Day job", kind: "employment", annualAmount: 95_000, startAge: 45, endAge: 64, raiseRate: 0.02 },
+      ];
+      return workspace;
+    }
+
+    function openSalaryEditor() {
+      fireEvent.click(screen.getByRole("tab", { name: "Income" }));
+      const card = screen.getByRole("region", { name: "Day job summary" });
+      fireEvent.click(within(card).getByRole("button", { name: "Edit" }));
+    }
+
+    it("applies a typed percentage while typing, with no arbitrary 100% cap", () => {
+      renderPlan(undefined, salaryWorkspace());
+      openSalaryEditor();
+      fireEvent.change(screen.getByLabelText(/Annual bonus/), { target: { value: "1" } });
+      expect(planState().incomes[0]?.bonusRate).toBe(0.01);
+      fireEvent.change(screen.getByLabelText(/Annual bonus/), { target: { value: "10" } });
+      expect(planState().incomes[0]?.bonusRate).toBe(0.1);
+      fireEvent.change(screen.getByLabelText(/Annual bonus/), { target: { value: "150" } });
+      expect(planState().incomes[0]?.bonusRate).toBe(1.5);
+    });
+
+    it("previews the starting annual pay while editing and on the read card", () => {
+      renderPlan(undefined, salaryWorkspace());
+      openSalaryEditor();
+      fireEvent.change(screen.getByLabelText(/Annual bonus/), { target: { value: "10" } });
+      const preview = screen.getByText(/Starting annual pay/i);
+      expect(preview.textContent).toMatch(/\$9,500/);
+      expect(preview.textContent).toMatch(/\$104,500/);
+      fireEvent.click(screen.getByRole("button", { name: "Close editor" }));
+      const card = screen.getByRole("region", { name: "Day job summary" });
+      expect(card.textContent).toContain("Annual bonus");
+      expect(card.textContent).toContain("10.0%");
+      expect(card.textContent).toContain("Starting annual pay");
+      expect(card.textContent).toContain("$104,500");
+    });
+
+    it("reopens a stored fraction as clean percent text (0.07 shows 7, not float noise)", () => {
+      const workspace = salaryWorkspace();
+      workspace.plan.incomes = [{ ...workspace.plan.incomes[0]!, bonusRate: 0.07 }];
+      renderPlan(undefined, workspace);
+      openSalaryEditor();
+      expect((screen.getByLabelText(/Annual bonus/) as HTMLInputElement).value).toBe("7");
+      fireEvent.change(screen.getByLabelText(/Annual bonus/), { target: { value: "7" } });
+      expect(planState().incomes[0]?.bonusRate).toBe(0.07);
+    });
+
+    it("rejects negative bonus values without touching the store", () => {
+      renderPlan(undefined, salaryWorkspace());
+      openSalaryEditor();
+      fireEvent.change(screen.getByLabelText(/Annual bonus/), { target: { value: "10" } });
+      expect(planState().incomes[0]?.bonusRate).toBe(0.1);
+      fireEvent.change(screen.getByLabelText(/Annual bonus/), { target: { value: "-5" } });
+      expect(screen.getByText(/not applied/i)).toBeTruthy();
+      expect(planState().incomes[0]?.bonusRate).toBe(0.1);
+    });
+
+    it("treats pasted non-numeric text as invalid, never as an intentional blank", () => {
+      // NumberTextInput's cleaning strips letters, so pasting "NaN" must reach the
+      // field as raw invalid text (opt-in) instead of collapsing to "" — otherwise
+      // a garbage paste would silently wipe the stored bonus. A deliberate blank
+      // still clears it via the explicit unset.
+      const workspace = salaryWorkspace();
+      workspace.plan.incomes = [{ ...workspace.plan.incomes[0]!, bonusRate: 0.1 }];
+      renderPlan(undefined, workspace);
+      openSalaryEditor();
+      fireEvent.change(screen.getByLabelText(/Annual bonus/), { target: { value: "NaN" } });
+      expect((screen.getByLabelText(/Annual bonus/) as HTMLInputElement).value).toBe("NaN");
+      expect(screen.getByText(/not applied/i)).toBeTruthy();
+      expect(planState().incomes[0]?.bonusRate).toBe(0.1);
+      fireEvent.change(screen.getByLabelText(/Annual bonus/), { target: { value: "" } });
+      expect("bonusRate" in planState().incomes[0]!).toBe(false);
+    });
+
+    it("clears the stored bonus when the field is blanked (explicit unset, not retained)", () => {
+      const workspace = salaryWorkspace();
+      workspace.plan.incomes = [{ ...workspace.plan.incomes[0]!, bonusRate: 0.1 }];
+      renderPlan(undefined, workspace);
+      openSalaryEditor();
+      expect((screen.getByLabelText(/Annual bonus/) as HTMLInputElement).value).toBe("10");
+      fireEvent.change(screen.getByLabelText(/Annual bonus/), { target: { value: "" } });
+      expect("bonusRate" in planState().incomes[0]!).toBe(false);
+    });
+
+    it("clears the stored bonus when the kind changes away from employment and shows no bonus field for other kinds", () => {
+      const workspace = salaryWorkspace();
+      workspace.plan.incomes = [{ ...workspace.plan.incomes[0]!, bonusRate: 0.1 }];
+      renderPlan(undefined, workspace);
+      openSalaryEditor();
+      fireEvent.change(screen.getByLabelText("Income type"), { target: { value: "other" } });
+      expect(screen.queryByLabelText(/Annual bonus/)).toBeNull();
+      const stored = planState().incomes[0]!;
+      expect(stored.kind).toBe("other");
+      expect("bonusRate" in stored).toBe(false);
+      // The plan stays valid after the switch — no stale salary-only field lingers.
+      expect(screen.queryByText(/not applied/i)).toBeNull();
+      fireEvent.change(screen.getByLabelText("Income type"), { target: { value: "employment" } });
+      expect((screen.getByLabelText(/Annual bonus/) as HTMLInputElement).value).toBe("");
+      expect(planState().incomes[0]?.bonusRate).toBeUndefined();
+    });
+
+    it("leaves legacy employment incomes without a bonus untouched and adds none by default", () => {
+      renderPlan(undefined, salaryWorkspace());
+      openSalaryEditor();
+      const bonusInput = screen.getByLabelText(/Annual bonus/) as HTMLInputElement;
+      expect(bonusInput.value).toBe("");
+      fireEvent.click(screen.getByRole("button", { name: "Close editor" }));
+      expect("bonusRate" in planState().incomes[0]!).toBe(false);
+
+      fireEvent.click(screen.getByRole("button", { name: "Add employment" }));
+      expect("bonusRate" in planState().incomes[1]!).toBe(false);
+      expect(planState().incomes[1]).toMatchObject({ kind: "employment", raiseRate: 0.02 });
+    });
+  });
 });

@@ -6,6 +6,7 @@ import { NumberTextInput } from "../../components/NumberTextInput";
 import { FormSection } from "../../components/FormSection";
 import { InlineEditorPanel } from "../../components/InlineEditorPanel";
 import { TAX_MINIMIZING_STRATEGY_HELP } from "../../content/assumptions";
+import { fmtPercentInput } from "../projection/fmt";
 import { ACCOUNT_TYPE_LABELS, cashOrderPosition, INVESTMENT_ACCOUNT_TYPES, investmentOrder, orderWithCashPosition, swapOrderPosition, type CashOrderPosition } from "../../domain/accountOrder";
 
 const ACCOUNT_TYPES: AccountType[] = [...INVESTMENT_ACCOUNT_TYPES];
@@ -39,15 +40,6 @@ type FullOverrides = {
   returnAssumptions: { equity: number; bond: number; cash: number };
   withdrawalOrder: AccountType[];
 };
-
-/**
- * Percent text for a stored rate, preserving decimal precision (5.5% stays "5.5",
- * never rounds to "6"). Rounds away float binary noise (0.07→7.000000000000001)
- * at the 10th decimal of the percent value — far below any meaningful input precision.
- */
-function fmtPercentInput(rate: number): string {
-  return String(Math.round(rate * 1e12) / 1e10);
-}
 
 function effectiveOverrides(delta: ScenarioDelta | null, base: ScenarioBase): FullOverrides {
   return {

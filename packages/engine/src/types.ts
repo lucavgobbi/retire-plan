@@ -51,6 +51,12 @@ export interface IncomePlan {
   startAge: number;
   endAge?: number;
   raiseRate: number;
+  /**
+   * Optional annual bonus as a FRACTION of the raised annual base (10% = 0.1);
+   * employment income only. Absent or 0 means no bonus (legacy plans).
+   * The bonus is paid the same year as the raised base — no separate payout date.
+   */
+  bonusRate?: number;
 }
 
 export interface ExpensePlan {
@@ -315,6 +321,17 @@ export function validatePlan(plan: Plan): string[] {
       errors.push(
         `Income "${income.id}" endAge (${income.endAge}) is before its startAge (${income.startAge}); it must end at or after when it starts.`,
       );
+    }
+    if (income.bonusRate !== undefined) {
+      if (!Number.isFinite(income.bonusRate) || income.bonusRate < 0) {
+        errors.push(
+          `Income "${income.id}" bonusRate must be a non-negative finite fraction of the annual base, e.g. 0.1 for 10% (got ${income.bonusRate}).`,
+        );
+      } else if (income.kind !== "employment") {
+        errors.push(
+          `Income "${income.id}" bonusRate is supported only for employment income (remove it from this ${income.kind} stream).`,
+        );
+      }
     }
   }
 

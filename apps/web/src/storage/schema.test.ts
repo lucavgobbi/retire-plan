@@ -208,6 +208,36 @@ describe("structural schema checks", () => {
     plan.debts[0]!.paymentFrequency = "daily";
     expect(validatePlanShape(plan).some((e) => e.includes("paymentFrequency"))).toBe(true);
   });
+
+  describe("income bonusRate", () => {
+    it("accepts employment bonus fractions including 0 and above 100%", () => {
+      const plan = sample() as { incomes: Record<string, unknown>[] };
+      plan.incomes[0]!.bonusRate = 0.1;
+      expect(validatePlanShape(plan)).toEqual([]);
+      plan.incomes[0]!.bonusRate = 0;
+      expect(validatePlanShape(plan)).toEqual([]);
+      plan.incomes[0]!.bonusRate = 1.5;
+      expect(validatePlanShape(plan)).toEqual([]);
+    });
+
+    it("rejects negative, non-finite, and non-employment bonus rates", () => {
+      const plan = sample() as { incomes: Record<string, unknown>[] };
+      plan.incomes[0]!.bonusRate = -0.1;
+      expect(validatePlanShape(plan).some((e) => e.includes("bonusRate"))).toBe(true);
+      plan.incomes[0]!.bonusRate = Number.POSITIVE_INFINITY;
+      expect(validatePlanShape(plan).some((e) => e.includes("bonusRate"))).toBe(true);
+      plan.incomes[0]!.bonusRate = 0.1;
+      plan.incomes[0]!.kind = "cpp";
+      expect(validatePlanShape(plan).some((e) => e.includes("bonusRate") && e.includes("employment"))).toBe(true);
+    });
+
+    it("loads legacy files whose incomes have no bonusRate at all", () => {
+      // The golden sample carries no bonusRate — legacy files stay valid untouched.
+      const plan = sample() as { incomes: Record<string, unknown>[] };
+      expect("bonusRate" in plan.incomes[0]!).toBe(false);
+      expect(validatePlanShape(plan)).toEqual([]);
+    });
+  });
 });
 
 it.each([
