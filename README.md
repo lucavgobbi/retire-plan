@@ -35,6 +35,6 @@ The root `npm test` runs the engine suite only. Tooling uses Vitest **4.1.12** a
 
 ## Scope and assumptions
 
-Read [modeling assumptions](docs/assumptions.md) and the [external cross-check, limitations, and source references](docs/validation/cross-check.md) before interpreting a projection. The app uses 2026 tax parameters and documented future-year conventions. Ontario health premiums, CPP/EI payroll contributions, and other listed simplifications remain outside the current model.
+The engine uses 2026 tax parameters and documented future-year assumptions. Optional employee CPP, CPP2, and EI payroll deductions model one Ontario employer per year and default to off. Ontario health premiums remain outside the model. [Modeling assumptions](docs/assumptions.md) · [External cross-check and limitations](docs/validation/cross-check.md)
 
 Phase 1 validation and Phase 2 implementation/verification are complete in the working tree. Monte Carlo and historical UI, CSV/print/PDF exports, per-year overrides, and multi-plan management remain queued for Phase 3. Current closeout changes are uncommitted.

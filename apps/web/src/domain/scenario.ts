@@ -14,6 +14,8 @@ export function resolveScenario(delta: ScenarioDelta | null, base: ScenarioBase)
     withdrawalOrder: [...(overrides?.withdrawalOrder ?? base.withdrawalOrder ?? DEFAULT_SCENARIO_BASE.withdrawalOrder)],
     benefits: structuredClone(delta?.benefits ?? base.benefits ?? DEFAULT_SCENARIO_BASE.benefits!),
     withdrawalStrategy: delta?.withdrawalStrategy ?? base.withdrawalStrategy ?? "manual",
+    // Payroll stays optional: absent base and delta resolve to legacy (no deductions).
+    ...((delta?.payroll ?? base.payroll) ? { payroll: structuredClone(delta?.payroll ?? base.payroll) } : {}),
     ...((delta?.mcConfig ?? base.mcConfig) ? { mcConfig: structuredClone(delta?.mcConfig ?? base.mcConfig) } : {}),
     ...((delta?.historicalConfig ?? base.historicalConfig) ? { historicalConfig: structuredClone(delta?.historicalConfig ?? base.historicalConfig) } : {}),
   };

@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { HISTORICAL_DATASET } from "@retire-plan/engine";
 import { useWorkspace, type AccountType, type Scenario } from "../store/api";
-import type { BenefitSettings, WithdrawalStrategy } from "../domain/types";
+import type { BenefitSettings, PayrollSettings, WithdrawalStrategy } from "../domain/types";
 import { NumberTextInput } from "./NumberTextInput";
 import { FormSection } from "./FormSection";
+import { PayrollOptions } from "./PayrollOptions";
 import { TAX_MINIMIZING_STRATEGY_HELP } from "../content/assumptions";
 import { ACCOUNT_TYPE_LABELS, cashOrderPosition, INVESTMENT_ACCOUNT_TYPES, investmentOrder, orderWithCashPosition, swapOrderPosition, type CashOrderPosition } from "../domain/accountOrder";
 import "./baseScenarioSettings.css";
 
 function percentInput(rate: number): string { return String(Math.round(rate * 1e12) / 1e10); }
 
-type SettingsDraft = { simMode: Scenario["simMode"]; runs: string; seed: string; equitySd: string; bondSd: string; cashSd: string; historicalStartYear: string; retirementAge: string; equity: string; bond: string; cash: string; order: AccountType[]; cashPosition: CashOrderPosition; benefits: BenefitSettings; withdrawalStrategy: WithdrawalStrategy };
-type SettingsItem = { simMode?: Scenario["simMode"]; mcConfig?: Scenario["mcConfig"]; historicalConfig?: Scenario["historicalConfig"]; retirementAge: number; returnAssumptions: { equity: number; bond: number; cash: number }; withdrawalOrder: AccountType[]; benefits?: BenefitSettings; withdrawalStrategy?: WithdrawalStrategy };
+type SettingsDraft = { simMode: Scenario["simMode"]; runs: string; seed: string; equitySd: string; bondSd: string; cashSd: string; historicalStartYear: string; retirementAge: string; equity: string; bond: string; cash: string; order: AccountType[]; cashPosition: CashOrderPosition; benefits: BenefitSettings; payroll: PayrollSettings; withdrawalStrategy: WithdrawalStrategy };
+type SettingsItem = { simMode?: Scenario["simMode"]; mcConfig?: Scenario["mcConfig"]; historicalConfig?: Scenario["historicalConfig"]; retirementAge: number; returnAssumptions: { equity: number; bond: number; cash: number }; withdrawalOrder: AccountType[]; benefits?: BenefitSettings; payroll?: PayrollSettings; withdrawalStrategy?: WithdrawalStrategy };
 const HISTORICAL_FIRST_YEAR = HISTORICAL_DATASET.coverageStart;
 const HISTORICAL_LAST_YEAR = HISTORICAL_DATASET.coverageEnd;
 
@@ -31,6 +32,7 @@ function settingsDraftOf(base: NonNullable<ReturnType<typeof useWorkspace>["base
     order: investmentOrder(base.withdrawalOrder),
     cashPosition: cashOrderPosition(base.withdrawalOrder),
     benefits: base.benefits ?? { cpp: true, oas: true, gis: true },
+    payroll: base.payroll ?? { cpp: false, ei: false, cppOptOut65to69: false },
     withdrawalStrategy: base.withdrawalStrategy ?? "manual",
   };
 }
@@ -67,7 +69,7 @@ function readSettingsDraft(draft: SettingsDraft, stored: SettingsItem, latestWin
       errors.push(`Historical start year must be from ${HISTORICAL_FIRST_YEAR} through ${latestWindowStart}, the latest full window for this plan.`);
     } else historicalConfig = { startYear };
   }
-  return { errors, item: { simMode: draft.simMode, ...(mcConfig ? { mcConfig } : {}), ...(historicalConfig ? { historicalConfig } : {}), retirementAge, returnAssumptions, withdrawalOrder: orderWithCashPosition(draft.order, draft.cashPosition), benefits: { ...draft.benefits, gis: draft.benefits.oas && draft.benefits.gis }, withdrawalStrategy: draft.withdrawalStrategy } };
+  return { errors, item: { simMode: draft.simMode, ...(mcConfig ? { mcConfig } : {}), ...(historicalConfig ? { historicalConfig } : {}), retirementAge, returnAssumptions, withdrawalOrder: orderWithCashPosition(draft.order, draft.cashPosition), benefits: { ...draft.benefits, gis: draft.benefits.oas && draft.benefits.gis }, payroll: { ...draft.payroll }, withdrawalStrategy: draft.withdrawalStrategy } };
 }
 
 /**
@@ -106,6 +108,7 @@ export function BaseScenarioSettings() {
     order: investmentOrder(item.withdrawalOrder),
     cashPosition: cashOrderPosition(item.withdrawalOrder),
     benefits: item.benefits ?? { cpp: true, oas: true, gis: true },
+    payroll: item.payroll ?? { cpp: false, ei: false, cppOptOut65to69: false },
     withdrawalStrategy: item.withdrawalStrategy ?? "manual",
   });
   const change = (patch: Partial<SettingsDraft>) => {
@@ -150,6 +153,12 @@ export function BaseScenarioSettings() {
         {draft.benefits.cpp && !workspace.plan.incomes.some(income => income.kind === "cpp") && <p className="form-section-note">No CPP income stream is configured. Add one under Plan → Incomes to model CPP.</p>}
         {draft.benefits.oas && !workspace.plan.incomes.some(income => income.kind === "oas") && <p className="form-section-note">No OAS income stream is configured. Add one under Plan → Incomes to model OAS.</p>}
         <p className="form-section-note">CPP and OAS amounts and start/end ages come from the Plan income streams. GIS requires OAS here; <a href="https://www.canada.ca/en/services/benefits/publicpensions/old-age-security/guaranteed-income-supplement/eligibility.html" target="_blank" rel="noreferrer">Service Canada eligibility</a>.</p>
+      </FormSection>
+
+      <FormSection title="Payroll" description="Employee payroll deductions withheld from employment income. These are separate from the benefit switches above.">
+        <PayrollOptions ariaPrefix="Base" payroll={draft.payroll} onChange={payroll => change({ payroll: { ...draft.payroll, ...payroll } })} hasEmploymentIncome={workspace.plan.incomes.some(income => income.kind === "employment")} />
+        {draft.payroll.cpp === false && draft.payroll.ei === false && <p className="form-section-note">Payroll is off — the legacy default: no employee CPP or EI amounts are withheld and working-year cash flow is unchanged.</p>}
+        <p className="form-section-note">CPP applies ages 18–69.</p>
       </FormSection>
 
       <FormSection title="Simulation" description="Choose how investment returns are generated for the base projection.">

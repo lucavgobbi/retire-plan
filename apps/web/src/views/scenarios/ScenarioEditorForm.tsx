@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HISTORICAL_DATASET, type AccountType } from "@retire-plan/engine";
 import { useWorkspace } from "../../store/api";
-import type { BenefitSettings, ScenarioBase, ScenarioDelta, WithdrawalStrategy } from "../../domain/types";
+import type { BenefitSettings, PayrollSettings, ScenarioBase, ScenarioDelta, WithdrawalStrategy } from "../../domain/types";
 import { NumberTextInput } from "../../components/NumberTextInput";
 import { FormSection } from "../../components/FormSection";
+import { PayrollOptions } from "../../components/PayrollOptions";
 import { InlineEditorPanel } from "../../components/InlineEditorPanel";
 import { TAX_MINIMIZING_STRATEGY_HELP } from "../../content/assumptions";
 import { fmtPercentInput } from "../projection/fmt";
@@ -31,6 +32,8 @@ type EditorDraft = {
   cashPosition: CashOrderPosition;
   benefits: BenefitSettings;
   benefitsOverridden: boolean;
+  payroll: PayrollSettings;
+  payrollOverridden: boolean;
   withdrawalStrategy: WithdrawalStrategy;
   withdrawalStrategyOverridden: boolean;
 };
@@ -67,6 +70,8 @@ function draftOf(storedDelta: ScenarioDelta | null, base: ScenarioBase): EditorD
       cashPosition: cashOrderPosition(base.withdrawalOrder),
       benefits: base.benefits ?? { cpp: true, oas: true, gis: true },
       benefitsOverridden: false,
+      payroll: base.payroll ?? { cpp: false, ei: false, cppOptOut65to69: false },
+      payrollOverridden: false,
       withdrawalStrategy: base.withdrawalStrategy ?? "manual",
       withdrawalStrategyOverridden: false,
     };
@@ -88,6 +93,8 @@ function draftOf(storedDelta: ScenarioDelta | null, base: ScenarioBase): EditorD
     cashPosition: cashOrderPosition(storedDelta.overrides.withdrawalOrder ?? base.withdrawalOrder),
     benefits: storedDelta.benefits ?? base.benefits ?? { cpp: true, oas: true, gis: true },
     benefitsOverridden: storedDelta.benefits !== undefined,
+    payroll: storedDelta.payroll ?? base.payroll ?? { cpp: false, ei: false, cppOptOut65to69: false },
+    payrollOverridden: storedDelta.payroll !== undefined,
     withdrawalStrategy: storedDelta.withdrawalStrategy ?? base.withdrawalStrategy ?? "manual",
     withdrawalStrategyOverridden: storedDelta.withdrawalStrategy !== undefined,
   };
@@ -195,6 +202,7 @@ export function ScenarioEditorForm({ delta, onDone }: { delta: ScenarioDelta | n
       basePlanId,
       simMode: next.simMode,
       ...(next.benefitsOverridden ? { benefits: { ...next.benefits, gis: next.benefits.oas && next.benefits.gis } } : {}),
+      ...(next.payrollOverridden ? { payroll: { ...next.payroll } } : {}),
       ...(next.withdrawalStrategyOverridden ? { withdrawalStrategy: next.withdrawalStrategy } : {}),
       ...(next.simMode === "montecarlo" ? { mcConfig: {
         runs: Number(next.runs), seed: Number(next.seed),
@@ -232,6 +240,13 @@ export function ScenarioEditorForm({ delta, onDone }: { delta: ScenarioDelta | n
         {draft.benefits.cpp && !configuredIncomes.some(income => income.kind === "cpp") && <p className="form-section-note">No CPP income stream is configured. Add one under Plan → Incomes to model CPP.</p>}
         {draft.benefits.oas && !configuredIncomes.some(income => income.kind === "oas") && <p className="form-section-note">No OAS income stream is configured. Add one under Plan → Incomes to model OAS.</p>}
         <p className="form-section-note">CPP and OAS amounts and start/end ages come from Plan income streams; these switches do not create amounts. GIS requires OAS in this model; <a href="https://www.canada.ca/en/services/benefits/publicpensions/old-age-security/guaranteed-income-supplement/eligibility.html" target="_blank" rel="noreferrer">Service Canada eligibility</a>. Starting age and other eligibility assumptions are simplified.</p>
+      </FormSection>
+
+      <FormSection title="Payroll" description="Choose whether employee payroll deductions are withheld from employment income in this scenario.">
+        <div className="form-section-status" aria-live="polite">{!draft.payrollOverridden ? "Using the base scenario payroll choices." : "Using payroll choices for this scenario."}</div>
+        {draft.payrollOverridden && <button className="form-section-reset" type="button" onClick={() => change({ payroll: base.payroll ?? { cpp: false, ei: false, cppOptOut65to69: false }, payrollOverridden: false })}>Use base payroll settings</button>}
+        <PayrollOptions ariaPrefix="Scenario" payroll={draft.payroll} onChange={payroll => change({ payroll: { ...draft.payroll, ...payroll }, payrollOverridden: true })} hasEmploymentIncome={configuredIncomes.some(income => income.kind === "employment")} />
+        {draft.payroll.cpp === false && draft.payroll.ei === false && <p className="form-section-note">Payroll is off — the legacy default: no employee CPP or EI amounts are withheld.</p>}
       </FormSection>
 
       <FormSection title="Simulation" description="Choose how this scenario generates investment returns.">

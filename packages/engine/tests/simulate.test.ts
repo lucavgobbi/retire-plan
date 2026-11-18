@@ -160,7 +160,10 @@ describe("simulate — focused, hand-checked cases", () => {
     expect(y.rrspRoom).toBeCloseTo(tables.rrsp.incomeRate * 120_000, 8);
     expect(y.withdrawals).toEqual({ tfsa: 0, rrsp: 0, nonreg: 0 });
     expect(y.shortfall).toBe(0);
-    expect(y.warnings).toEqual([]);
+    expect(y.warnings).toEqual([
+      "CPP and CPP2 payroll deductions are off for this projection.",
+      "EI payroll deductions are off for this projection.",
+    ]);
   });
 
   it("retirement, CPP/OAS start events, and GIS for a 65-year-old retiree", () => {

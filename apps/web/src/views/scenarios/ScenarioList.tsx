@@ -138,6 +138,13 @@ export function describeOverrides(delta: ScenarioDelta): string {
     const included = [delta.benefits.cpp && "CPP", delta.benefits.oas && "OAS", delta.benefits.oas && delta.benefits.gis && "GIS"].filter(Boolean);
     parts.push(`benefits ${included.length ? included.join(", ") : "none"}`);
   }
+  // Explicit payroll is an override even when it turns both programs off — it
+  // differs from absent (inherit the working settings).
+  if (delta.payroll) {
+    const programs = [delta.payroll.cpp && "CPP", delta.payroll.ei && "EI"].filter(Boolean);
+    const optOut = delta.payroll.cppOptOut65to69 ? " · opt-out 65–69" : "";
+    parts.push(`payroll ${programs.length ? programs.join(" + ") : "none"}${optOut}`);
+  }
   if (delta.withdrawalStrategy === "tax-minimizing") parts.push("tax-minimizing planning");
   else if (delta.withdrawalStrategy === "manual") parts.push("manual withdrawal order");
   if (o.retirementAge !== undefined) parts.push(`retirement age ${o.retirementAge}`);

@@ -51,4 +51,21 @@ describe("scenario resolution", () => {
     expect(resolved.withdrawalStrategy).toBe("tax-minimizing");
     expect(resolved.benefits).not.toBe(delta.benefits);
   });
+
+  it("resolves payroll settings with delta override, base fallback, and legacy absence", () => {
+    const payroll = { cpp: true, ei: false, cppOptOut65to69: true };
+    // Delta payroll wins over base payroll and is isolated from the stored delta.
+    const baseWithPayroll = { ...structuredClone(DEFAULT_SCENARIO_BASE), payroll: { cpp: false, ei: true, cppOptOut65to69: false } };
+    const delta: ScenarioDelta = { id: "p", name: "Payroll", basePlanId: "p", simMode: "deterministic", overrides: {}, payroll };
+    const overridden = resolveScenario(delta, baseWithPayroll);
+    expect(overridden.payroll).toEqual(payroll);
+    overridden.payroll!.cpp = false;
+    expect(delta.payroll!.cpp).toBe(true);
+    // No delta payroll: the base settings flow through.
+    const plainDelta: ScenarioDelta = { id: "p2", name: "Inherit", basePlanId: "p", simMode: "deterministic", overrides: {} };
+    expect(resolveScenario(plainDelta, baseWithPayroll).payroll).toEqual(baseWithPayroll.payroll);
+    // Absent everywhere stays absent — the legacy all-off shape.
+    expect(resolveScenario(null, DEFAULT_SCENARIO_BASE).payroll).toBeUndefined();
+    expect(resolveScenario(plainDelta, DEFAULT_SCENARIO_BASE).payroll).toBeUndefined();
+  });
 });

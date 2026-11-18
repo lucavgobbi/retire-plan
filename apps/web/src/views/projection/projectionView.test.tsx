@@ -8,7 +8,8 @@ import { StoreProvider, useWorkspace } from "../../store/api";
 import { DEFAULT_SCENARIO_BASE } from "../../domain/defaults";
 import { makeRunOutPlan, makeSamplePlan, makeWorkspace } from "./testFixtures";
 import { ProjectionTable, columns } from "./ProjectionTable";
-import { fmtMoney } from "./fmt";
+import { YearDetailRow } from "./YearDetailRow";
+import { fmtMoney, fmtMoneyDetail } from "./fmt";
 import { ProjectionView } from "./ProjectionView";
 
 const selectableColumnIds = () => columns().slice(1).map((col) => col.id);
@@ -248,7 +249,7 @@ describe("ProjectionView", () => {
     const results = screen.getByRole("region", { name: "Year-by-year projection results" });
     expect(results.id).toBe("projection-year-table");
     expect(results.querySelectorAll("thead > tr")).toHaveLength(2);
-    expect(results.querySelectorAll('thead th[scope="col"]')).toHaveLength(41);
+    expect(results.querySelectorAll('thead th[scope="col"]')).toHaveLength(46);
     expect(Array.from(results.querySelectorAll("thead tr:last-child th")).filter((cell) => cell.textContent === "Expenses")).toHaveLength(1);
     expect(results.querySelector('thead tr:first-child th[rowspan="2"]')?.textContent).toBe("Audit");
     results.focus();
@@ -403,10 +404,10 @@ describe("projection table column selector", () => {
     // Pinned Age/calendar-year and the Audit column always remain.
     expect(screen.getByRole("columnheader", { name: "Household calendar year" })).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "Audit" })).toBeTruthy();
-    // Every decade summary row drops exactly the six hidden cells (41 → 35 each).
+    // Every decade summary row drops exactly the six hidden cells (46 → 40 each).
     const decadeRows = document.querySelectorAll(".projection-table tbody tr.decade-row");
     expect(decadeRows.length).toBeGreaterThan(0);
-    for (const row of decadeRows) expect(row.querySelectorAll("td").length).toBe(35);
+    for (const row of decadeRows) expect(row.querySelectorAll("td").length).toBe(40);
   });
 
   it("picker toggles persist in workspace state across re-renders; the bulk checkbox restores the default", async () => {
@@ -431,6 +432,24 @@ describe("projection table column selector", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Select all columns" }));
     expect(screen.getByRole("columnheader", { name: "Interest" })).toBeTruthy();
     expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toBeNull();
+  });
+
+  it("payroll column toggles persist under the existing hidden-columns architecture", async () => {
+    const { container } = render(
+      <StoreProvider initialWorkspace={makeWorkspace()} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+        <ProjectionView />
+        <HiddenColumnsProbe />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(document.querySelector(".projection-table")).toBeTruthy());
+    expect(screen.getByRole("columnheader", { name: "CPP base" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("checkbox", { name: "CPP base" }));
+    expect(screen.queryByRole("columnheader", { name: "CPP base" })).toBeNull();
+    // Other Payroll members (and the group total, matched via its note id since
+    // total headers carry a hidden note in their accessible name) stay visible.
+    expect(container.querySelector('th[aria-describedby="col-note-payroll.total"]')).toBeTruthy();
+    expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toEqual(["payroll.cppBase"]);
   });
 
   it("projection settings gear opens with its accessible name; chart toggles persist and default to all visible", async () => {
@@ -505,6 +524,7 @@ describe("projection table group totals", () => {
   const makeYear = (age: number, opts: {
     income?: Partial<{ employment: number; cpp: number; oas: number; gis: number; other: number }>;
     cashInterest?: number; taxTotal?: number; fed?: number;
+    payroll?: Partial<{ cppBase: number; cppAdditional: number; cpp2: number; ei: number; total: number; enhancedCppDeduction: number; eiRefund: number }>;
     withdrawals?: Partial<{ tfsa: number; rrsp: number; nonreg: number; cash: number }>;
     contributions?: Partial<{ tfsa: number; rrsp: number; nonreg: number; cash: number }>;
     balances?: { tfsa: number; debt: number }; netWorth?: number;
@@ -513,6 +533,7 @@ describe("projection table group totals", () => {
     income: { employment: opts.income?.employment ?? 0, cpp: opts.income?.cpp ?? 20, oas: opts.income?.oas ?? 10, gis: opts.income?.gis ?? 5, other: opts.income?.other ?? 15 },
     cashInterest: opts.cashInterest,
     taxableIncome: 0,
+    ...(opts.payroll ? { payroll: { cppBase: 0, cppAdditional: 0, cpp2: 0, ei: 0, total: 0, enhancedCppDeduction: 0, eiRefund: 0, ...opts.payroll } } : {}),
     tax: tax(opts.taxTotal ?? 15, opts.fed ?? 7),
     withdrawals: { tfsa: opts.withdrawals?.tfsa ?? 10, rrsp: opts.withdrawals?.rrsp ?? 20, nonreg: opts.withdrawals?.nonreg ?? 30, cash: opts.withdrawals?.cash ?? 40 },
     contributions: { tfsa: opts.contributions?.tfsa ?? 1, rrsp: opts.contributions?.rrsp ?? 2, nonreg: opts.contributions?.nonreg ?? 3, cash: opts.contributions?.cash ?? 4 },
@@ -524,16 +545,24 @@ describe("projection table group totals", () => {
     events: [], warnings: [],
   });
 
-  // Year 60: income parts 100/20/10/5/15 (total 150), interest 4, tax total 15
-  // (components sum 13 — the engine total is authoritative), withdrawals 100,
-  // contributions 10, assets 870 (debt 120 excluded), netWorth 750.
-  // Year 61: income employment 200 (total 250), interest 6, tax total 25
-  // (components 20), withdrawals 125, contributions 14, assets 880 (debt 110), netWorth 770.
+  // Year 60: income parts 100/20/10/5/15 (total 150), payroll withheld 53,
+  // interest 4, tax total 15 (components sum 13 — the engine total is
+  // authoritative), withdrawals 100, contributions 10, assets 870 (debt 120
+  // excluded), netWorth 750.
+  // Year 61: income employment 200 (total 250), payroll withheld 57, interest 6,
+  // tax total 25 (components 20), withdrawals 125, contributions 14, assets 880
+  // (debt 110), netWorth 770.
   const years = [
-    makeYear(60, { income: { employment: 100 }, cashInterest: 4, balances: { tfsa: 100, debt: 120 }, netWorth: 750 }),
-    makeYear(61, { income: { employment: 200 }, cashInterest: 6, taxTotal: 25, fed: 10,
+    makeYear(60, {
+      income: { employment: 100 }, cashInterest: 4, balances: { tfsa: 100, debt: 120 }, netWorth: 750,
+      payroll: { cppBase: 30, cppAdditional: 5, cpp2: 8, ei: 10, total: 53, enhancedCppDeduction: 13, eiRefund: 0 },
+    }),
+    makeYear(61, {
+      income: { employment: 200 }, cashInterest: 6, taxTotal: 25, fed: 10,
+      payroll: { cppBase: 40, cppAdditional: 6, cpp2: 0, ei: 11, total: 57, enhancedCppDeduction: 6, eiRefund: 11 },
       withdrawals: { tfsa: 20, rrsp: 25, nonreg: 35, cash: 45 }, contributions: { tfsa: 2, rrsp: 3, nonreg: 4, cash: 5 },
-      balances: { tfsa: 110, debt: 110 }, netWorth: 770 }),
+      balances: { tfsa: 110, debt: 110 }, netWorth: 770,
+    }),
   ];
   const result = { years, summary: { success: true, finalNetWorth: 770 } } as unknown as SimulationResult;
 
@@ -547,6 +576,7 @@ describe("projection table group totals", () => {
     const totals = Array.from(decade.querySelectorAll("td[data-total]"));
     expect(totals.map((td) => td.textContent)).toEqual([
       fmtMoney(150 + 250),   // Total income (income parts only — cash interest NOT included)
+      fmtMoney(53 + 57),     // Total withheld (gross payroll withholding, components summed)
       fmtMoney(4 + 6),       // Total interest (cash-account interest, not a balance)
       fmtMoney(15 + 25),     // Tax total: engine total, NOT the component sum (33)
       fmtMoney(100 + 125),   // Total withdrawn
@@ -569,7 +599,7 @@ describe("projection table group totals", () => {
     const decade = container.querySelector(".decade-row")!;
     const totals = Array.from(decade.querySelectorAll("td[data-total]"));
     expect(totals.map((td) => td.textContent)).toEqual([
-      fmtMoney(400), fmtMoney(10), fmtMoney(40), fmtMoney(225), fmtMoney(24), fmtMoney(880),
+      fmtMoney(400), fmtMoney(110), fmtMoney(10), fmtMoney(40), fmtMoney(225), fmtMoney(24), fmtMoney(880),
     ]);
     // Member headers are really gone; the total headers remain.
     expect(container.querySelector('thead th[aria-describedby="col-note-income.total"]')).toBeTruthy();
@@ -581,6 +611,42 @@ describe("projection table group totals", () => {
     const th = container.querySelector('thead th[aria-describedby="col-note-balances.total"]')!;
     expect(th.textContent).toContain("Total assets");
     expect(document.getElementById("col-note-balances.total")!.textContent).toContain("debt is not included");
+  });
+
+  it("renders the Payroll group after Income with component columns and the total last", () => {
+    const { container } = renderTable();
+    // Total headers carry a visually hidden note span, so header text is matched
+    // by prefix (the note follows the label inside the same th).
+    const ths = Array.from(container.querySelectorAll("thead tr:last-child th")).map(th => th.childNodes[0]?.textContent ?? "");
+    const payrollLabels = ["CPP base", "CPP additional", "CPP2", "EI", "Total withheld"];
+    expect(ths.filter(text => payrollLabels.includes(text)))
+      .toEqual(["CPP base", "CPP additional", "CPP2", "EI", "Total withheld"]);
+    // The group sits between Income and the Cash accounts' Interest column.
+    expect(ths.indexOf("CPP base")).toBeGreaterThan(ths.indexOf("Employment"));
+    expect(ths.indexOf("Total withheld")).toBeLessThan(ths.indexOf("Interest"));
+    // Withholding note separates gross withholding from the annual cash cost.
+    expect(document.getElementById("col-note-payroll.total")!.textContent).toContain("minus the EI refund");
+    const cellOf = (row: Element, label: string) =>
+      row.querySelectorAll("td")[ths.indexOf(label)]!.textContent;
+    const year60 = container.querySelector('tr[data-age="60"]')!;
+    expect(cellOf(year60, "CPP base")).toBe(fmtMoney(30));
+    expect(cellOf(year60, "CPP additional")).toBe(fmtMoney(5));
+    expect(cellOf(year60, "CPP2")).toBe(fmtMoney(8));
+    expect(cellOf(year60, "EI")).toBe(fmtMoney(10));
+    // Total withheld is gross withholding — the EI refund does not reduce the shown column.
+    expect(cellOf(year60, "Total withheld")).toBe(fmtMoney(53));
+  });
+
+  it("legacy results without a payroll block render the payroll columns as zero", () => {
+    const legacy = {
+      years: [makeYear(60, { income: { employment: 100 } })],
+      summary: { success: true, finalNetWorth: 750 },
+    } as unknown as SimulationResult;
+    render(<ProjectionTable result={legacy} birthYear={1980} />);
+    const yearRow = document.querySelector('tr[data-age="60"]')!;
+    expect(yearRow.textContent).toContain(fmtMoney(0));
+    // Every payroll column is still selectable (picker stays consistent across runs).
+    expect(selectableColumnIds()).toContain("payroll.cppBase");
   });
 });
 
@@ -864,6 +930,7 @@ describe("run analysis summary collapse persistence (projectionRunSummaryCollaps
 describe("canonical column order: each named group's Total is last", () => {
   const groupTotals: Record<string, string> = {
     "Income": "Total income",
+    "Payroll": "Total withheld",
     "Cash accounts": "Total interest",
     "Tax": "Total",
     "Withdrawals": "Total withdrawn",
@@ -905,9 +972,9 @@ describe("canonical column order: each named group's Total is last", () => {
     fireEvent.click(document.querySelector(".projection-settings summary")!);
     const groups = Array.from(document.querySelectorAll(".projection-settings-menu .settings-group"));
     // "Other" holds the standalone Taxable column, which sits canonically between
-    // the Cash accounts and Tax groups.
+    // the Cash accounts and Tax groups; Payroll sits right after Income.
     expect(groups.map((group) => group.querySelector(".settings-group-name")!.textContent))
-      .toEqual(["Income", "Cash accounts", "Other", "Tax", "Withdrawals", "Contributions", "Balances"]);
+      .toEqual(["Income", "Payroll", "Cash accounts", "Other", "Tax", "Withdrawals", "Contributions", "Balances"]);
     for (const group of groups) {
       const name = group.querySelector(".settings-group-name")!.textContent!;
       const labels = Array.from(group.querySelectorAll("label")).map((label) => label.textContent!.trim());
@@ -1018,5 +1085,59 @@ describe("run analysis collapsible", () => {
     expect(details.contains(analysis)).toBe(true);
     expect(details.querySelector(".chart-grid")).toBeNull();
     expect(document.querySelector(".chart-grid")).toBeTruthy();
+  });
+});
+
+describe("YearDetailRow payroll card", () => {
+  function detailYear(payroll?: YearResult["payroll"]): YearResult {
+    return {
+      age: 45,
+      income: { employment: 95_000, cpp: 0, oas: 0, gis: 0, other: 0 },
+      taxableIncome: 0,
+      tax: { federal: 0, provincial: 0, surtax: 0, oasClawback: 0, total: 0, marginalRate: 0.2 },
+      withdrawals: { tfsa: 0, rrsp: 0, nonreg: 0 }, contributions: { tfsa: 0, rrsp: 0, nonreg: 0 },
+      savings: { tfsa: 0, rrsp: 0, nonreg: 0, mortgage: 0 },
+      expenses: 0, shortfall: 0,
+      balances: { tfsa: 0, rrsp: 0, nonreg: 0, cash: 0, home: 0, debt: 0 },
+      netWorth: 0, tfsaRoom: 0, rrspRoom: 0, events: [], warnings: [],
+      ...(payroll ? { payroll } : {}),
+    } as YearResult;
+  }
+  const withheld = { cppBase: 4230.45, cppAdditional: 500, cpp2: 416, ei: 1123.07, total: 6269.52, enhancedCppDeduction: 916, eiRefund: 1123.07 };
+
+  function renderCard(payroll?: YearResult["payroll"]) {
+    return render(<table><tbody><YearDetailRow age={45} year={detailYear(payroll)} expanded colSpan={3} /></tbody></table>);
+  }
+
+  it("shows an honest older-run hint when payroll is missing, and a fresh no-wages/zero copy when nothing was withheld", () => {
+    const missing = renderCard();
+    expect(screen.getByText(/no payroll breakdown was recorded for this saved result/i)).toBeTruthy();
+    expect(screen.getByText(/re-run the projection/i)).toBeTruthy();
+    missing.unmount();
+    // Zero withholding does NOT mean payroll is off — no wages or age-ineligibility can cause it.
+    const zero = renderCard({ cppBase: 0, cppAdditional: 0, cpp2: 0, ei: 0, total: 0, enhancedCppDeduction: 0, eiRefund: 0 });
+    expect(screen.getByText(/no employee payroll deductions were withheld this year/i)).toBeTruthy();
+    expect(screen.queryByText(/payroll collection is off/i)).toBeNull();
+    zero.unmount();
+  });
+
+  it("details gross employment vs each deduction, the EI refund, and the corrected credit scope", () => {
+    renderCard(withheld);
+    const card = screen.getByRole("region", { name: "Payroll deductions" });
+    const text = card.textContent ?? "";
+    expect(text).toContain("Gross employment");
+    expect(text).toContain(fmtMoneyDetail(95_000));
+    expect(text).toContain(fmtMoneyDetail(4230.45));
+    expect(text).toContain(fmtMoneyDetail(500));
+    expect(text).toContain(fmtMoneyDetail(416));
+    expect(text).toContain(fmtMoneyDetail(1123.07));
+    expect(text).toContain(fmtMoneyDetail(6269.52));
+    // Credits attach to base CPP contributions and eligible EI PREMIUMS — never to the refund.
+    expect(text).toMatch(/base CPP contributions and eligible EI premiums earn non-refundable tax credits/i);
+    expect(text).not.toMatch(/EI refund earns? a credit|refund.*non-refundable credit/i);
+    expect(text).toMatch(/enhanced CPP portion/i);
+    expect(text).toContain(fmtMoneyDetail(916));
+    expect(text).toMatch(/single-employer annual approximation/i);
+    expect(text).toMatch(/PRB/i);
   });
 });

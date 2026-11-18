@@ -1,9 +1,9 @@
-import type { AccountType, BenefitSettings, Plan, Scenario, SimulationResult, WithdrawalStrategy } from "@retire-plan/engine";
+import type { AccountType, BenefitSettings, PayrollSettings, Plan, Scenario, SimulationResult, WithdrawalStrategy } from "@retire-plan/engine";
 import type { RunAnalysis } from "./run";
 export type * from "@retire-plan/engine";
 
 export interface PlanMeta { id: string; name: string; updatedAt: string }
-export type { BenefitSettings, WithdrawalStrategy };
+export type { BenefitSettings, PayrollSettings, WithdrawalStrategy };
 export interface ScenarioBase {
   simMode?: Scenario["simMode"];
   retirementAge: number;
@@ -12,6 +12,7 @@ export interface ScenarioBase {
   mcConfig?: Scenario["mcConfig"];
   historicalConfig?: Scenario["historicalConfig"];
   benefits?: BenefitSettings;
+  payroll?: PayrollSettings;
   withdrawalStrategy?: WithdrawalStrategy;
 }
 export interface ScenarioDelta {
@@ -22,6 +23,7 @@ export interface ScenarioDelta {
   mcConfig?: Scenario["mcConfig"];
   historicalConfig?: Scenario["historicalConfig"];
   benefits?: BenefitSettings;
+  payroll?: PayrollSettings;
   withdrawalStrategy?: WithdrawalStrategy;
   overrides: Partial<Pick<ScenarioBase, "retirementAge" | "returnAssumptions" | "withdrawalOrder">>;
 }

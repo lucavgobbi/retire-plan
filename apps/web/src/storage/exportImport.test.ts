@@ -74,6 +74,31 @@ describe("parsePlanFile", () => {
     }
   });
 
+  it("round-trips payroll settings on the base scenario and a scenario delta; legacy files stay absent", () => {
+    const ws = makeSampleWorkspace();
+    ws.baseScenario = {
+      retirementAge: 65, returnAssumptions: { equity: 0.05, bond: 0.02, cash: 0 }, withdrawalOrder: ["tfsa", "nonreg", "rrsp"],
+      payroll: { cpp: true, ei: true, cppOptOut65to69: false },
+    };
+    const scenario = ws.scenarios[0]!;
+    scenario.payroll = { cpp: false, ei: false, cppOptOut65to69: true };
+    const parsed = parsePlanFile(JSON.parse(workspaceToText(ws)));
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.workspace.baseScenario).toMatchObject({ payroll: { cpp: true, ei: true, cppOptOut65to69: false } });
+      expect(parsed.workspace.scenarios[0]).toMatchObject({ payroll: { cpp: false, ei: false, cppOptOut65to69: true } });
+      expect(buildPlanFile(parsed.workspace)).toEqual(buildPlanFile(ws));
+    }
+    // Legacy file: no payroll keys anywhere — loads with the fields absent.
+    const legacy = makeSampleWorkspace();
+    const legacyParsed = parsePlanFile(JSON.parse(workspaceToText(legacy)));
+    expect(legacyParsed.ok).toBe(true);
+    if (legacyParsed.ok) {
+      expect(legacyParsed.workspace.baseScenario === undefined || !("payroll" in legacyParsed.workspace.baseScenario)).toBe(true);
+      expect("payroll" in legacyParsed.workspace.scenarios[0]!).toBe(false);
+    }
+  });
+
   it("round-trips projection preferences; legacy JSON without them keeps defaults", () => {
     const ws = makeSampleWorkspace();
     ws.hiddenProjectionColumns = ["income.employment", "stale.id"];

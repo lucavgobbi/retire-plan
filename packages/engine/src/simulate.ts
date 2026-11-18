@@ -16,6 +16,7 @@ import {
 import { planWithdrawalPolicy } from "./strategy/withdrawalPlanner";
 import { federalTax, taxableIncome, type IncomeForTax } from "./tax/federal";
 import { ontarioTax } from "./tax/ontario";
+import { annualPayroll } from "./tax/payroll";
 import { oasClawback } from "./tax/oasClawback";
 import { gisAnnual } from "./benefits/gis";
 import { rrifMinimum } from "./benefits/rrif";
@@ -126,6 +127,9 @@ export function simulate(
   const scenarioErrors = validateScenarioSettings(scenario);
   if (errors.length > 0 || scenarioErrors.length > 0) {
     throw new Error(`validatePlan: ${[...errors, ...scenarioErrors].join(" ")}`);
+  }
+  if ((scenario.payroll?.cpp || scenario.payroll?.ei) && tables.payroll === undefined) {
+    throw new Error("Tax tables: employee payroll parameters are required when CPP or EI payroll deductions are enabled.");
   }
 
   // Tax-minimizing policy: injected `planned` (candidate evaluation, runners) is used
@@ -292,6 +296,10 @@ export function simulate(
       }
     }
 
+    // Normalize the sum before applying payroll cutoffs or using it in cash flow.
+    employment = roundCent(employment);
+    const payroll = annualPayroll(employment, cpp, age, scenario.payroll, yearTables.payroll, warnings);
+    const netPayrollCost = roundCent(payroll.total - payroll.eiRefund);
     const taxForYear = (income: IncomeForTax) => taxOf(income, yearTables, oas);
 
     const gis =
@@ -301,7 +309,7 @@ export function simulate(
             {
               cpp,
               rrspRrifWithdrawals: prevWithdrawals.rrsp,
-              employmentIncome: employment,
+              employmentIncome: employment - netPayrollCost,
               otherTaxableIncome: otherPlan + Math.max(0, prevNonregGains) + prevCashInterest, // positive gains count; losses are not GIS deductions
               tfsaWithdrawals: prevWithdrawals.tfsa,
             },
@@ -368,6 +376,8 @@ export function simulate(
     // layered on top per branch (tax0 is the floor, taxWithDue adds the RRIF minimum).
     const incomeBase: IncomeForTax = {
       employmentIncome: employment,
+      payrollCreditAmount: roundCent(payroll.cppBase + payroll.ei - payroll.eiRefund),
+      enhancedCppDeduction: payroll.enhancedCppDeduction,
       otherTaxableIncome: cpp + oas + otherPlan + cashInterest,
       rrspWithdrawals: 0,
       pensionEligibleIncome: 0,
@@ -375,6 +385,12 @@ export function simulate(
       dividendsEligible: 0,
       age,
     };
+    const incomeAfterWithdrawals = (rrspDraw: number, nonregGain: number): IncomeForTax => ({
+      ...incomeBase,
+      rrspWithdrawals: rrspDraw,
+      pensionEligibleIncome: age >= 65 ? rrspDraw : 0,
+      capitalGains: capitalGains + nonregGain,
+    });
 
     // ---- 5a. Mandatory RRIF minimum, first and always (Task 8)
     const rrspAtStart = sumType(accounts, "rrsp");
@@ -400,27 +416,18 @@ export function simulate(
     if (policy && policy.fillTargetTaxable > 0) {
       const rrspRoomLeft = Math.max(0, rrspAtStart - rrifDue);
       if (rrspRoomLeft > 0) {
-        const baseTaxable = taxableIncome(
-          { ...incomeBase, rrspWithdrawals: rrifDue, pensionEligibleIncome: age >= 65 ? rrifDue : 0 },
-        );
+        const baseTaxable = taxableIncome(incomeAfterWithdrawals(rrifDue, 0));
         plannedRrspDraw = roundCent(
           Math.min(rrspRoomLeft, Math.max(0, policy.fillTargetTaxable - baseTaxable)),
         );
       }
     }
-    if (plannedRrspDraw > 0) {
-      // Fold the draw into the year's income base so every tax shape below (RRIF
-      // obligation pricing, non-reg gross-ups, final tax, marginal rate) sees it.
-      incomeBase.rrspWithdrawals += plannedRrspDraw;
-      if (age >= 65) incomeBase.pensionEligibleIncome += plannedRrspDraw;
-    }
-    const taxWithDue = taxForYear(
-      { ...incomeBase, rrspWithdrawals: rrifDue + plannedRrspDraw, pensionEligibleIncome: age >= 65 ? rrifDue + plannedRrspDraw : 0 },
-    );
-    const cash = employment + cpp + oas + otherPlan + gis + rrifDue + plannedRrspDraw + cashBalance;
+    const fundedRrspDraw = rrifDue + plannedRrspDraw;
+    const taxWithDue = taxForYear(incomeAfterWithdrawals(fundedRrspDraw, 0));
+    const cash = employment + cpp + oas + otherPlan + gis + rrifDue + plannedRrspDraw + cashBalance - netPayrollCost;
     const obligation = expenses + taxWithDue.total + mortgageCash;
 
-    const withdrawals: YearResult["withdrawals"] = { tfsa: 0, rrsp: 0, nonreg: 0 };
+    const withdrawals: YearResult["withdrawals"] = { tfsa: 0, rrsp: fundedRrspDraw, nonreg: 0 };
     const contributions: YearResult["contributions"] = { tfsa: 0, rrsp: 0, nonreg: 0 };
     let contributionsCash = 0;
     let employerMatch = 0;
@@ -428,11 +435,8 @@ export function simulate(
     let shortfall = 0;
     let finalTax = taxWithDue;
 
-    // Non-reg realized-gain accounting (plan Task 14): gains are taxed as each
-    // non-reg draw happens, and the charged tax folds into the reported tax
-    // exactly as cash is charged, keeping the year ledger conserved.
+    // Each taxable draw updates the year's running tax and the cash still needed.
     let nonregGains = 0;
-    const nonregGainsTax = { federal: 0, provincial: 0, surtax: 0, oasClawback: 0, total: 0 };
 
     let roomTf = tfsaRoom; // this year's room available to the allocator
     // RRSP room available IN-YEAR: carry-forward plus the room earned this year
@@ -448,8 +452,6 @@ export function simulate(
       // ---- Surplus branch: the year funds everything including the RRIF minimum's tax.
       // Mandatory RRIF minimum is taken even in surplus years (counted as withdrawal,
       // returned to cash inside `cash`).
-      finalTax = taxWithDue;
-      withdrawals.rrsp = rrifDue + plannedRrspDraw;
       const allocation = allocateSurplus(
         Math.max(0, cash - expenses - finalTax.total - mortgageCash),
         plan.savingsPolicy,
@@ -494,91 +496,57 @@ export function simulate(
       // consumed whenever total cash is below the year's obligation.
       cashBalance = 0;
       for (const type of withdrawalOrder) {
+        if (need <= 0) break;
         const available = Math.max(0, sumType(accounts, type) - (withdrawals[type] ?? 0));
+        if (available === 0) continue;
+        const taxBeforeDraw = finalTax.total;
         if (type === "rrsp") {
-          // RRIF due and the proactive draw are already earmarked against this
-          // balance: new deficit draws may only consume what is left of it.
-          const drawable = Math.max(0, sumType(accounts, type) - rrifDue - plannedRrspDraw);
-          const shape = (amount: number): IncomeForTax => ({
-            ...incomeBase,
-            rrspWithdrawals: rrifDue + plannedRrspDraw + amount,
-            pensionEligibleIncome: age >= 65 ? rrifDue + plannedRrspDraw + amount : 0,
-          });
-          // Iterate to a SELF-CONSISTENT grossed-up draw: the draw must deliver `need`
-          // net of the marginal tax the new draw itself creates (the mandatory
-          // minimum's own tax is already priced inside `obligation`/`taxWithDue`).
-          // Each pass contracts the error by the marginal rate, so this reaches cents fast.
-          let draw = Math.min(drawable, Math.max(0, need));
-          let extra = 0;
+          // The tax baseline includes mandatory and proactive RRSP draws and
+          // any gains already realized earlier in the withdrawal order.
+          const taxAfterDraw = (draw: number) =>
+            taxForYear(incomeAfterWithdrawals(withdrawals.rrsp + draw, nonregGains));
+          let draw = Math.min(available, need);
           for (let iter = 0; iter < 24; iter++) {
-            extra = Math.max(0, taxForYear(shape(draw)).total - taxWithDue.total);
-            const next = Math.min(drawable, Math.max(0, need + extra));
+            const extra = taxAfterDraw(draw).total - taxBeforeDraw;
+            const next = Math.min(available, Math.max(0, need + extra));
             if (Math.abs(next - draw) < 0.005) {
               draw = next;
               break;
             }
             draw = next;
           }
-          // Re-derive the tax from the FINAL draw so `extra` and the recorded tax
-          // describe the same shape — otherwise the ledger leaks the difference.
-          extra = Math.max(0, taxForYear(shape(draw)).total - taxWithDue.total);
-          withdrawals.rrsp = rrifDue + plannedRrspDraw + draw;
-          finalTax = taxForYear(shape(draw));
-          need -= Math.max(0, draw - extra); // net cash actually delivered after its tax
+          finalTax = taxAfterDraw(draw);
+          withdrawals.rrsp += draw;
+          need -= draw - (finalTax.total - taxBeforeDraw);
         } else if (type === "nonreg") {
-          // Plan Task 14: non-reg draws now carry their realized-gain tax. The chunk is
-          // taxed marginally on the year's income-so-far shape; the household receives
-          // `take - chunkTax` net, and the charged tax folds into the reported tax.
-          const take = Math.min(Math.max(0, available), Math.max(0, need));
-          if (take > 0) {
-            const marketNow = Math.max(0, sumType(accounts, "nonreg") - withdrawals.nonreg);
-            const ratio = marketNow > 0 ? Math.max(0, nonregBook / marketNow) : 0;
-            let draw = Math.min(take, marketNow);
-            const taxShape = (): IncomeForTax => ({
-              ...incomeBase,
-              rrspWithdrawals: withdrawals.rrsp,
-              pensionEligibleIncome: age >= 65 ? withdrawals.rrsp : 0,
-              capitalGains: capitalGains + nonregGains,
-            });
-            let beforeShape = taxShape();
-            let t0 = taxForYear(beforeShape);
-            let chunkGain = draw >= marketNow ? marketNow - nonregBook : draw * (1 - ratio);
-            let t1 = taxForYear({ ...beforeShape, capitalGains: capitalGains + nonregGains + chunkGain });
-            let delta = t1.total - t0.total;
-            // Solve gross proceeds against the tax change from this draw. Capital
-            // losses may offset this year's gains; taxOf floors the tax itself.
-            for (let iter = 0; iter < 24; iter++) {
-              const next = Math.min(marketNow, Math.max(0, take + delta));
-              if (Math.abs(next - draw) < 0.005) { draw = next; break; }
-              draw = next;
-              chunkGain = draw >= marketNow ? marketNow - nonregBook : draw * (1 - ratio);
-              beforeShape = taxShape();
-              t0 = taxForYear(beforeShape);
-              t1 = taxForYear({ ...beforeShape, capitalGains: capitalGains + nonregGains + chunkGain });
-              delta = t1.total - t0.total;
+          const gainOnDraw = (draw: number) =>
+            draw >= available ? available - nonregBook : draw * (1 - nonregBook / available);
+          const taxAfterDraw = (draw: number) =>
+            taxForYear(incomeAfterWithdrawals(withdrawals.rrsp, nonregGains + gainOnDraw(draw)));
+          const netProceeds = (draw: number) => draw - (taxAfterDraw(draw).total - taxBeforeDraw);
+          let draw = available;
+          if (netProceeds(available) > need) {
+            // Net proceeds increase with the gross draw. A capital loss can
+            // make them rise faster than the draw by reducing tax on prior gains.
+            let low = 0;
+            let high = available;
+            for (let iter = 0; iter < 64 && high - low > 0.000001; iter++) {
+              const middle = low + (high - low) / 2;
+              if (netProceeds(middle) >= need) high = middle;
+              else low = middle;
             }
-            chunkGain = draw >= marketNow ? marketNow - nonregBook : draw * (1 - ratio);
-            beforeShape = taxShape();
-            t0 = taxForYear(beforeShape);
-            t1 = taxForYear({ ...beforeShape, capitalGains: capitalGains + nonregGains + chunkGain });
-            delta = t1.total - t0.total;
-            nonregGainsTax.federal += t1.federal - t0.federal;
-            nonregGainsTax.provincial += t1.provincial - t0.provincial;
-            nonregGainsTax.surtax += t1.surtax - t0.surtax;
-            nonregGainsTax.oasClawback += t1.oasClawback - t0.oasClawback;
-            nonregGainsTax.total += delta;
-            nonregGains += chunkGain;
-            const basisConsumed = draw >= marketNow ? nonregBook : draw * ratio;
-            nonregBook = Math.max(0, nonregBook - basisConsumed);
-            withdrawals[type] += draw;
-            need -= draw - delta;
-          } else {
-            withdrawals[type] += take;
+            draw = high;
           }
+          finalTax = taxAfterDraw(draw);
+          const realizedGain = gainOnDraw(draw);
+          nonregGains += realizedGain;
+          nonregBook = Math.max(0, nonregBook - (draw - realizedGain));
+          withdrawals.nonreg += draw;
+          need -= draw - (finalTax.total - taxBeforeDraw);
         } else {
           // TFSA and named-cash draws: neither carries tax in v1 (cash principal is
           // never taxed; cash interest was already taxed at the year's opening).
-          const take = Math.min(Math.max(0, available), Math.max(0, need));
+          const take = Math.min(available, need);
           withdrawals[type] = (withdrawals[type] ?? 0) + take;
           need -= take;
         }
@@ -586,16 +554,7 @@ export function simulate(
       shortfall = Math.max(0, roundCent(need));
       // Expenses absorb the shortfall: the household simply cannot fund the rest.
     }
-    // ---- 5c. Fold the charged gains tax into the reported tax and book contributions
-    // at par (ACB grows with every fresh dollar that lands in non-reg).
-    finalTax = {
-      federal: finalTax.federal + nonregGainsTax.federal,
-      provincial: finalTax.provincial + nonregGainsTax.provincial,
-      surtax: finalTax.surtax + nonregGainsTax.surtax,
-      oasClawback: finalTax.oasClawback + nonregGainsTax.oasClawback,
-      total: finalTax.total + nonregGainsTax.total,
-      taxable: finalTax.taxable + nonregGains,
-    };
+    // Book contributions at par (ACB grows with every fresh dollar that lands in non-reg).
     nonregBook += contributions.nonreg;
     if (contributionsCash > 0) contributions.cash = contributionsCash;
 
@@ -659,29 +618,8 @@ export function simulate(
     );
 
     // ---- 7. Final tax figures + marginal rate (numeric derivative per $100)
-    const taxNow = taxForYear(
-      {
-        employmentIncome: employment,
-        otherTaxableIncome: cpp + oas + otherPlan + cashInterest,
-        rrspWithdrawals: withdrawals.rrsp,
-        pensionEligibleIncome: age >= 65 ? withdrawals.rrsp : 0,
-        capitalGains: capitalGains + nonregGains,
-        dividendsEligible: 0,
-        age,
-      },
-    );
-    const taxPlus = taxForYear(
-      {
-        employmentIncome: employment,
-        otherTaxableIncome: cpp + oas + otherPlan + cashInterest,
-        rrspWithdrawals: withdrawals.rrsp + 100,
-        pensionEligibleIncome: age >= 65 ? withdrawals.rrsp + 100 : 0,
-        capitalGains: capitalGains + nonregGains,
-        dividendsEligible: 0,
-        age,
-      },
-    );
-    const marginalRate = roundCent4((taxPlus.total - taxNow.total) / 100);
+    const taxPlus = taxForYear(incomeAfterWithdrawals(withdrawals.rrsp + 100, nonregGains));
+    const marginalRate = roundCent4((taxPlus.total - finalTax.total) / 100);
 
     const netWorth = roundCent(
       sumType(accounts, "tfsa") +
@@ -698,7 +636,7 @@ export function simulate(
     const year: YearResult = {
       age,
       income: {
-        employment: roundCent(employment),
+        employment,
         cpp: roundCent(cpp),
         oas: roundCent(oas),
         gis: roundCent(gis),
@@ -708,7 +646,8 @@ export function simulate(
       // so legacy saved plans keep their exact result shapes.
       ...(cashInterest > 0 ? { cashInterest } : {}),
       ...(plannedRrspDraw > 0 ? { plannedRrspDraw: roundCent(plannedRrspDraw) } : {}),
-      taxableIncome: roundCent(taxNow.taxable),
+      payroll,
+      taxableIncome: roundCent(finalTax.taxable),
       tax: {
         federal: roundCent(finalTax.federal),
         provincial: roundCent(finalTax.provincial),

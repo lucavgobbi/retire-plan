@@ -18,6 +18,10 @@ import type { TaxYearTables } from "./tables";
  */
 export interface IncomeForTax {
   employmentIncome: number;
+  /** Base CPP and EI eligible for non-refundable credits. */
+  payrollCreditAmount?: number;
+  /** First and second additional employee CPP contributions deductible from income. */
+  enhancedCppDeduction?: number;
   otherTaxableIncome: number;
   rrspWithdrawals: number;
   pensionEligibleIncome: number;
@@ -35,7 +39,8 @@ interface RateBracket {
 }
 
 /**
- * Taxable income = all taxable sources + capital gains at 50%; eligible dividends assert 0.
+ * Taxable income includes capital gains at 50% and deducts enhanced employee CPP.
+ * Eligible dividends must be zero.
  * `pensionEligibleIncome` is a subset annotation of other fields and is not added here.
  */
 export function taxableIncome(income: IncomeForTax): number {
@@ -48,7 +53,8 @@ export function taxableIncome(income: IncomeForTax): number {
     income.employmentIncome +
     income.otherTaxableIncome +
     income.rrspWithdrawals +
-    Math.max(0, income.capitalGains) * CAPITAL_GAINS_INCLUSION
+    Math.max(0, income.capitalGains) * CAPITAL_GAINS_INCLUSION -
+    (income.enhancedCppDeduction ?? 0)
   );
 }
 
@@ -82,11 +88,11 @@ export interface FederalTaxResult {
  *
  * Credit stack (converted to tax dollars at the lowest bracket rate, per ITA s.117(2)):
  *   lowest rate x (BPA + employment amount + age amount after reduction
- *                  + pension income amount + CPP/OAS credits — assumed fully consumed in v1)
+ *                  + pension income amount + eligible base CPP and EI)
  * Tax floor is 0.
  *
- * Reduction measures use the computed taxable income as the net-income proxy (v1 has no
- * deductions to model), and the age amount reduces per the Federal Worksheet 5000-D1
+ * Reduction measures use the computed taxable income as the net-income proxy,
+ * and the age amount reduces per the Federal Worksheet 5000-D1
  * chart: max(0, amount - reductionRate x max(0, netIncome - threshold)), gated at 65+.
  * The pension income amount is min(table amount, eligible pension income) — current law
  * (verified on the official worksheet) has no income phase-out (see SOURCES.md).
@@ -115,7 +121,8 @@ export function federalTax(income: IncomeForTax, tables: TaxYearTables): Federal
 
   const creditable = Math.max(
     0,
-    tables.federal.basicPersonalAmount + employmentAmount + ageAmount + pensionAmount,
+    tables.federal.basicPersonalAmount + employmentAmount + ageAmount + pensionAmount +
+      (income.payrollCreditAmount ?? 0),
   );
   const credits = lowestRate * creditable;
 

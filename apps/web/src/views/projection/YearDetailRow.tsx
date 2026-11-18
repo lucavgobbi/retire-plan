@@ -72,6 +72,22 @@ export function YearDetailRow({
               <dt>Non-registered</dt><dd>{fmtMoneyDetail(year.savings.nonreg)}</dd><dt>Cash accounts</dt><dd>{fmtMoneyDetail(year.savings.cash ?? 0)}</dd><dt>Mortgage</dt><dd>{fmtMoneyDetail(year.savings.mortgage)}</dd>
             </dl>
           </section>
+          <section className="detail-section" aria-label="Payroll deductions"><h4>Payroll deductions</h4>
+            {year.payroll === undefined
+              ? <p className="hint">No payroll breakdown was recorded for this saved result. Re-run the projection to see payroll deductions.</p>
+              : year.payroll.total === 0
+                ? <p className="hint">No employee payroll deductions were withheld this year.</p>
+                : <dl className="detail-values">
+                    <dt>Gross employment</dt><dd>{fmtMoneyDetail(year.income.employment)}</dd>
+                    <dt>CPP base</dt><dd>{fmtMoneyDetail(year.payroll.cppBase)}</dd>
+                    <dt>CPP additional</dt><dd>{fmtMoneyDetail(year.payroll.cppAdditional)}</dd>
+                    <dt>CPP2</dt><dd>{fmtMoneyDetail(year.payroll.cpp2)}</dd>
+                    <dt>EI</dt><dd>{fmtMoneyDetail(year.payroll.ei)}</dd>
+                    <dt>EI refund</dt><dd>{fmtMoneyDetail(year.payroll.eiRefund)}</dd>
+                    <dt className="detail-total-label">Total withheld</dt><dd className="detail-total">{fmtMoneyDetail(year.payroll.total)}</dd>
+                  </dl>}
+            {year.payroll !== undefined && year.payroll.total > 0 && <p className="hint">Base CPP contributions and eligible EI premiums earn non-refundable tax credits; the enhanced CPP portion ({fmtMoneyDetail(year.payroll.enhancedCppDeduction)}) is deducted from taxable income. Employee, single-employer annual approximation — EI benefits, CPP pension accrual and post-retirement benefit (PRB) increases are not calculated.</p>}
+          </section>
           <section className="detail-section" aria-label="Net worth breakdown"><h4>Net worth breakdown</h4>
             <dl className="detail-values">
               <dt>TFSA</dt><dd>{fmtMoneyDetail(year.balances.tfsa)}</dd><dt>RRSP</dt><dd>{fmtMoneyDetail(year.balances.rrsp)}</dd>

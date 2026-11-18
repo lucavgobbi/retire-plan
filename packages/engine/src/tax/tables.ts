@@ -1,3 +1,15 @@
+interface PayrollTables {
+  cppBasicExemption: number;
+  cppFirstCeiling: number;
+  cppSecondCeiling: number;
+  cppBaseRate: number;
+  cppAdditionalRate: number;
+  cpp2Rate: number;
+  eiInsurableCeiling: number;
+  eiRate: number;
+  eiRefundEarningsLimit: number;
+}
+
 /**
  * TaxYearTables — the versioned CRA parameter set for one tax year (Ontario resident).
  * All rates/thresholds/limits live in JSON tables (data/tax/ca-*.json); none are hardcoded
@@ -20,6 +32,8 @@ export interface TaxYearTables {
     basicPersonalAmount: number;
     indexationFactor: number;
   };
+  /** Optional for older custom tables. Payroll projections require these values. */
+  payroll?: PayrollTables;
   oas: { annualMax: number; clawbackThreshold: number; recoveryRate: number };
   gis: { annualMaxSingle: number; taperRate: number; exclusionEmployment: number };
   rrif: { minimumFactors: { age: number; factor: number }[] };
@@ -52,6 +66,31 @@ function assertPositiveNumber(value: unknown, what: string): number {
     throw new Error(`Tax tables: ${what} must be positive (got ${n}).`);
   }
   return n;
+}
+
+function loadPayrollTables(value: unknown): PayrollTables {
+  const raw = assertObject(value, "payroll");
+  const tables = {
+    cppBasicExemption: assertPositiveNumber(raw.cppBasicExemption, "payroll.cppBasicExemption"),
+    cppFirstCeiling: assertPositiveNumber(raw.cppFirstCeiling, "payroll.cppFirstCeiling"),
+    cppSecondCeiling: assertPositiveNumber(raw.cppSecondCeiling, "payroll.cppSecondCeiling"),
+    cppBaseRate: assertPositiveNumber(raw.cppBaseRate, "payroll.cppBaseRate"),
+    cppAdditionalRate: assertPositiveNumber(raw.cppAdditionalRate, "payroll.cppAdditionalRate"),
+    cpp2Rate: assertPositiveNumber(raw.cpp2Rate, "payroll.cpp2Rate"),
+    eiInsurableCeiling: assertPositiveNumber(raw.eiInsurableCeiling, "payroll.eiInsurableCeiling"),
+    eiRate: assertPositiveNumber(raw.eiRate, "payroll.eiRate"),
+    eiRefundEarningsLimit: assertPositiveNumber(raw.eiRefundEarningsLimit, "payroll.eiRefundEarningsLimit"),
+  };
+  if (tables.cppBasicExemption >= tables.cppFirstCeiling || tables.cppFirstCeiling >= tables.cppSecondCeiling) {
+    throw new Error("Tax tables: payroll CPP exemption and earnings ceilings must be strictly ascending.");
+  }
+  if (tables.eiRefundEarningsLimit >= tables.eiInsurableCeiling) {
+    throw new Error("Tax tables: payroll EI refund limit must be below the insurable earnings ceiling.");
+  }
+  if ([tables.cppBaseRate + tables.cppAdditionalRate, tables.cpp2Rate, tables.eiRate].some(rate => rate >= 1)) {
+    throw new Error("Tax tables: payroll contribution rates must be fractions below 1.");
+  }
+  return tables;
 }
 
 function assertArray(value: unknown, what: string): unknown[] {
@@ -186,6 +225,7 @@ export function loadTables(json: unknown): TaxYearTables {
   return {
     year,
     province: "ON",
+    ...(root.payroll === undefined ? {} : { payroll: loadPayrollTables(root.payroll) }),
     federal: {
       brackets: federalBrackets,
       basicPersonalAmount: assertNumber(federal.basicPersonalAmount, "federal.basicPersonalAmount"),
@@ -263,8 +303,9 @@ function indexBrackets(brackets: Bracket[], factor: number): Bracket[] {
  *    amount, OAS recovery threshold.
  *  - ontario: bracket thresholds, surtax tax thresholds, BPA.
  *
- * What does not scale (fixed by annual announcement or legislation): TFSA/RRSP limits, GIS
- * maximum, OAS annual maximum, RRIF factors, all rates, and the factors themselves.
+ * What does not scale (fixed by annual announcement or legislation): TFSA/RRSP limits,
+ * payroll parameters, GIS maximum, OAS annual maximum, RRIF factors, all rates, and
+ * the factors themselves.
  *
  * Ontario's $150,000 and $220,000 brackets are legislatively unindexed in reality (see
  * SOURCES.md); uniform ON indexing is a documented simplification.

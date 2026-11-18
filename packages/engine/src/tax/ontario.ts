@@ -38,7 +38,7 @@ export function ontarioSurtax(onBase: number, taxable: number, tables: TaxYearTa
  * Ontario tax for the year.
  *
  * Flow mirrors the ON428 ordering: progressive tax on taxable income, minus non-refundable
- * credits (v1 stack: lowest-ON-rate x Ontario BPA), then the surtax is computed on that
+ * credits (lowest Ontario rate × Ontario BPA and eligible base CPP/EI), then surtax applies to
  * "basic provincial tax payable" (credits reduce the surtax base; dividend credits would
  * apply after it but are not modeled in v1 — see docs/assumptions.md when it ships).
  */
@@ -50,7 +50,8 @@ export function ontarioTax(income: IncomeForTax, tables: TaxYearTables): Ontario
   }
   const lowestRate = brackets[0]!.rate;
   const gross = progressiveGrossTax(taxable, brackets);
-  const tax = Math.max(0, gross - lowestRate * tables.ontario.basicPersonalAmount);
+  const creditable = tables.ontario.basicPersonalAmount + (income.payrollCreditAmount ?? 0);
+  const tax = Math.max(0, gross - lowestRate * creditable);
   const surtax = ontarioSurtax(tax, taxable, tables);
   return { tax, surtax, total: tax + surtax, taxable };
 }

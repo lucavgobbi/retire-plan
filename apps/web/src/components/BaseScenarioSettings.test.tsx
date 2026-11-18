@@ -89,10 +89,39 @@ describe("base projection return inputs", () => {
     expect(screen.getByText(/bounded planning heuristic/i)).toBeTruthy();
   });
 
+  it("saves employee payroll choices, keeps CPP2 inside CPP, and shows the legacy default while off", () => {
+    renderSettings(DEFAULT_SCENARIO_BASE);
+    expect(screen.getByRole("region", { name: "Payroll" })).toBeTruthy();
+    expect(screen.getByText(/payroll is off — the legacy default/i)).toBeTruthy();
+    // Exactly three switches: CPP (which includes CPP2), EI and the 65–69 opt-out.
+    const group = screen.getByRole("group", { name: "Base employee payroll deductions" });
+    expect(within(group).getAllByRole("checkbox").length).toBe(3);
+    expect(screen.getByText(/CPP2 follows CPP with no separate switch/i)).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Base employee CPP"));
+    expect(storedBase().payroll).toEqual({ cpp: true, ei: false, cppOptOut65to69: false });
+    expect(screen.queryByText(/payroll is off — the legacy default/i)).toBeNull();
+    expect(screen.getByText(/no employment income is configured/i)).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Base employee EI"));
+    expect(storedBase().payroll).toEqual({ cpp: true, ei: true, cppOptOut65to69: false });
+    fireEvent.click(screen.getByLabelText("Base CPP opt-out ages 65–69"));
+    expect(storedBase().payroll).toEqual({ cpp: true, ei: true, cppOptOut65to69: true });
+    // Unchecking returns to an explicit all-off object (semantically the legacy default).
+    fireEvent.click(screen.getByLabelText("Base employee CPP"));
+    fireEvent.click(screen.getByLabelText("Base employee EI"));
+    expect(storedBase().payroll).toEqual({ cpp: false, ei: false, cppOptOut65to69: true });
+    expect(screen.getByText(/payroll is off — the legacy default/i)).toBeTruthy();
+  });
+
+  it("shows the legacy payroll note for an explicitly all-off stored base too", () => {
+    renderSettings({ ...DEFAULT_SCENARIO_BASE, payroll: { cpp: false, ei: false, cppOptOut65to69: false } });
+    expect(screen.getByText(/payroll is off — the legacy default/i)).toBeTruthy();
+    expect((screen.getByLabelText("Base employee CPP") as HTMLInputElement).checked).toBe(false);
+  });
+
   it("groups base controls into clear sections and keeps hidden invalid return fields discoverable", async () => {
     const invalid: ScenarioBase = { ...DEFAULT_SCENARIO_BASE, returnAssumptions: { equity: 0.07, bond: 0.05, cash: 0.02 } };
     renderSettings(invalid);
-    for (const name of ["Basics", "Benefits", "Simulation", "Withdrawals"]) {
+    for (const name of ["Basics", "Benefits", "Payroll", "Simulation", "Withdrawals"]) {
       expect(screen.getByRole("region", { name })).toBeTruthy();
     }
     const returns = screen.getByText("Return assumptions").closest("details")!;

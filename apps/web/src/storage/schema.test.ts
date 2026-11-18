@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isFiniteNumber,
   isIsoDateString,
+  validateBaseScenario,
   validatePlanFile,
   validatePlanMeta,
   validatePlanShape,
@@ -82,6 +83,29 @@ describe("structural schema checks", () => {
     expect(validateScenarioDelta({ ...scenario, withdrawalStrategy: "maximize-net-worth" }).join(" ")).toMatch(/withdrawalStrategy must be manual or tax-minimizing/);
     // Optional fields preserve pre-feature saved scenarios.
     expect(validateScenarioDelta(scenario)).toEqual([]);
+  });
+
+  it("accepts payroll settings and rejects malformed payroll options (exactly three booleans)", () => {
+    const scenario = { id: "s", name: "S", basePlanId: "p", simMode: "deterministic", overrides: {} };
+    expect(validateScenarioDelta({ ...scenario, payroll: { cpp: true, ei: false, cppOptOut65to69: false } })).toEqual([]);
+    expect(validateScenarioDelta({ ...scenario, payroll: { cpp: false, ei: true, cppOptOut65to69: true } })).toEqual([]);
+    // Legacy scenarios without payroll stay valid.
+    expect(validateScenarioDelta(scenario)).toEqual([]);
+    // Extra keys are surfaced, not silently coerced.
+    expect(validateScenarioDelta({ ...scenario, payroll: { cpp: true, ei: true, cppOptOut65to69: false, cpp2: true } }).join(" ")).toMatch(/payroll must be an object with exactly the boolean flags/);
+    expect(validateScenarioDelta({ ...scenario, payroll: { cpp: true, ei: false } }).join(" ")).toMatch(/payroll must be an object with exactly the boolean flags/);
+    expect(validateScenarioDelta({ ...scenario, payroll: { cpp: "yes", ei: false, cppOptOut65to69: false } }).join(" ")).toMatch(/payroll must be an object with exactly the boolean flags/);
+    expect(validateScenarioDelta({ ...scenario, payroll: "off" }).join(" ")).toMatch(/payroll must be an object with exactly the boolean flags/);
+  });
+
+  it("validates payroll on the working base scenario settings", () => {
+    const base = {
+      retirementAge: 65, returnAssumptions: { equity: 0.05, bond: 0.02, cash: 0 }, withdrawalOrder: ["tfsa", "nonreg", "rrsp"],
+      benefits: { cpp: true, oas: true, gis: true },
+    };
+    expect(validateBaseScenario({ ...base, payroll: { cpp: true, ei: true, cppOptOut65to69: false } })).toEqual([]);
+    expect(validateBaseScenario(base)).toEqual([]);
+    expect(validateBaseScenario({ ...base, payroll: { cpp: true, ei: false } }).join(" ")).toMatch(/payroll must be an object with exactly the boolean flags/);
   });
 
   it("accepts persisted Monte Carlo settings and rejects invalid seeds/deviations", () => {

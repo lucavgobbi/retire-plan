@@ -69,6 +69,12 @@ function validateScenarioOptions(value: Record<string, unknown>, label: string):
       errors.push(`${label} benefits cannot enable GIS when OAS is disabled.`);
     }
   }
+  if (value.payroll !== undefined) {
+    const payroll = value.payroll;
+    if (!isRecord(payroll) || Object.keys(payroll).length !== 3 || !["cpp", "ei", "cppOptOut65to69"].every(key => typeof payroll[key] === "boolean")) {
+      errors.push(`${label} payroll must be an object with exactly the boolean flags cpp, ei, cppOptOut65to69.`);
+    }
+  }
   if (value.withdrawalStrategy !== undefined && !isEnum(value.withdrawalStrategy, WITHDRAWAL_STRATEGIES)) {
     errors.push(`${label} withdrawalStrategy must be manual or tax-minimizing.`);
   }
@@ -525,11 +531,12 @@ export function asWorkspace(value: unknown): Workspace {
   return value as Workspace;
 }
 
-function validateBaseScenario(value: unknown): string[] {
+export function validateBaseScenario(value: unknown): string[] {
   if (!isRecord(value)) return ["Working scenario settings must be an object."];
   const errors = validateScenarioDelta({
     id: "settings", name: "settings", basePlanId: "settings", simMode: value.simMode ?? "deterministic",
     mcConfig: value.mcConfig, historicalConfig: value.historicalConfig, benefits: value.benefits,
+    payroll: value.payroll,
     withdrawalStrategy: value.withdrawalStrategy, overrides: value,
   });
   for (const key of ["retirementAge", "returnAssumptions", "withdrawalOrder"]) {

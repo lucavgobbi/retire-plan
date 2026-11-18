@@ -159,12 +159,12 @@ official law now agree; no open item.
    premium would be **$750**/yr for every compared year — material to net income. (Under
    the §5b retired fixture the compared years have taxable ≈ 16.9k and no premium.) Fast
    -follow candidate.
-3. **CPP/EI payroll contributions — not modeled.** 2026 employee rate 5.95% (max 4,230.45
-   on YMPE 74,600), CPP2 4.00% (max 416.00), EI 1.63% (max 1,123.07). Affects working
-   years' net cash; CPP pension is already taxed correctly as income. Fast-follow.
+3. **CPP/EI payroll contributions are off in the base fixture.** The engine can model
+   annual employee CPP, CPP2 and EI for a single Ontario employer when enabled.
+   The baseline figures in this cross-check exclude payroll. [Payroll assumptions](../assumptions.md#employee-payroll-deductions)
 4. **GIS income test (corrected during this check — an earlier draft of this document
    stated the engine counts OAS; that was false).** Exact code evidence: the engine's GIS
-   call passes cpp / prior-year RRSP·RRIF withdrawals / employment income / (other plan
+   call passes cpp / prior-year RRSP·RRIF withdrawals / employment income net of modeled payroll / (other plan
    streams + prior-year realized non-reg gains) / TFSA withdrawals into
    `GisIncomeSources`, holds OAS in a separate variable and never passes it, and the
    interface has no `oas` field. The engine therefore **excludes the OAS pension from the
@@ -175,8 +175,8 @@ official law now agree; no open item.
    conservative for that band, and a documented fast-follow). GIS in the §5b compared
    years = 9,304.88 under the official formula and matches the engine to the cent.
 5. **Future-year indexation is extrapolation** (both engine and reference): per-year
-   federal 2.0% / Ontario 1.9% factors applied geometrically from base 2026. No official
-   future-year values exist; CRA announces each fall. Corroboration: the official OAS
+   federal 2.0% / Ontario 1.9% factors applied geometrically from base 2026. The reference
+   uses this extrapolation even when a later year's official rates are available. The official OAS
    repayment threshold grew 90,997 → 93,454 (2024→2025, +2.7% = the 2025 federally
    announced factor) → 95,323 (2025→2026, +2.0% = the 2026 factor) — the mechanism the
    engine extrapolates matches its history. Ontario's legislatively unindexed 150k/220k
@@ -252,6 +252,6 @@ npm test -w packages/engine                                          # full suit
   (`min(oasReceived, oasClawback(...))`), confirmed resolved with high-income and
   delayed-OAS coverage in the 186/186 suite; the pension income amount was corrected to
   the statutory fixed $2,000 in both engine and reference (§5d) — resolved.
-- Remaining known gaps are documented above (§6): Ontario health premium and CPP/EI
-  contributions are the material ones; the employment-stream fixture-intent question
-  (§6.8) is the captain's call.
+- The base fixture excludes Ontario health premiums and leaves the optional employee
+  CPP and EI payroll settings off. Section 6 describes the fixture and model limits,
+  including the employment stream used in the comparison (§6.8).

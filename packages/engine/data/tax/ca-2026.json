@@ -39,6 +39,17 @@
     "basicPersonalAmount": 12989,
     "indexationFactor": 1.019
   },
+  "payroll": {
+    "cppBasicExemption": 3500,
+    "cppFirstCeiling": 74600,
+    "cppSecondCeiling": 85000,
+    "cppBaseRate": 0.0495,
+    "cppAdditionalRate": 0.01,
+    "cpp2Rate": 0.04,
+    "eiInsurableCeiling": 68900,
+    "eiRate": 0.0163,
+    "eiRefundEarningsLimit": 2000
+  },
   "oas": {
     "annualMax": 8907.72,
     "clawbackThreshold": 95323,

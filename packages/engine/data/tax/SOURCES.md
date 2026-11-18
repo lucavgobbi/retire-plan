@@ -31,6 +31,28 @@ employment-income exclusion tier) is the Government of Canada / CRA page cited.
 | `ontario.basicPersonalAmount` | $12,989 | TaxTips.ca Ontario 2026 (confirmed to CRA info); consistent with $12,747 (2025) × 1.019 | https://www.taxtips.ca/taxrates/on.htm |
 | `ontario.indexationFactor` | 1.019 (1.9%) | TaxTips.ca Ontario 2026: "The Ontario tax brackets and personal tax credit amounts are increased for 2026 by an indexation factor of 1.019"; consistent with ON threshold pair ratios (53,891/52,886 and surtax 5,818/5,710) | https://www.taxtips.ca/taxrates/on.htm |
 
+## Employee payroll
+
+| Field | 2026 value |
+| --- | --- |
+| `payroll.cppBasicExemption` | $3,500 |
+| `payroll.cppFirstCeiling` | $74,600 (YMPE) |
+| `payroll.cppSecondCeiling` | $85,000 (YAMPE) |
+| `payroll.cppBaseRate` | 4.95%, maximum $3,519.45 |
+| `payroll.cppAdditionalRate` | 1.00%, maximum $711.00 |
+| `payroll.cpp2Rate` | 4.00%, maximum $416.00 |
+| `payroll.eiInsurableCeiling` | $68,900 |
+| `payroll.eiRate` | 1.63%, maximum $1,123.07 |
+| `payroll.eiRefundEarningsLimit` | $2,000, inclusive |
+
+The rates and ceilings are the employee amounts in CRA's Ontario 2026 payroll
+tables. The federal and provincial credit bases follow T4127 factors K2 and K2P,
+and the enhanced deduction follows F5. The EI low-earnings refund follows CRA
+line 31200 and line 45000. Service Canada lists the allowable payroll deductions
+from GIS employment income in block 7 of ISP-3026. [CRA T4032-ON](https://www.canada.ca/en/revenue-agency/services/forms-publications/payroll/t4032-payroll-deductions-tables/t4032on-jan/t4032on-january-general-information.html) · [CRA T4127](https://www.canada.ca/en/revenue-agency/services/forms-publications/payroll/t4127-payroll-deductions-formulas/t4127-jan/t4127-jan-payroll-deductions-formulas-computer-programs.html) · [CRA line 31200](https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/about-your-tax-return/tax-return/completing-a-tax-return/deductions-credits-expenses/line-31200-employment-insurance-premiums-through-employment.html) · [Service Canada ISP-3026](https://catalogue.servicecanada.gc.ca/apps/EForms/pdf/en/ISP-3026.pdf)
+
+The stepper keeps these payroll parameters at the base-table values. [Projection assumptions](../../../../docs/assumptions.md#employee-payroll-deductions)
+
 ## OAS / GIS
 
 | Field | Value (2026) | Source | URL |

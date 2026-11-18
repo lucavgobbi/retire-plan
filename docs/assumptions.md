@@ -45,6 +45,45 @@ annual announcement (including RRIF factors, TFSA/RRSP dollar limits, and OAS/GI
 maximums) remain at their base-table amounts in v1; future announced values are not
 forecast.
 
+## Employee payroll deductions
+
+The optional scenario payroll settings enable CPP and EI independently. Legacy
+scenarios omit payroll deductions, and enabled scenarios use the employee share
+for one Ontario taxpayer with one employer per calendar year. All active employment
+streams are combined with their same-year bonuses before calculating CPP, CPP2
+and EI. Each stream should enter gross pay. The annual calculation assumes those
+wages are pensionable and insurable and excludes employer contributions,
+self-employment, Quebec payroll and multi-employer reconciliation.
+
+The bundled model uses the 2026 payroll rates, earnings ceilings, basic CPP
+exemption and EI refund threshold in every projected year. Like the annual
+TFSA and RRSP limits, these amounts stay at the base-table values when ordinary
+income-tax brackets and credits are indexed. The projection does not fetch
+current payroll rates or forecast changes announced for later years.
+
+CPP, including CPP2, applies in modeled years at ages 18 through 69. The
+optional age 65–69 election applies only when a positive configured CPP
+retirement pension is paid in the same scenario and year. This annual model
+uses whole years for birthdays and elections. Actual payroll starts after
+the month of the 18th birthday, continues through the month of the 70th
+birthday, and generally changes in the month after an employer receives a
+valid CPT30 election. CPP-recognized disability, election revocations and
+partial-year payroll require more detail than the plan stores. EI remains
+age independent.
+
+Gross payroll withholding appears separately from income tax. The annual cash
+cost is total withholding minus the EI refund, reconciled in the same model
+year when annual insurable earnings are $2,000 or less. Base CPP and EI retained
+after the refund generate non-refundable federal and Ontario credits. First
+additional CPP and CPP2 reduce taxable income and the OAS recovery income proxy.
+GIS uses employment income net of payroll before its existing exemption. The
+RRSP room calculation continues to use gross employment income. Annual tax
+and payroll deductions reduce available cash before savings or deficit funding.
+
+The CPP pension remains the amount entered by the user. Future CPP pension
+accrual, the CPP Post-Retirement Benefit, and EI benefit payments are outside
+the payroll model. [CRA Ontario 2026 payroll tables](https://www.canada.ca/en/revenue-agency/services/forms-publications/payroll/t4032-payroll-deductions-tables/t4032on-jan/t4032on-january-general-information.html) · [CRA CPP elections and cutoffs](https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/payroll/payroll-deductions-contributions/canada-pension-plan-cpp/starting-stopping-cpp-deductions.html) · [CRA EI credit and refund](https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/about-your-tax-return/tax-return/completing-a-tax-return/deductions-credits-expenses/line-31200-employment-insurance-premiums-through-employment.html) · [Service Canada PRB eligibility](https://www.canada.ca/en/services/benefits/publicpensions/cpp/cpp-post-retirement/eligibility.html)
+
 ## Monte Carlo returns
 
 Monte Carlo draws independent annual normal returns for equity, bonds, and cash,
@@ -125,8 +164,9 @@ schedule is pinned in `packages/engine/tests/benefits/rrif.test.ts` and sourced 
   applied against ordinary income. This is a v1 single-year approximation.
 - **Non-reg draws carry their own gains tax:** in the deficit branch, each non-reg
   draw is grossed up to deliver the requested net amount after its own realized-gain
-  tax; the charged tax is folded component-wise into annual tax. Losses offset current
-  year gains only. TFSA draws carry no tax (Task 7 contract).
+  tax. RRSP and non-reg draws price their incremental tax against the running liability,
+  including earlier gains and mandatory or proactive RRSP draws. Losses offset current
+  year gains only. TFSA withdrawals are tax-free.
 - **Mortgage-prepay step:** prepayments are capped at the debt remaining after scheduled
   payments. The step is terminal in the savings policy; leftover surplus is kept as
   uninvested projection cash. `untilAge` is inclusive: a step remains active at its

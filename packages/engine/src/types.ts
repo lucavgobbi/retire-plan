@@ -101,6 +101,13 @@ export interface BenefitSettings {
   gis: boolean;
 }
 
+/** Employee payroll deductions. Absent settings leave both programs off. */
+export interface PayrollSettings {
+  cpp: boolean;
+  ei: boolean;
+  cppOptOut65to69: boolean;
+}
+
 export type WithdrawalStrategy = "manual" | "tax-minimizing";
 
 export interface Scenario {
@@ -112,6 +119,7 @@ export interface Scenario {
   withdrawalOrder: AccountType[];
   /** Optional benefit receipt toggles; absent = all configured benefits received (legacy). */
   benefits?: BenefitSettings;
+  payroll?: PayrollSettings;
   /** Optional withdrawal strategy; absent = manual (the configured withdrawalOrder, legacy). */
   withdrawalStrategy?: WithdrawalStrategy;
   mcConfig?: {
@@ -129,6 +137,17 @@ export interface YearResult {
   cashInterest?: number;
   /** Proactive tax-strategy RRSP draw executed this year (above the mandatory RRIF minimum); optional for manual/legacy runs. */
   plannedRrspDraw?: number;
+  /** Employee payroll amounts in dollars. Optional for stored legacy results. */
+  payroll?: {
+    cppBase: number;
+    cppAdditional: number;
+    cpp2: number;
+    ei: number;
+    /** Gross withholding. The annual cash cost is total minus eiRefund. */
+    total: number;
+    enhancedCppDeduction: number;
+    eiRefund: number;
+  };
   taxableIncome: number;
   tax: {
     federal: number;
@@ -371,7 +390,7 @@ export function validatePlan(plan: Plan): string[] {
  * Note: `benefits.oas === false` disables GIS at simulation time (GIS eligibility
  * requires qualifying for OAS — canada.ca GIS page), not a validation error.
  */
-export function validateScenarioSettings(scenario: Pick<Scenario, "benefits" | "withdrawalStrategy">): string[] {
+export function validateScenarioSettings(scenario: Pick<Scenario, "benefits" | "withdrawalStrategy" | "payroll">): string[] {
   const errors: string[] = [];
   const benefits = scenario.benefits;
   if (benefits !== undefined) {
@@ -380,6 +399,14 @@ export function validateScenarioSettings(scenario: Pick<Scenario, "benefits" | "
       !["cpp", "oas", "gis"].every((k) => typeof (benefits as unknown as Record<string, unknown>)[k] === "boolean")) {
       errors.push("benefits must be an object with exactly the boolean flags cpp, oas, gis.");
     }
+  }
+  const payroll = scenario.payroll;
+  if (payroll !== undefined && (
+    typeof payroll !== "object" || payroll === null || Array.isArray(payroll) ||
+    Object.keys(payroll).length !== 3 ||
+    typeof payroll.cpp !== "boolean" || typeof payroll.ei !== "boolean" || typeof payroll.cppOptOut65to69 !== "boolean"
+  )) {
+    errors.push("payroll must be an object with exactly the boolean flags cpp, ei, cppOptOut65to69.");
   }
   if (scenario.withdrawalStrategy !== undefined && scenario.withdrawalStrategy !== "manual" && scenario.withdrawalStrategy !== "tax-minimizing") {
     errors.push(`withdrawalStrategy must be "manual" or "tax-minimizing" (got ${String(scenario.withdrawalStrategy)}).`);

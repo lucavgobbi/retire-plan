@@ -7,7 +7,7 @@ import { StoreProvider } from "../../store/StoreProvider";
 import { DEFAULT_SCENARIO_BASE } from "../../domain/defaults";
 import { makeSamplePlan, makeWorkspace } from "../projection/testFixtures";
 import { ScenariosView } from "./ScenariosView";
-import { duplicateScenario } from "./ScenarioList";
+import { describeOverrides, duplicateScenario } from "./ScenarioList";
 import { BaseScenarioSettings } from "../../components/BaseScenarioSettings";
 
 const delta: ScenarioDelta = {
@@ -31,6 +31,19 @@ function ScenariosProbe() {
   return <output data-testid="scenario-state">{JSON.stringify(workspace.scenarios)}</output>;
 }
 
+describe("describeOverrides", () => {
+  it("summarizes explicit payroll overrides, including an all-off override, and only claims inheritance when payroll is absent", () => {
+    expect(describeOverrides({ ...delta, overrides: {} })).toBe("inherits the working scenario (no overrides)");
+    expect(describeOverrides({ ...delta, overrides: {}, payroll: { cpp: true, ei: true, cppOptOut65to69: false } })).toBe("payroll CPP + EI");
+    expect(describeOverrides({ ...delta, overrides: {}, payroll: { cpp: true, ei: false, cppOptOut65to69: true } })).toBe("payroll CPP · opt-out 65–69");
+    // Explicit all-off settings ARE an override: they differ from absent inheritance.
+    expect(describeOverrides({ ...delta, overrides: {}, payroll: { cpp: false, ei: false, cppOptOut65to69: false } })).toBe("payroll none");
+    expect(describeOverrides({ ...delta, overrides: {}, payroll: { cpp: false, ei: false, cppOptOut65to69: true } })).toBe("payroll none · opt-out 65–69");
+    // Payroll shows alongside other overrides.
+    expect(describeOverrides(delta)).toBe("retirement age 62");
+  });
+});
+
 describe("ScenariosView", () => {
   it("creates a deep copy with a new ID and collision-safe name", () => {
     const source: ScenarioDelta = {
@@ -39,6 +52,7 @@ describe("ScenariosView", () => {
       mcConfig: { runs: 37, seed: 91, stdDev: { equity: 0.2, bond: 0.08, cash: 0.03 } },
       historicalConfig: { startYear: 1900 },
       benefits: { cpp: false, oas: true, gis: true },
+      payroll: { cpp: true, ei: false, cppOptOut65to69: true },
       withdrawalStrategy: "tax-minimizing",
       overrides: {
         retirementAge: 61,
@@ -49,10 +63,11 @@ describe("ScenariosView", () => {
     const copy = duplicateScenario(source, [source.name, "Copy of Retire 3 years earlier"]);
     expect(copy.id).not.toBe(source.id);
     expect(copy.name).toBe("Copy of Retire 3 years earlier (2)");
-    expect(copy).toMatchObject({ simMode: "montecarlo", mcConfig: source.mcConfig, historicalConfig: source.historicalConfig, benefits: source.benefits, withdrawalStrategy: "tax-minimizing", overrides: source.overrides });
+    expect(copy).toMatchObject({ simMode: "montecarlo", mcConfig: source.mcConfig, historicalConfig: source.historicalConfig, benefits: source.benefits, payroll: source.payroll, withdrawalStrategy: "tax-minimizing", overrides: source.overrides });
     expect(copy.mcConfig).not.toBe(source.mcConfig);
     expect(copy.mcConfig!.stdDev).not.toBe(source.mcConfig!.stdDev);
     expect(copy.overrides.withdrawalOrder).not.toBe(source.overrides.withdrawalOrder);
+    expect(copy.payroll).not.toBe(source.payroll);
   });
 
   it("disables scenario run buttons while the shared run is active and offers cancellation", () => {
@@ -226,6 +241,32 @@ describe("ScenariosView", () => {
     expect(saved[0]).toMatchObject({
       benefits: { cpp: false, oas: false, gis: false }, withdrawalStrategy: "tax-minimizing",
     });
+  });
+
+  it("saves a payroll override on the scenario and removes the key when reset to base", () => {
+    const workspace = makeWorkspace();
+    workspace.scenarios.push({ ...delta, overrides: {} });
+    render(<StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE}><BaseScenarioSettings /><ScenariosView /><ScenariosProbe /></StoreProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    // Inherited state: the delta carries no payroll key and follows the base choices.
+    let stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
+    expect(stored[0]).not.toHaveProperty("payroll");
+    expect(screen.getByText(/using the base scenario payroll choices/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("Scenario employee CPP"));
+    stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
+    expect(stored[0]).toHaveProperty("payroll", { cpp: true, ei: false, cppOptOut65to69: false });
+    expect(screen.getByRole("button", { name: "Use base payroll settings" })).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("Scenario employee EI"));
+    fireEvent.click(screen.getByLabelText("Scenario CPP opt-out ages 65–69"));
+    stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
+    expect(stored[0]).toHaveProperty("payroll", { cpp: true, ei: true, cppOptOut65to69: true });
+
+    fireEvent.click(screen.getByRole("button", { name: "Use base payroll settings" }));
+    stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
+    expect(stored[0]).not.toHaveProperty("payroll");
+    expect((screen.getByLabelText("Scenario employee CPP") as HTMLInputElement).checked).toBe(false);
   });
 
   it("keeps scenario benefit and strategy choices inherited when only the name changes, and refreshes them from base", () => {
