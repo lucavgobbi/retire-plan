@@ -164,6 +164,7 @@ describe("parsePlanFile", () => {
     ws.plan.debts[0]!.paymentFrequency = "biweekly";
     const employment = ws.plan.incomes.find(income => income.kind === "employment")!;
     employment.name = "Work income";
+    delete employment.endAtRetirement;
     employment.endAge = 64;
     ws.plan.expenses[0]!.endAge = 94;
     ws.plan.savingsPolicy[0]!.untilAge = 64;

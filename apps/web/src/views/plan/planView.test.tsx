@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { buildDeterministicReturns, simulate, type SimulationResult } from "@retire-plan/engine";
 import { createEmptyWorkspace, DEFAULT_SCENARIO_BASE } from "../../domain/defaults";
 import type { SimulationRunner } from "../../store/simulationWorkerProtocol";
 import { useWorkspace, StoreProvider } from "../../store/api";
@@ -7,11 +8,14 @@ import { PlanView } from "./PlanView";
 
 function WorkspaceProbe() {
   const { workspace } = useWorkspace();
-  return <output data-testid="workspace-json">{JSON.stringify(workspace.plan)}</output>;
+  return <>
+    <output data-testid="workspace-json">{JSON.stringify(workspace.plan)}</output>
+    <output data-testid="saved-retirement-age">{workspace.baseScenario?.retirementAge}</output>
+  </>;
 }
 
 function renderPlan(simulationRunner?: SimulationRunner, initialWorkspace = createEmptyWorkspace()) {
-  return render(<StoreProvider now={() => "2026-11-10T12:00:00Z"} initialWorkspace={initialWorkspace} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={simulationRunner}>
+  return render(<StoreProvider now={() => "2026-11-10T12:00:00Z"} initialWorkspace={initialWorkspace} simulationRunner={simulationRunner}>
     <PlanView /><WorkspaceProbe />
   </StoreProvider>);
 }
@@ -218,9 +222,11 @@ describe("PlanView", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Income" }));
     fireEvent.click(screen.getByRole("button", { name: "Add employment" }));
-    expect(planState().incomes[0]).toMatchObject({ kind: "employment", annualAmount: 0, startAge: 45, endAge: 64 });
+    expect(planState().incomes[0]).toMatchObject({ kind: "employment", annualAmount: 0, startAge: 45, endAtRetirement: true });
+    expect(planState().incomes[0]).not.toHaveProperty("endAge");
+    expect((screen.getByRole("checkbox", { name: "Until retirement" }) as HTMLInputElement).checked).toBe(true);
     fireEvent.change(screen.getByLabelText("Annual amount ($)"), { target: { value: "95000" } });
-    expect(planState().incomes[0]).toMatchObject({ kind: "employment", annualAmount: 95_000, startAge: 45, endAge: 64, raiseRate: 0.02 });
+    expect(planState().incomes[0]).toMatchObject({ kind: "employment", annualAmount: 95_000, startAge: 45, endAtRetirement: true, raiseRate: 0.02 });
 
     fireEvent.click(screen.getByRole("tab", { name: "Expenses" }));
     fireEvent.click(screen.getByRole("button", { name: "Add expense" }));
@@ -360,6 +366,68 @@ describe("PlanView", () => {
     expect(planState().debts[0]).toMatchObject({ paymentFrequency: "weekly" });
     fireEvent.change(screen.getByLabelText("Payment frequency"), { target: { value: "monthly" } });
     expect(planState().debts[0]?.paymentFrequency).toBeUndefined();
+  });
+
+  it("edits the saved base age from the Plan and passes it to a new projection", async () => {
+    const workspace = createEmptyWorkspace();
+    workspace.baseScenario = { ...DEFAULT_SCENARIO_BASE, retirementAge: 67, withdrawalStrategy: "tax-minimizing" };
+    workspace.plan.incomes = [
+      { id: "linked", name: "Main salary", kind: "employment", annualAmount: 50_000, startAge: 45, endAtRetirement: true, raiseRate: 0 },
+      { id: "fixed", name: "Part-time salary", kind: "employment", annualAmount: 5_000, startAge: 45, endAge: 67, raiseRate: 0 },
+    ];
+    let result: SimulationResult | undefined;
+    const run: SimulationRunner = async (plan, scenario) => {
+      const { currentAge, endAge } = plan.profile;
+      result = simulate(plan, scenario, buildDeterministicReturns(scenario.returnAssumptions, currentAge, endAge));
+      return { result };
+    };
+    renderPlan(run, workspace);
+    expect(screen.getByText("Tax-minimizing planning")).toBeTruthy();
+    const retirementAge = screen.getByLabelText("Retirement age") as HTMLInputElement;
+    expect(retirementAge.value).toBe("67");
+    fireEvent.change(retirementAge, { target: { value: "62" } });
+    expect(screen.getByTestId("saved-retirement-age").textContent).toBe("62");
+    expect(planState().profile).not.toHaveProperty("retirementAge");
+    fireEvent.change(retirementAge, { target: { value: "62.5" } });
+    expect(screen.getByRole("alert").textContent).toContain("Retirement age must be a whole number.");
+    expect(screen.getByTestId("saved-retirement-age").textContent).toBe("62");
+    fireEvent.click(screen.getByRole("button", { name: "Run projection" }));
+    await waitFor(() => expect(result?.years.find(year => year.events.includes("retirement"))?.age).toBe(62));
+    expect(result?.years.find(year => year.age === 61)?.income.employment).toBe(55_000);
+    expect(result?.years.find(year => year.age === 62)?.income.employment).toBe(5_000);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Income" }));
+    const linked = screen.getByRole("region", { name: "Main salary summary" });
+    expect(linked.textContent).toContain("Until retirement");
+    expect(linked.textContent).toContain("45–61");
+    const fixed = screen.getByRole("region", { name: "Part-time salary summary" });
+    expect(fixed.textContent).toContain("Fixed end age");
+    expect(fixed.textContent).toContain("45–67");
+  });
+
+  it("switches between fixed and linked salary, clearing each incompatible stored field", () => {
+    const workspace = createEmptyWorkspace();
+    workspace.plan.incomes = [{ id: "salary", kind: "employment", annualAmount: 50_000, startAge: 45, endAge: 67, raiseRate: 0 }];
+    renderPlan(undefined, workspace);
+    expect(screen.getByText("Manual account order")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Income" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Employment summary" })).getByRole("button", { name: "Edit" }));
+    const untilRetirement = screen.getByRole("checkbox", { name: "Until retirement" }) as HTMLInputElement;
+    expect(untilRetirement.checked).toBe(false);
+    fireEvent.click(untilRetirement);
+    expect(planState().incomes[0]).toMatchObject({ endAtRetirement: true });
+    expect(planState().incomes[0]).not.toHaveProperty("endAge");
+    expect(screen.queryByLabelText(/End age/)).toBeNull();
+    fireEvent.click(untilRetirement);
+    expect((screen.getByLabelText(/End age/) as HTMLInputElement).value).toBe("67");
+    expect(planState().incomes[0]).toMatchObject({ endAge: 67 });
+    expect(planState().incomes[0]).not.toHaveProperty("endAtRetirement");
+    fireEvent.click(untilRetirement);
+    fireEvent.change(screen.getByLabelText("Income type"), { target: { value: "cpp" } });
+    expect(screen.queryByRole("checkbox", { name: "Until retirement" })).toBeNull();
+    expect(planState().incomes[0]).toMatchObject({ kind: "cpp" });
+    expect(planState().incomes[0]).not.toHaveProperty("endAtRetirement");
+    expect(planState().incomes[0]).not.toHaveProperty("endAge");
   });
 
   describe("employment bonus percentage", () => {

@@ -267,15 +267,16 @@ function DebtForm({ debt, onApply, onRemove, onClose }: { debt: DebtPlan; onAppl
   </ItemForm>;
 }
 
-interface IncomeDraft { id: string; name: string; kind: IncomePlan["kind"]; annualAmount: string; startAge: string; endAge: string; raiseRate: string; bonusRate: string }
-function incomeDraft(income: IncomePlan): IncomeDraft { return { id: income.id, name: income.name ?? "", kind: income.kind, annualAmount: String(income.annualAmount), startAge: String(income.startAge), endAge: income.endAge === undefined ? "" : String(income.endAge), raiseRate: String(income.raiseRate * 100), bonusRate: income.bonusRate === undefined ? "" : fmtPercentInput(income.bonusRate) }; }
-function newIncomeDraft(kind: IncomePlan["kind"], currentAge: number, retirementAge: number): IncomeDraft { return { id: makeId("income"), name: "", kind, annualAmount: "0", startAge: String(currentAge), endAge: kind === "employment" ? String(Math.max(currentAge, retirementAge - 1)) : "", raiseRate: kind === "employment" ? "2" : "0", bonusRate: "" }; }
+interface IncomeDraft { id: string; name: string; kind: IncomePlan["kind"]; annualAmount: string; startAge: string; endAge: string; endAtRetirement: boolean; raiseRate: string; bonusRate: string }
+function incomeDraft(income: IncomePlan): IncomeDraft { return { id: income.id, name: income.name ?? "", kind: income.kind, annualAmount: String(income.annualAmount), startAge: String(income.startAge), endAge: income.endAge === undefined ? "" : String(income.endAge), endAtRetirement: income.endAtRetirement === true, raiseRate: String(income.raiseRate * 100), bonusRate: income.bonusRate === undefined ? "" : fmtPercentInput(income.bonusRate) }; }
+function newIncomeDraft(kind: IncomePlan["kind"], currentAge: number): IncomeDraft { return { id: makeId("income"), name: "", kind, annualAmount: "0", startAge: String(currentAge), endAge: "", endAtRetirement: kind === "employment", raiseRate: kind === "employment" ? "2" : "0", bonusRate: "" }; }
 const INCOME_LABELS: Record<IncomePlan["kind"], string> = { employment: "Employment", cpp: "CPP", oas: "OAS", other: "Other" };
 function readIncomeDraft(draft: IncomeDraft): { errors: string[]; item: IncomePlan } {
   const errors: string[] = [];
   const annualAmount = requiredNumber(draft.annualAmount, "Annual amount", errors, 0);
   const startAge = requiredInteger(draft.startAge, "Start age", errors, 1);
-  const endAge = optionalInteger(draft.endAge, "End age", errors, 1);
+  const endAtRetirement = draft.kind === "employment" && draft.endAtRetirement;
+  const endAge = endAtRetirement ? undefined : optionalInteger(draft.endAge, "End age", errors, 1);
   const raiseRate = requiredNumber(draft.raiseRate, "Annual raise (%)", errors) / 100;
   // Bonus (employment only, fraction of the raised base): blank = intentional
   // unset, so the patch always carries the key — an explicit `bonusRate: undefined`
@@ -285,7 +286,7 @@ function readIncomeDraft(draft: IncomeDraft): { errors: string[]; item: IncomePl
   const bonusPct = draft.kind === "employment" ? optionalNumber(draft.bonusRate, "Annual bonus (%)", errors, 0) : undefined;
   const bonusRate = bonusPct === undefined ? undefined : bonusPct / 100;
   if (endAge !== undefined && endAge < startAge) errors.push("End age must be on or after start age.");
-  return { errors, item: { id: draft.id, name: draft.name.trim() === "" ? undefined : draft.name.trim(), kind: draft.kind, annualAmount, startAge, ...(endAge === undefined ? {} : { endAge }), raiseRate, bonusRate } };
+  return { errors, item: { id: draft.id, name: draft.name.trim() === "" ? undefined : draft.name.trim(), kind: draft.kind, annualAmount, startAge, endAge, endAtRetirement: endAtRetirement || undefined, raiseRate, bonusRate } };
 }
 /**
  * Live preview of the STARTING annual pay: the configured annual amount is the
@@ -305,11 +306,14 @@ function IncomeForm({ income, onApply, onRemove, onClose }: { income: IncomePlan
   const { draft, change, errors } = useAutoApplyForm(income, incomeDraft, readIncomeDraft, onApply);
   return <ItemForm title={draft.name.trim() || INCOME_LABELS[draft.kind]} errors={errors} onRemove={onRemove} onClose={onClose}>
     <TextField label="Name" value={draft.name} onChange={name => change({ name })} optional />
-    <SelectField label="Income type" value={draft.kind} choices={["employment", "cpp", "oas", "other"] as const} labels={INCOME_LABELS} onChange={kind => change({ kind, ...(kind === "employment" ? {} : { endAge: "", bonusRate: "" }) })} />
+    <SelectField label="Income type" value={draft.kind} choices={["employment", "cpp", "oas", "other"] as const} labels={INCOME_LABELS} onChange={kind => change({ kind, ...(kind === "employment" ? {} : { endAtRetirement: false, ...(draft.endAtRetirement ? { endAge: "" } : {}), bonusRate: "" }) })} />
     <TextInput label="Annual amount ($)" value={draft.annualAmount} min="0" onChange={annualAmount => change({ annualAmount })} />
     <TextInput label="Start age" value={draft.startAge} min="1" step="1" onChange={startAge => change({ startAge })} />
     {(draft.kind === "cpp" || draft.kind === "oas") && <BenefitAmountGuide kind={draft.kind} startAge={draft.startAge} onUseAnnualAmount={annualAmount => change({ annualAmount: annualAmount.toFixed(2) })} />}
-    <TextInput label="End age" value={draft.endAge} min="1" step="1" optional onChange={endAge => change({ endAge })} />
+    {draft.kind === "employment" && <label className="plan-check"><input type="checkbox" checked={draft.endAtRetirement} onChange={event => change({ endAtRetirement: event.currentTarget.checked })} />Until retirement</label>}
+    {draft.endAtRetirement
+      ? <p className="plan-help">The last paid age is one year before the projection’s retirement age.</p>
+      : <TextInput label="End age" value={draft.endAge} min="1" step="1" optional onChange={endAge => change({ endAge })} />}
     <TextInput label="Annual raise / indexing (%)" value={draft.raiseRate} onChange={raiseRate => change({ raiseRate })} />
     {draft.kind === "employment" && <>
       <TextInput label="Annual bonus (%)" value={draft.bonusRate} min="0" optional keepInvalidDraft onChange={bonusRate => change({ bonusRate })} />
@@ -383,7 +387,7 @@ function addFromDraft<TDraft extends object, TItem extends { id: string }>(
 }
 
 function ProfileEditor() {
-  const { workspace, dispatch, baseScenario, validationErrors, runProjection, runError, isRunning, runCancelled, cancelRun, calendarYear } = useWorkspace();
+  const { workspace, dispatch, baseScenario, setBaseScenario, validationErrors, runProjection, runError, isRunning, runCancelled, cancelRun, calendarYear } = useWorkspace();
   const profile = workspace.plan.profile;
   const { draft, change, errors } = useAutoApplyForm(
     profile,
@@ -399,6 +403,17 @@ function ProfileEditor() {
     },
     patch => dispatch({ type: "plan/setProfile", patch }),
   );
+  const retirement = useAutoApplyForm(
+    baseScenario,
+    stored => ({ retirementAge: String(stored.retirementAge) }),
+    draft => {
+      const errors: string[] = [];
+      const retirementAge = requiredInteger(draft.retirementAge, "Retirement age", errors, 1);
+      return { errors, item: { ...baseScenario, retirementAge } };
+    },
+    ({ retirementAge }) => setBaseScenario({ retirementAge }),
+  );
+  const profileErrors = [...errors, ...retirement.errors];
   const previewAge = draft.birthYear.trim() !== "" && Number.isInteger(Number(draft.birthYear)) ? calculateCurrentAge(Number(draft.birthYear), calendarYear) : null;
   return <section className="plan-panel" aria-labelledby="profile-title">
     <h2 id="profile-title">Profile and projection</h2>
@@ -409,10 +424,13 @@ function ProfileEditor() {
         <label className="plan-field"><span className="field-label">Current age</span><input type="number" aria-label="Current age" readOnly value={previewAge !== null && previewAge > 0 ? previewAge : ""} aria-describedby="current-age-help" /><small id="current-age-help">Age reached in {calendarYear}, calculated from birth year.</small></label>
         <TextInput label="Projection end age" value={draft.endAge} min="1" step="1" onChange={endAge => change({ endAge })} />
         <label className="plan-field"><span className="field-label">Province</span><select value="ON" disabled><option value="ON">Ontario (ON)</option></select></label>
-        <label className="plan-field"><span className="field-label">Retirement age</span><input type="number" aria-label="Retirement age" readOnly value={baseScenario.retirementAge} /><small>Change this in Base projection settings.</small></label>
+        <label className="plan-field"><span className="field-label">Retirement age</span>
+          <NumberTextInput aria-label="Retirement age" aria-describedby="retirement-age-help" value={retirement.draft.retirementAge} step="1" min="1" group={false} allowNegative={false} onChange={retirementAge => retirement.change({ retirementAge })} />
+          <small id="retirement-age-help">Updates the base projection. Salary set to “Until retirement” ends the year before this age. Fixed end ages stay as entered.</small>
+        </label>
       </div>
-      <ErrorList errors={errors} />
-      <ApplyNotice errors={errors} />
+      <ErrorList errors={profileErrors} />
+      <ApplyNotice errors={profileErrors} />
       <div className="plan-actions">
         <button type="button" disabled={validationErrors.length > 0 || isRunning} onClick={() => { void runProjection(); }}>Run projection</button>
         {isRunning && <><span role="status">Projection running in the background…</span><button type="button" onClick={cancelRun}>Cancel projection</button></>}
@@ -450,9 +468,16 @@ function DebtSummary({ debt, editing, onEdit }: { debt: DebtPlan; editing: boole
   ]} editing={editing} onEdit={onEdit} />;
 }
 
-function IncomeSummary({ income, editing, onEdit }: { income: IncomePlan; editing: boolean; onEdit: () => void }) {
+function IncomeSummary({ income, retirementAge, editing, onEdit }: { income: IncomePlan; retirementAge: number; editing: boolean; onEdit: () => void }) {
   const kind = INCOME_LABELS[income.kind];
-  const details: [string, string][] = [["Active ages", `${income.startAge}–${income.endAge ?? "ongoing"}`], ["Annual raise / indexing", fmtPercent(income.raiseRate)]];
+  const linked = income.kind === "employment" && income.endAtRetirement === true;
+  const activeAges = linked && retirementAge <= income.startAge
+    ? "No active years in base projection"
+    : `${income.startAge}–${linked ? retirementAge - 1 : income.endAge ?? "ongoing"}`;
+  const details: [string, string][] = [[linked ? "Active ages (base)" : "Active ages", activeAges], ["Annual raise / indexing", fmtPercent(income.raiseRate)]];
+  if (income.kind === "employment") {
+    details.push(["Employment schedule", linked ? "Until retirement" : income.endAge === undefined ? "Ongoing" : "Fixed end age"]);
+  }
   if (income.kind === "employment" && (income.bonusRate ?? 0) > 0) {
     details.push(["Annual bonus", fmtPercent(income.bonusRate!)], ["Starting annual pay", fmtMoney(income.annualAmount * (1 + income.bonusRate!))]);
   }
@@ -512,8 +537,10 @@ function AssetsDebtsEditor() {
 /** Full plan editor; mounted by the app shell at the Plan route. */
 export function PlanView() {
   const [activeTab, setActiveTab] = useState<Tab>("Profile");
+  const { baseScenario } = useWorkspace();
+  const withdrawalMode = baseScenario.withdrawalStrategy === "tax-minimizing" ? "Tax-minimizing planning" : "Manual account order";
   return <div className="plan-view">
-    <div className="plan-view-header"><div><span className="eyebrow">YOUR FINANCIAL PICTURE</span><h1>Plan</h1><p className="plan-help">Edit your starting profile, accounts, income, spending, and savings rules.</p></div></div>
+    <div className="plan-view-header"><div><span className="eyebrow">YOUR FINANCIAL PICTURE</span><h1>Plan</h1><p className="plan-help">Edit your starting profile, accounts, income, spending, and savings rules.</p><p className="plan-help">Base withdrawal strategy <strong>{withdrawalMode}</strong></p></div></div>
     <div className="plan-tabs" role="tablist" aria-label="Plan sections">
       {TABS.map(tab => <button key={tab} type="button" role="tab" id={`plan-tab-${tab.replaceAll(" ", "-").toLowerCase()}`} aria-selected={activeTab === tab} aria-controls="plan-tabpanel" onClick={() => setActiveTab(tab)}>{tab}</button>)}
     </div>
@@ -531,13 +558,13 @@ export function PlanView() {
 function IncomesEditor() {
   const { workspace, dispatch, baseScenario } = useWorkspace(); const items = workspace.plan.incomes;
   const editors = useInlineEditors();
-  const add = (kind: IncomePlan["kind"]) => { const id = addFromDraft(dispatch, "incomes", newIncomeDraft(kind, workspace.plan.profile.currentAge, baseScenario.retirementAge), readIncomeDraft); if (id) editors.open(id); };
+  const add = (kind: IncomePlan["kind"]) => { const id = addFromDraft(dispatch, "incomes", newIncomeDraft(kind, workspace.plan.profile.currentAge), readIncomeDraft); if (id) editors.open(id); };
   return <section className="plan-panel"><div className="plan-section-heading"><div><h2>Income</h2><p>Enter taxable income and the ages when each stream starts and ends. End age is optional.</p></div>
     <div className="plan-add-buttons">{(["employment", "cpp", "oas", "other"] as const).map(kind => <button key={kind} type="button" onClick={() => add(kind)}>Add {kind}</button>)}</div></div>
     {items.map(item => <div className="plan-item-entry" data-inline-edit-row key={item.id}>
       {editors.isOpen(item.id)
         ? <IncomeForm income={item} onApply={value => dispatch({ type: "plan/updateItem", section: "incomes", id: item.id, patch: value })} onRemove={() => { dispatch({ type: "plan/removeItem", section: "incomes", id: item.id }); editors.close(item.id); }} onClose={() => editors.close(item.id)} />
-        : <IncomeSummary income={item} editing={false} onEdit={() => editors.open(item.id)} />}
+        : <IncomeSummary income={item} retirementAge={baseScenario.retirementAge} editing={false} onEdit={() => editors.open(item.id)} />}
     </div>)}
     {!items.length && <p className="plan-empty">No income streams yet.</p>}
   </section>;

@@ -20,6 +20,8 @@ export interface WorkspaceApi {
   isRunning: boolean;
   runCancelled: boolean;
   cancelRun: () => void;
+  /** Clears generated run history; never mutates the plan, scenarios, base settings or preferences. */
+  resetRuns: () => void;
   runError: string | null;
   calendarYear: number;
   activeRunId: string | null;
@@ -95,6 +97,18 @@ export function StoreProvider({ children, initialWorkspace, initialBaseScenario,
     return errors;
   }, [state.workspace.plan]);
   const setBaseScenario = useCallback((patch: Partial<ScenarioBase>) => dispatch({ type: "scenario/setBase", patch }), [dispatch]);
+  const resetRuns = useCallback(() => {
+    // Invalidate first: incrementing the sequence makes every in-flight completion
+    // stale, and aborting terminates the worker computation. The reducer only
+    // drops run history, so workspace state (plan, scenarios, base settings and
+    // preferences) is preserved byte-for-byte.
+    cancelCurrentRun();
+    setIsRunning(false);
+    setRunCancelled(false);
+    setRunError(null);
+    setActiveRunId(null);
+    dispatch({ type: "run/reset" });
+  }, [cancelCurrentRun, dispatch]);
   const runProjection = useCallback(async (delta: ScenarioDelta | null = null): Promise<RunRecord | null> => {
     if (currentRun.current) return null;
     const runSequence = ++sequence.current;
@@ -145,6 +159,6 @@ export function StoreProvider({ children, initialWorkspace, initialBaseScenario,
       return null;
     }
   }, [state.workspace, baseScenario, validationErrors, makeId, now, dispatch, simulationRunner]);
-  const value = useMemo(() => ({ ...state, dispatch, baseScenario, setBaseScenario, validationErrors, runProjection, isRunning, runCancelled, cancelRun, runError, calendarYear, activeRunId }), [state, dispatch, baseScenario, setBaseScenario, validationErrors, runProjection, isRunning, runCancelled, cancelRun, runError, calendarYear, activeRunId]);
+  const value = useMemo(() => ({ ...state, dispatch, baseScenario, setBaseScenario, validationErrors, runProjection, isRunning, runCancelled, cancelRun, resetRuns, runError, calendarYear, activeRunId }), [state, dispatch, baseScenario, setBaseScenario, validationErrors, runProjection, isRunning, runCancelled, cancelRun, resetRuns, runError, calendarYear, activeRunId]);
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

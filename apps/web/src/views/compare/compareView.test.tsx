@@ -35,6 +35,11 @@ function CompareRunner({ runs: records }: { runs: RunRecord[] }) {
   );
 }
 
+function ResetRunsButton() {
+  const { resetRuns } = useWorkspace();
+  return <button type="button" onClick={resetRuns}>Reset runs</button>;
+}
+
 describe("CompareView", () => {
   it("empty state: no runs stored → hint", () => {
     render(
@@ -80,5 +85,26 @@ describe("CompareView", () => {
     expect(legend.textContent).toContain("Base scenario");
     expect(legend.textContent).toContain("Retire 3 years earlier");
     expect(screen.getByRole("region", { name: "Side-by-side run comparison" })).toBeTruthy();
+  });
+
+  it("reset runs drops selected results and returns to the empty state", () => {
+    render(
+      <StoreProvider initialWorkspace={{ meta: { id: "plan-test", name: "T", updatedAt: "x" }, plan: EMPTY_PLAN, scenarios: [] }}>
+        <RunSeeder runs={runs}>
+          <CompareView />
+          <ResetRunsButton />
+        </RunSeeder>
+      </StoreProvider>,
+    );
+    for (const checkbox of screen.getAllByRole("checkbox") as HTMLInputElement[]) {
+      fireEvent.click(checkbox);
+    }
+    expect(screen.getByRole("table")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Reset runs" }));
+    // Selection ids are local UI state, but with no stored runs there is nothing
+    // to join them against: the table and chart disappear with the history.
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Side-by-side run comparison" })).toBeNull();
+    expect(screen.getByText(/no runs stored/i)).toBeTruthy();
   });
 });

@@ -14,6 +14,7 @@ export type Action =
   | { type: "scenario/add" | "scenario/update" | "scenario/remove"; delta: ScenarioDelta }
   | { type: "scenario/setBase"; patch: Partial<ScenarioBase> }
   | { type: "run/store"; record: RunRecord }
+  | { type: "run/reset" }
   | { type: "workspace/loaded"; workspace: Workspace }
   | { type: "projection/setHiddenColumns"; /** Hidden data-column ids; null removes the field = default (all columns visible). */ hiddenColumnIds: string[] | null }
   | { type: "projection/setHiddenCharts"; /** Hidden dashboard-chart ids; null removes the field = default (all charts visible). */ hiddenChartIds: string[] | null }

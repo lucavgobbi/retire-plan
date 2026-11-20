@@ -1,4 +1,4 @@
-import type { ScenarioDelta } from "../../domain/types";
+import type { ScenarioBase, ScenarioDelta, WithdrawalStrategy } from "../../domain/types";
 import { useProjectionRun, useWorkspace } from "../../store/api";
 import { fmtMoney, fmtPercent } from "../projection/fmt";
 import { formatAccountOrder } from "../../domain/accountOrder";
@@ -40,8 +40,11 @@ export function ScenarioListItem({
   editing: boolean;
   onEdit: (id: string | null) => void;
 }) {
-  const { dispatch, workspace } = useWorkspace();
+  const { dispatch, workspace, baseScenario } = useWorkspace();
   const { run, runProjection, error, stale, isRunning, cancelRun } = useProjectionRun(undefined, delta.id);
+  // Current cards describe the mode the scenario will actually run with, not just
+  // an explicit override: inherited base strategy matters here too.
+  const withdrawalStrategy = effectiveWithdrawalStrategy(delta, baseScenario);
 
   return (
     <li className="scenario-item" data-inline-edit-row>
@@ -81,6 +84,7 @@ export function ScenarioListItem({
       {editing
         ? <ScenarioEditorForm key={delta.id} delta={delta} onDone={() => onEdit(null)} />
         : <>
+      <p className="hint scenario-withdrawal-mode">Withdrawal mode <strong>{withdrawalStrategyLabel(withdrawalStrategy)}</strong></p>
       <p className="hint scenario-overrides">{describeOverrides(delta)}</p>
       {run && run.analysis ? <p className="summary-strip">
         {run.analysis.mode === "historical" ? `Historical ${run.analysis.representativeStartYear}–${run.analysis.representativeEndYear} · ` : "Monte Carlo · "}
@@ -129,6 +133,15 @@ export function SummaryStrip({ summary }: { summary: ScenarioSummary }) {
       {summary.worstShortfallAge !== undefined && <> · worst shortfall age {summary.worstShortfallAge}</>}
     </p>
   );
+}
+
+/** Effective mode for a current scenario: explicit override, then base, then legacy manual. */
+export function effectiveWithdrawalStrategy(delta: ScenarioDelta, base: ScenarioBase): WithdrawalStrategy {
+  return delta.withdrawalStrategy ?? base.withdrawalStrategy ?? "manual";
+}
+
+export function withdrawalStrategyLabel(strategy: WithdrawalStrategy): string {
+  return strategy === "tax-minimizing" ? "Tax-minimizing planning" : "Manual account order";
 }
 
 export function describeOverrides(delta: ScenarioDelta): string {

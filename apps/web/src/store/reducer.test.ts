@@ -61,6 +61,18 @@ describe("workspace reducer", () => {
     expect(state.workspace.scenarios).toEqual([]);
     expect(state.workspace.projectionScenarioId).toBe("");
   });
+  it("clears every generated run while preserving the complete workspace", () => {
+    const workspace = createEmptyWorkspace();
+    workspace.scenarios = [{ id: "s", name: "S", basePlanId: "p", simMode: "deterministic", overrides: {} }];
+    workspace.projectionScenarioId = "s";
+    workspace.hiddenProjectionCharts = ["tax"];
+    const record: RunRecord = { id: "run", planId: "p", scenarioId: "s", scenario: resolveScenario(workspace.scenarios[0]!, workspace.baseScenario!), result: { years: [], summary: { success: true, finalNetWorth: 1 } }, createdAt: "now" };
+    const before = reducer({ workspace, runs: [record] }, { type: "projection/setScenarioId", scenarioId: "s" });
+    const after = reducer(before, { type: "run/reset" });
+    expect(after.runs).toEqual([]);
+    expect(after.workspace).toEqual(before.workspace);
+    expect(after.workspace).toMatchObject({ projectionScenarioId: "s", hiddenProjectionCharts: ["tax"], scenarios: [{ id: "s" }] });
+  });
   it("keeps the newest twenty immutable run snapshots and clears runs on workspace replacement", () => {    let state: StoreState = { workspace: createEmptyWorkspace(), runs: [] };
     let last!: RunRecord;
     for (let i = 0; i < 22; i++) {

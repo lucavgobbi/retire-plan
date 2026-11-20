@@ -19,10 +19,14 @@ type EditorDraft = {
   name: string;
   simMode: ScenarioDelta["simMode"];
   retirementAge: string;
+  /** False = follow the base age; true = the delta carries an explicit retirement age. */
+  retirementAgeOverridden: boolean;
   equity: string;
   bond: string;
   cash: string;
+  returnAssumptionsOverridden: boolean;
   order: AccountType[];
+  withdrawalOrderOverridden: boolean;
   runs: string;
   seed: string;
   equitySd: string;
@@ -62,10 +66,13 @@ function draftOf(storedDelta: ScenarioDelta | null, base: ScenarioBase): EditorD
       name: "",
       simMode: "deterministic",
       retirementAge: String(base.retirementAge),
+      retirementAgeOverridden: false,
       equity: fmtPercentInput(base.returnAssumptions.equity),
       bond: fmtPercentInput(base.returnAssumptions.bond),
       cash: fmtPercentInput(base.returnAssumptions.cash),
+      returnAssumptionsOverridden: false,
       order: investmentOrder(base.withdrawalOrder),
+      withdrawalOrderOverridden: false,
       runs: "1000", seed: "12345", equitySd: "18", bondSd: "7", cashSd: "2", historicalStartYear: String(base.historicalConfig?.startYear ?? HISTORICAL_FIRST_YEAR),
       cashPosition: cashOrderPosition(base.withdrawalOrder),
       benefits: base.benefits ?? { cpp: true, oas: true, gis: true },
@@ -81,10 +88,17 @@ function draftOf(storedDelta: ScenarioDelta | null, base: ScenarioBase): EditorD
     name: storedDelta.name,
     simMode: storedDelta.simMode ?? "deterministic",
     retirementAge: String(overrides.retirementAge),
+    // Explicit means the key exists, even when the value happens to equal the
+    // base: equality is not evidence of inheritance.
+    retirementAgeOverridden: storedDelta.overrides.retirementAge !== undefined,
     equity: fmtPercentInput(overrides.returnAssumptions.equity),
     bond: fmtPercentInput(overrides.returnAssumptions.bond),
     cash: fmtPercentInput(overrides.returnAssumptions.cash),
+    // Track each override key independently: an absent key inherits and must stay
+    // absent through unrelated edits, even when its current value was displayed.
+    returnAssumptionsOverridden: storedDelta.overrides.returnAssumptions !== undefined,
     order: overrides.withdrawalOrder,
+    withdrawalOrderOverridden: storedDelta.overrides.withdrawalOrder !== undefined,
     runs: String(storedDelta.mcConfig?.runs ?? 1000), seed: String(storedDelta.mcConfig?.seed ?? 12345),
     equitySd: String((storedDelta.mcConfig?.stdDev.equity ?? 0.18) * 100),
     bondSd: String((storedDelta.mcConfig?.stdDev.bond ?? 0.07) * 100),
@@ -188,13 +202,15 @@ export function ScenarioEditorForm({ delta, onDone }: { delta: ScenarioDelta | n
     // exact stored precision instead of round-tripping through a number.
     const source = effectiveOverrides(lastApplied.current, base);
     const overrides: Overrides = {
-      retirementAge: Number(next.retirementAge),
-      returnAssumptions: {
+      // Each override key is independent. Edits to one area (or a reset of the
+      // age) must not snapshot values that the delta was inheriting.
+      ...(next.retirementAgeOverridden ? { retirementAge: Number(next.retirementAge) } : {}),
+      ...(next.returnAssumptionsOverridden ? { returnAssumptions: {
         equity: next.equity === fmtPercentInput(source.returnAssumptions.equity) ? source.returnAssumptions.equity : Number(next.equity) / 100,
         bond: next.bond === fmtPercentInput(source.returnAssumptions.bond) ? source.returnAssumptions.bond : Number(next.bond) / 100,
         cash: next.cash === fmtPercentInput(source.returnAssumptions.cash) ? source.returnAssumptions.cash : Number(next.cash) / 100,
-      },
-      withdrawalOrder: orderWithCashPosition(next.order, next.cashPosition),
+      } } : {}),
+      ...(next.withdrawalOrderOverridden ? { withdrawalOrder: orderWithCashPosition(next.order, next.cashPosition) } : {}),
     };
     const nextDelta: ScenarioDelta = {
       id: appliedId.current ?? crypto.randomUUID(),
@@ -225,7 +241,9 @@ export function ScenarioEditorForm({ delta, onDone }: { delta: ScenarioDelta | n
       <FormSection title="Basics" description="Name the scenario and set its retirement age.">
         <div className="form-section-grid">
           <label className="form-field">Scenario name<input aria-label="Name" type="text" value={draft.name} onChange={(e) => change({ name: e.target.value })} /></label>
-          <label className="form-field">Retirement age override<NumberTextInput aria-label="Retirement age override" min={1} step={1} allowNegative={false} value={draft.retirementAge} onChange={(retirementAge) => change({ retirementAge })} /><span className="form-section-note">This value is used for this scenario; income and saving rules continue to follow their own settings.</span></label>
+          <label className="form-field">Retirement age override<NumberTextInput aria-label="Retirement age override" min={1} step={1} allowNegative={false} value={draft.retirementAge} onChange={(retirementAge) => change({ retirementAge, retirementAgeOverridden: true })} /><span className="form-section-note">This value is used for this scenario. Salary set to “Until retirement” ends the year before this age; income and saving rules otherwise follow their own settings.</span></label>
+          <div className="form-section-status" aria-live="polite">{draft.retirementAgeOverridden ? "Using a retirement age for this scenario." : "Following the base retirement age."}</div>
+          {draft.retirementAgeOverridden && <button className="form-section-reset" type="button" onClick={() => change({ retirementAge: String(base.retirementAge), retirementAgeOverridden: false })}>Use base retirement age</button>}
         </div>
       </FormSection>
 
@@ -275,9 +293,9 @@ export function ScenarioEditorForm({ delta, onDone }: { delta: ScenarioDelta | n
           onToggle={() => keepInvalidSectionOpen(returnSettingsRef, returnSettingsInvalid)}
         >
           <div className="form-section-grid">
-            <label className="form-field">Equity %<NumberTextInput aria-label="Equity %" value={draft.equity} onChange={(equity) => change({ equity })} /></label>
-            <label className="form-field">Bond %<NumberTextInput aria-label="Bond %" value={draft.bond} onChange={(bond) => change({ bond })} /></label>
-            <label className="form-field">Cash %<NumberTextInput aria-label="Cash %" value={draft.cash} onChange={(cash) => change({ cash })} /></label>
+            <label className="form-field">Equity %<NumberTextInput aria-label="Equity %" value={draft.equity} onChange={(equity) => change({ equity, returnAssumptionsOverridden: true })} /></label>
+            <label className="form-field">Bond %<NumberTextInput aria-label="Bond %" value={draft.bond} onChange={(bond) => change({ bond, returnAssumptionsOverridden: true })} /></label>
+            <label className="form-field">Cash %<NumberTextInput aria-label="Cash %" value={draft.cash} onChange={(cash) => change({ cash, returnAssumptionsOverridden: true })} /></label>
           </div>
         </FormSection>}
       </FormSection>
@@ -301,8 +319,8 @@ export function ScenarioEditorForm({ delta, onDone }: { delta: ScenarioDelta | n
             onToggle={() => keepInvalidSectionOpen(withdrawalSettingsRef, withdrawalSettingsInvalid)}
           >
             <div className="form-section-grid">
-              {[0, 1, 2].map((index) => <label className="form-field" key={index}><span>{`${index + 1}${["st", "nd", "rd"][index]} drawn`}</span><select aria-label={`${index + 1}${["st", "nd", "rd"][index]} drawn`} value={draft.order[index]} onChange={(e) => change({ order: swapOrderPosition(draft.order, index, e.target.value as AccountType) })}>{ACCOUNT_TYPES.map((type) => <option key={type} value={type}>{ACCOUNT_TYPE_LABELS[type]}</option>)}</select></label>)}
-              <label className="form-field form-section-wide">Named cash withdrawal order<select aria-label="Cash withdrawal order" value={draft.cashPosition} onChange={e => change({ cashPosition: e.target.value as CashOrderPosition })}><option value="automatic">Automatic (cash first when named cash accounts exist)</option>{["First", "Second", "Third", "Fourth"].map((label, index) => <option key={label} value={String(index)}>{label}</option>)}</select></label>
+              {[0, 1, 2].map((index) => <label className="form-field" key={index}><span>{`${index + 1}${["st", "nd", "rd"][index]} drawn`}</span><select aria-label={`${index + 1}${["st", "nd", "rd"][index]} drawn`} value={draft.order[index]} onChange={(e) => change({ order: swapOrderPosition(draft.order, index, e.target.value as AccountType), withdrawalOrderOverridden: true })}>{ACCOUNT_TYPES.map((type) => <option key={type} value={type}>{ACCOUNT_TYPE_LABELS[type]}</option>)}</select></label>)}
+              <label className="form-field form-section-wide">Named cash withdrawal order<select aria-label="Cash withdrawal order" value={draft.cashPosition} onChange={e => change({ cashPosition: e.target.value as CashOrderPosition, withdrawalOrderOverridden: true })}><option value="automatic">Automatic (cash first when named cash accounts exist)</option>{["First", "Second", "Third", "Fourth"].map((label, index) => <option key={label} value={String(index)}>{label}</option>)}</select></label>
             </div>
           </FormSection>}
         </div>

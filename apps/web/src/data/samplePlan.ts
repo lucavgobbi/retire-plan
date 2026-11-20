@@ -9,11 +9,11 @@ import type { Plan } from "@retire-plan/engine";
 import type { PlanMeta, Workspace } from "../domain/types";
 
 /**
- * Golden sample plan (plan Task 15): a realistic 45-year-old Ontarian.
+ * Built-in sample for a 45-year-old Ontarian, based on the engine's golden fixture.
  * home $700k @2%; mortgage $350k @4.5%/25yr/$1930 monthly; RRSP $180k;
  * TFSA $60k; non-reg $40k; salary $95k @2% raises; expenses $55k @2%;
  * policy TFSA cap $7k -> RRSP; CPP $8k @65; OAS @65 (btable annual max);
- * retire 65; project to 95. All mixes 70/25/05.
+ * Salary follows the default retirement age of 65. Project to 95. All mixes 70/25/05.
  */
 export function makeSamplePlan(): Plan {
   const mix = { equity: 0.7, bond: 0.25, cash: 0.05 };
@@ -39,7 +39,7 @@ export function makeSamplePlan(): Plan {
       },
     ],
     incomes: [
-      { id: "salary", kind: "employment", annualAmount: 95_000, startAge: 45, raiseRate: 0.02 },
+      { id: "salary", kind: "employment", annualAmount: 95_000, startAge: 45, endAtRetirement: true, raiseRate: 0.02 },
       { id: "cpp", kind: "cpp", annualAmount: 8_000, startAge: 65, raiseRate: 0 },
       { id: "oas", kind: "oas", annualAmount: 8_907.72, startAge: 65, raiseRate: 0 },
     ],
@@ -54,11 +54,8 @@ export function makeSamplePlan(): Plan {
 }
 
 /**
- * Convenience for recovery flows ("start with the sample plan"): the golden plan
- * wrapped as a usable workspace (named meta + a golden-equivalent deterministic
- * scenario delta). `makeSampleScenario` is deliberately NOT re-exported from the
- * engine test — the delta here carries the same settings as overrides:{} under
- * the DEFAULT_SCENARIO_BASE layering, which resolves identically.
+ * Workspace for the recovery and sample-plan flows. The deterministic scenario
+ * inherits the base projection settings.
  */
 export function makeSampleWorkspace(meta: Partial<PlanMeta> = {}): Workspace {
   const id = meta.id ?? tempId();

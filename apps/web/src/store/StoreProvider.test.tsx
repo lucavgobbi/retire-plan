@@ -1,8 +1,8 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { createEmptyWorkspace, DEFAULT_SCENARIO_BASE } from "../domain/defaults";
 import type { RunOutcome } from "../domain/run";
-import type { ScenarioBase } from "../domain/types";
+import type { Scenario, ScenarioBase } from "../domain/types";
 import type { SimulationRunner } from "./simulationWorkerProtocol";
 import { StoreProvider } from "./StoreProvider";
 import { useProjectionRun, useRuns, useWorkspace } from "./hooks";
@@ -144,6 +144,151 @@ describe("store run flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     expect(screen.getByRole("status").textContent).toContain('"birthYear":1981,"stale":true');
   });
+  it("reset clears generated runs, active selection, progress and errors without mutating the workspace", async () => {
+    const workspace = createEmptyWorkspace();
+    const delta = { id: "saved-choice", name: "Saved choice", basePlanId: "unsaved", simMode: "deterministic" as const, overrides: { retirementAge: 63 } };
+    workspace.scenarios = [delta];
+    workspace.baseScenario = { ...DEFAULT_SCENARIO_BASE, retirementAge: 67 };
+    workspace.projectionScenarioId = "saved-choice";
+    workspace.hiddenProjectionColumns = ["tax.total"];
+    function ResetProbe() {
+      const { runProjection, resetRuns, runError, isRunning, activeRunId, workspace } = useWorkspace();
+      const runs = useRuns();
+      return <>
+        <button onClick={() => { void runProjection(delta); }}>Run saved</button>
+        <button onClick={resetRuns}>Reset</button>
+        <output data-testid="reset-state">{JSON.stringify({
+          count: runs.length,
+          activeRunId,
+          isRunning,
+          runError,
+          workspace,
+        })}</output>
+        {runError && <p role="alert">{runError}</p>}
+      </>;
+    }
+    render(<StoreProvider initialWorkspace={workspace} simulationRunner={async () => emptyOutcome} makeId={() => "run-1"}><ResetProbe /></StoreProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Run saved" }));
+    await waitFor(() => expect(JSON.parse(screen.getByTestId("reset-state").textContent ?? "{}").count).toBe(1));
+    const beforeReset = JSON.parse(screen.getByTestId("reset-state").textContent ?? "{}");
+    expect(beforeReset.activeRunId).toBe("run-1");
+    // The run records the requested scenario as a preference; reset must keep that
+    // exactly as it stands, along with the plan, scenarios and base settings.
+    expect(beforeReset.workspace).toMatchObject({
+      baseScenario: { retirementAge: 67 },
+      scenarios: [delta],
+      projectionScenarioId: "saved-choice",
+      hiddenProjectionColumns: ["tax.total"],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    const afterReset = JSON.parse(screen.getByTestId("reset-state").textContent ?? "{}");
+    expect(afterReset).toMatchObject({ count: 0, activeRunId: null, isRunning: false, runError: null });
+    expect(afterReset.workspace).toEqual(beforeReset.workspace);
+    expect(afterReset.workspace).toMatchObject({
+      baseScenario: { retirementAge: 67 },
+      scenarios: [delta],
+      projectionScenarioId: "saved-choice",
+      hiddenProjectionColumns: ["tax.total"],
+    });
+  });
+
+  it("reset clears a visible run error", async () => {
+    const simulationRunner: SimulationRunner = async () => { throw new Error("worker crashed"); };
+    function ErrorProbe() {
+      const { runProjection, resetRuns, runError } = useWorkspace();
+      return <>
+        <button onClick={() => { void runProjection(); }}>Run</button>
+        <button onClick={resetRuns}>Reset</button>
+        {runError && <p role="alert">{runError}</p>}
+      </>;
+    }
+    render(<StoreProvider simulationRunner={simulationRunner}><ErrorProbe /></StoreProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Run" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("worker crashed");
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("reset cancels and invalidates an in-flight run so a late worker completion cannot repopulate it", async () => {
+    let finish: (() => void) | undefined;
+    let signal: AbortSignal | undefined;
+    const simulationRunner: SimulationRunner = (_plan, _scenario, incomingSignal) => {
+      signal = incomingSignal;
+      return new Promise((resolve) => { finish = () => resolve(emptyOutcome); });
+    };
+    function ResetProbe() {
+      const { runProjection, resetRuns, isRunning, runCancelled } = useWorkspace();
+      const runs = useRuns();
+      return <>
+        <button onClick={() => { void runProjection(); }}>Run</button>
+        <button onClick={resetRuns}>Reset</button>
+        <output data-testid="run-progress">{JSON.stringify({ count: runs.length, isRunning, runCancelled })}</output>
+      </>;
+    }
+    render(<StoreProvider simulationRunner={simulationRunner}><ResetProbe /></StoreProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Run" }));
+    expect(JSON.parse(screen.getByTestId("run-progress").textContent ?? "{}").isRunning).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect(signal?.aborted).toBe(true);
+    // Resetting is not "cancelled by the user" in the UI sense: it clears history
+    // and shows neither a cancelled notice nor a stale progress state.
+    expect(JSON.parse(screen.getByTestId("run-progress").textContent ?? "{}")).toMatchObject({ count: 0, isRunning: false, runCancelled: false });
+    finish?.();
+    await waitFor(() => expect(JSON.parse(screen.getByTestId("run-progress").textContent ?? "{}")).toMatchObject({ count: 0, isRunning: false, runCancelled: false }));
+  });
+
+  it.each(["resolve", "reject"] as const)("a late %s from the run cancelled by reset cannot disturb the replacement run", async (settlement) => {
+    const pending: { resolve: (outcome: RunOutcome) => void; reject: (error: Error) => void; scenario: Scenario; signal?: AbortSignal }[] = [];
+    const simulationRunner: SimulationRunner = (_plan, scenario, signal) => new Promise((resolve, reject) => {
+      pending.push({ resolve, reject, scenario, signal });
+    });
+    const deltaA = { id: "a", name: "Run A", basePlanId: "unsaved", simMode: "deterministic" as const, overrides: {} };
+    const deltaB = { id: "b", name: "Run B", basePlanId: "unsaved", simMode: "deterministic" as const, overrides: {} };
+    function RaceProbe() {
+      const { runProjection, resetRuns, isRunning, runError, activeRunId } = useWorkspace();
+      const runs = useRuns();
+      return <>
+        <button onClick={() => { void runProjection(deltaA); }}>Run A</button>
+        <button onClick={() => { void runProjection(deltaB); }}>Run B</button>
+        <button onClick={resetRuns}>Reset</button>
+        <output data-testid="race-state">{JSON.stringify({ names: runs.map(run => run.scenario.name), isRunning, runError, activeRunId })}</output>
+      </>;
+    }
+    render(<StoreProvider initialWorkspace={createEmptyWorkspace()} simulationRunner={simulationRunner}><RaceProbe /></StoreProvider>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Run A" }));
+    expect(pending).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect(pending[0]!.signal?.aborted).toBe(true);
+
+    // Start B after the reset, then settle A while B is still in flight.
+    fireEvent.click(screen.getByRole("button", { name: "Run B" }));
+    expect(pending).toHaveLength(2);
+    expect(pending[1]!.scenario.name).toBe("Run B");
+    expect(pending[1]!.signal?.aborted).toBe(false);
+    await act(async () => {
+      if (settlement === "resolve") pending[0]!.resolve(emptyOutcome);
+      else pending[0]!.reject(new Error("late A failure"));
+      await Promise.resolve();
+    });
+
+    // B keeps its run slot: no restored A, no error, no progress reset.
+    expect(JSON.parse(screen.getByTestId("race-state").textContent ?? "{}")).toMatchObject({
+      names: [], isRunning: true, runError: null, activeRunId: null,
+    });
+    expect(pending[1]!.signal?.aborted).toBe(false);
+
+    await act(async () => {
+      pending[1]!.resolve(emptyOutcome);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(JSON.parse(screen.getByTestId("race-state").textContent ?? "{}").names).toEqual(["Run B"]));
+    expect(JSON.parse(screen.getByTestId("race-state").textContent ?? "{}")).toMatchObject({
+      isRunning: false, runError: null,
+    });
+  });
+
   it("normalizes age on load and profile edits using its injected calendar year", () => {
     const imported = createEmptyWorkspace();
     imported.plan.profile.currentAge = 12;

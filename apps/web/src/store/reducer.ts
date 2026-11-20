@@ -86,6 +86,9 @@ export function reducer(state: StoreState, action: Action): StoreState {
       return { ...state, workspace: { ...workspace, projectionRunSummaryCollapsed: action.collapsed } };
     }
     case "run/store": return { ...state, runs: [...state.runs.filter(run => run.id !== action.record.id), deepFreeze(structuredClone(action.record))].slice(-20) };
+    // Generated-run history lives beside the workspace, never inside it: resetting
+    // results must not touch the plan, scenarios, base settings or preferences.
+    case "run/reset": return state.runs.length === 0 ? state : { ...state, runs: [] };
     default: return assertNever(action);
   }
 }

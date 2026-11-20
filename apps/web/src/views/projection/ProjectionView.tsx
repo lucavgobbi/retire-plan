@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useProjectionRun, useWorkspace } from "../../store/api";
+import { useProjectionRun, useRuns, useWorkspace } from "../../store/api";
 import { DashboardSection, PROJECTION_CHARTS } from "./DashboardSection";
 import { ProjectionTable, columns, sanitizeHiddenColumns } from "./ProjectionTable";
 import { sanitizeHiddenIds } from "./hiddenIds";
@@ -26,7 +26,8 @@ export function ProjectionView() {
   const [jumpAge, setJumpAge] = useState<number | null>(null);
   const [jumpKey, setJumpKey] = useState(0);
   const workspace = useWorkspace();
-  const { validationErrors, runError } = workspace;
+  const runs = useRuns();
+  const { validationErrors, runError, resetRuns } = workspace;
   // Scenario selection is PERSISTED as workspace.projectionScenarioId under the
   // agreed contract: "" (the UI's empty option) is an EXPLICIT base choice,
   // undefined is absence/default (also the base), and any NON-EMPTY string is an
@@ -136,6 +137,16 @@ export function ProjectionView() {
         <button type="button" onClick={() => { void runProjection(); }} disabled={validationErrors.length > 0 || isRunning}>
           Run projection
         </button>
+        {(runs.length > 0 || isRunning) && (
+          <div className="reset-runs">
+            <button type="button" onClick={resetRuns} aria-describedby="reset-runs-hint">
+              Reset runs
+            </button>
+            <p id="reset-runs-hint" className="hint">
+              Clears generated runs and results only; your plan, scenarios, base settings and preferences are kept.
+            </p>
+          </div>
+        )}
         <details className="projection-settings">
           <summary aria-label="Projection settings" title="Projection settings">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">

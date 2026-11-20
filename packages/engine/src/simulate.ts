@@ -222,6 +222,14 @@ export function simulate(
   let worstShortfallAge: number | undefined;
   let worstShortfall = 0;
   let postRetirementShortfall = false;
+  // A match step without eligible wages becomes an ordinary employee contribution,
+  // including the guard against redepositing a proactive RRSP draw.
+  const hasLinkedEmployment = plan.incomes.some(income => income.kind === "employment" && income.endAtRetirement);
+  const savingsWithoutEmployerMatch = hasLinkedEmployment
+    ? plan.savingsPolicy.map(step => step.target === "rrsp-match"
+      ? { ...step, target: "rrsp" as const, matchRate: undefined }
+      : step)
+    : plan.savingsPolicy;
 
   const years: YearResult[] = [];
 
@@ -275,6 +283,7 @@ export function simulate(
     let otherPlan = 0;
     for (const s of plan.incomes) {
       if (!isActive(s)) continue;
+      if (s.kind === "employment" && s.endAtRetirement && age >= scenario.retirementAge) continue;
       const amount = grown(s);
       if (s.kind === "employment") {
         // Annual bonus (optional fraction of the raised base, 10% = 0.1): paid the
@@ -454,7 +463,7 @@ export function simulate(
       // returned to cash inside `cash`).
       const allocation = allocateSurplus(
         Math.max(0, cash - expenses - finalTax.total - mortgageCash),
-        plan.savingsPolicy,
+        employment > 0 ? plan.savingsPolicy : savingsWithoutEmployerMatch,
         { tfsa: roomTf, rrsp: roomRr },
         {
           tfsa: sumType(accounts, "tfsa"),

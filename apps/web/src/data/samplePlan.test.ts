@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 import { validatePlan } from "@retire-plan/engine";
 import { makeSamplePlan, makeSampleWorkspace } from "./samplePlan";
 import { validateWorkspace } from "../storage/schema";
+import { parsePlanFile, workspaceToText } from "../storage/exportImport";
 
-describe("sample plan (golden fixture mirror)", () => {
+describe("built-in sample plan", () => {
   it("passes the engine's validatePlan gate", () => {
     expect(validatePlan(makeSamplePlan())).toEqual([]);
   });
 
-  it("mirrors the golden fixture shape exactly (origin: packages/engine/tests/golden/samplePlan.ts, copied 2026-11-10)", () => {
+  it("uses the golden fixture's profile and starting accounts", () => {
     const plan = makeSamplePlan();
     expect(plan.profile).toEqual({ birthYear: 1981, currentAge: 45, province: "ON", endAge: 95 });
     expect(plan.accounts.map((a) => [a.id, a.type, a.balance])).toEqual([
@@ -22,11 +23,10 @@ describe("sample plan (golden fixture mirror)", () => {
     expect(plan.accounts.every((a) => a.assetMix)).toBe(true);
   });
 
-  it("matches the golden incomes/debts/policies verbatim", () => {
+  it("links the sample salary to retirement and preserves the other income, debt and policy settings", () => {
     const plan = makeSamplePlan();
     expect(plan.incomes.map((i) => i.id)).toEqual(["salary", "cpp", "oas"]);
-    // No endAge on salary: the golden fixture omits it (its intent is Task 16-B3's
-    // open question) — the mirror stays faithful rather than "fixing" it.
+    expect(plan.incomes[0]!.endAtRetirement).toBe(true);
     expect("endAge" in plan.incomes[0]!).toBe(false);
     expect(plan.incomes.find((i) => i.kind === "oas")?.annualAmount).toBe(8_907.72);
     expect(plan.debts[0]).toMatchObject({
@@ -45,7 +45,7 @@ describe("makeSampleWorkspace", () => {
     expect(ws.plan.profile.currentAge).toBe(45);
   });
 
-  it("carries a golden-equivalent deterministic scenario delta", () => {
+  it("carries a deterministic scenario that inherits the base settings", () => {
     const ws = makeSampleWorkspace();
     expect(ws.scenarios[0]).toMatchObject({
       id: "sample",
@@ -54,6 +54,16 @@ describe("makeSampleWorkspace", () => {
       overrides: {},
     });
     expect(ws.scenarios[0]!.basePlanId).toBe(ws.meta?.id);
+  });
+
+  it("round-trips linked, fixed and ongoing employment schedules through plan JSON", () => {
+    const ws = makeSampleWorkspace();
+    const salary = ws.plan.incomes[0]!;
+    const { endAtRetirement: _link, ...legacy } = salary;
+    ws.plan.incomes.push({ ...legacy, id: "fixed", endAge: 67 }, { ...legacy, id: "ongoing" });
+    const parsed = parsePlanFile(JSON.parse(workspaceToText(ws)));
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) expect(parsed.workspace.plan.incomes).toEqual(ws.plan.incomes);
   });
 
   it("accepts meta overrides for the recovery 'start with sample plan' flow", () => {

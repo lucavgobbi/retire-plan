@@ -14,13 +14,19 @@ local workspaces.
 
 ## Working with a plan
 
-The first launch opens the golden sample plan. On **Plan**, edit the profile,
+The first launch opens the built-in sample plan. On **Plan**, edit the profile,
 accounts, assets and debts, income, expenses, and savings policy. Account rows
 apply valid edits automatically; Add account creates a valid starting row ready
 to edit. Other editors use their Save/Add buttons. Invalid values remain in the editor
 with an explanation and do not become a projection input. Ages and years are whole
 numbers; asset mixes must total 100%. Non-registered accounts optionally accept
 cost basis (ACB); blank leaves the engine's default intact.
+
+Retirement age in **Plan** edits the base projection setting. An employment
+stream with **Until retirement** checked pays through the year before the
+retirement age used by the run. New salaries and the built-in sample start
+with this option checked. Existing fixed and ongoing streams can be linked
+by editing the income entry.
 
 Enter the birth year; current age is calculated as the current calendar year minus
 birth year. It represents the age reached during that year because the app does

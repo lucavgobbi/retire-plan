@@ -36,6 +36,21 @@
   font-size: 1.1rem;
 }
 
+/* Reset runs sits beside the run controls; its hint is scoped to the action so
+   the workspace-preservation promise stays visible without crowding the row. */
+.projection-controls .reset-runs {
+  display: flex;
+  align-items: center;
+  gap: 6px 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.projection-controls .reset-runs .hint {
+  margin: 0;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
 /* Projection settings: a details disclosure in the toolbar; the gear-only trigger
    carries the accessible name, the menu overlays the table. */
 .projection-settings { position: relative; }

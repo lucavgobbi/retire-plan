@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { ScenarioDelta } from "../../domain/types";
+import type { Scenario, ScenarioDelta } from "../../domain/types";
+import type { RunOutcome } from "../../domain/run";
 import type { SimulationRunner } from "../../store/simulationWorkerProtocol";
 import { useWorkspace } from "../../store/api";
 import { StoreProvider } from "../../store/StoreProvider";
@@ -17,6 +18,7 @@ const delta: ScenarioDelta = {
   simMode: "deterministic",
   overrides: { retirementAge: 62 },
 };
+const emptyOutcome = { result: { years: [], summary: { success: true, finalNetWorth: 0 } } } as RunOutcome;
 
 function renderView(workspace = makeWorkspace(), simulationRunner?: SimulationRunner) {
   return render(
@@ -141,7 +143,9 @@ describe("ScenariosView", () => {
     const nameBox = screen.getByLabelText(/^name$/i);
     fireEvent.change(nameBox, { target: { value: "Retire 3y earlier" } });
     const item = screen.getByText(/retire 3y earlier/i);
-    expect(item.closest("li")!.textContent).toMatch(/retirement age 65/i);
+    // A fresh scenario inherits the base retirement age: naming it alone must not
+    // pin today's value into the delta.
+    expect(item.closest("li")!.textContent).not.toMatch(/retirement age/i);
 
     fireEvent.change(screen.getByLabelText(/retirement age override/i), { target: { value: "62" } });
     expect(screen.getAllByText(/retire 3y earlier/i)).toHaveLength(1);
@@ -300,6 +304,32 @@ describe("ScenariosView", () => {
     expect(stored[0]).not.toHaveProperty("withdrawalStrategy");
   });
 
+  it("shows the withdrawal mode inherited from the base scenario on the current card", () => {
+    const workspace = makeWorkspace();
+    workspace.scenarios.push({ ...delta, overrides: {} });
+    const base = { ...DEFAULT_SCENARIO_BASE, withdrawalStrategy: "tax-minimizing" as const };
+    render(<StoreProvider initialWorkspace={workspace} initialBaseScenario={base}><ScenariosView /></StoreProvider>);
+    const card = screen.getByText(/retire 3 years earlier/i).closest("li")!;
+    // The delta has no strategy key, so the card must resolve the base mode the
+    // scenario will actually run with rather than claim it is undecided.
+    expect(within(card).getByText(/withdrawal mode/i).textContent).toBe("Withdrawal mode Tax-minimizing planning");
+    expect(card.textContent).not.toMatch(/Manual account order/);
+
+    fireEvent.click(within(card).getByRole("button", { name: "Edit" }));
+    expect(screen.getByText(/salary set to “Until retirement” ends the year before this age/i)).toBeTruthy();
+  });
+
+  it("shows an explicit manual override on the card even when the base is tax-minimizing", () => {
+    const workspace = makeWorkspace();
+    workspace.scenarios.push({ ...delta, withdrawalStrategy: "manual", overrides: {} });
+    const base = { ...DEFAULT_SCENARIO_BASE, withdrawalStrategy: "tax-minimizing" as const };
+    render(<StoreProvider initialWorkspace={workspace} initialBaseScenario={base}><ScenariosView /></StoreProvider>);
+    const card = screen.getByText(/retire 3 years earlier/i).closest("li")!;
+    // Explicit override wins over the tax-minimizing base.
+    expect(within(card).getByText(/withdrawal mode/i).textContent).toBe("Withdrawal mode Manual account order");
+    expect(card.textContent).not.toMatch(/Tax-minimizing planning/);
+  });
+
   it("tax-minimizing strategy hides order controls, keeps the saved order, and restores it when manual returns", () => {
     const ws = makeWorkspace();
     ws.scenarios.push({ ...delta, overrides: { retirementAge: 62, withdrawalOrder: ["nonreg", "tfsa", "rrsp"] } });
@@ -410,5 +440,134 @@ describe("ScenariosView", () => {
     fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Fractional" } });
     expect(screen.getByText(/retirement age must be a whole number of years/i)).toBeTruthy();
     expect(screen.queryByText(/fractional/i)).toBeNull();
+  });
+});
+
+describe("scenario retirement-age inheritance", () => {
+  const storedScenarios = () => JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
+
+  it("an unrelated edit does not pin the current base age, and later base age changes reach the scenario run", async () => {
+    const received: Scenario[] = [];
+    const simulationRunner: SimulationRunner = async (_plan, scenario) => {
+      received.push(scenario);
+      return emptyOutcome;
+    };
+    render(
+      <StoreProvider initialWorkspace={makeWorkspace()} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={simulationRunner}>
+        <BaseScenarioSettings />
+        <ScenariosView />
+        <ScenariosProbe />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /new scenario/i }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Inherited age" } });
+    expect(storedScenarios()[0]!.overrides).not.toHaveProperty("retirementAge");
+    expect((screen.getByLabelText("Retirement age override") as HTMLInputElement).value).toBe("65");
+    expect(screen.queryByRole("button", { name: "Use base retirement age" })).toBeNull();
+
+    // Change the BASE age: the inherited scenario editor follows it, and the run
+    // resolves the new age rather than a value pinned by the name edit.
+    fireEvent.change(screen.getByLabelText("Base retirement age"), { target: { value: "67" } });
+    expect((screen.getByLabelText("Retirement age override") as HTMLInputElement).value).toBe("67");
+    expect(storedScenarios()[0]!.overrides).not.toHaveProperty("retirementAge");
+
+    fireEvent.click(screen.getByRole("button", { name: "Run Inherited age" }));
+    await waitFor(() => expect(received).toHaveLength(1));
+    expect(received[0]!.retirementAge).toBe(67);
+  });
+
+  it("preserves an existing explicit age even when it equals the base, and resets only the age override", () => {
+    const workspace = makeWorkspace();
+    workspace.scenarios.push({
+      ...delta,
+      name: "Pinned age",
+      overrides: {
+        retirementAge: 65,
+        returnAssumptions: { equity: 0.055, bond: 0.025, cash: 0.01 },
+        withdrawalOrder: ["nonreg", "tfsa", "rrsp"],
+      },
+    });
+    render(
+      <StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+        <ScenariosView />
+        <ScenariosProbe />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    // Explicit 65 equals the base 65 but is still an override: it must not be
+    // silently converted to inheritance just because the values match.
+    expect(screen.getByRole("button", { name: "Use base retirement age" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Renamed pinned age" } });
+    expect(storedScenarios()[0]!.overrides).toMatchObject({
+      retirementAge: 65,
+      returnAssumptions: { equity: 0.055, bond: 0.025, cash: 0.01 },
+      withdrawalOrder: ["nonreg", "tfsa", "rrsp"],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Use base retirement age" }));
+    const cleared = storedScenarios()[0]!;
+    expect(cleared.overrides).not.toHaveProperty("retirementAge");
+    expect(cleared.overrides).toMatchObject({
+      returnAssumptions: { equity: 0.055, bond: 0.025, cash: 0.01 },
+      withdrawalOrder: ["nonreg", "tfsa", "rrsp"],
+    });
+    expect((screen.getByLabelText("Retirement age override") as HTMLInputElement).value).toBe("65");
+    expect(screen.queryByRole("button", { name: "Use base retirement age" })).toBeNull();
+
+    // Setting a new explicit age re-pins it; clearing again returns to inheritance.
+    fireEvent.change(screen.getByLabelText("Retirement age override"), { target: { value: "63" } });
+    expect(storedScenarios()[0]!.overrides.retirementAge).toBe(63);
+    fireEvent.click(screen.getByRole("button", { name: "Use base retirement age" }));
+    expect(storedScenarios()[0]!.overrides).not.toHaveProperty("retirementAge");
+  });
+
+  it("resetting an imported age-only override keeps return and withdrawal-order inheritance, then base changes flow to the run", async () => {
+    const received: Scenario[] = [];
+    const simulationRunner: SimulationRunner = async (_plan, scenario) => {
+      received.push(scenario);
+      return emptyOutcome;
+    };
+    const workspace = makeWorkspace();
+    workspace.scenarios.push({
+      id: "imported-age-only",
+      name: "Imported age only",
+      basePlanId: "plan-test",
+      simMode: "deterministic",
+      overrides: { retirementAge: 62 },
+    });
+    render(
+      <StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={simulationRunner}>
+        <BaseScenarioSettings />
+        <ScenariosView />
+        <ScenariosProbe />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use base retirement age" }));
+
+    // The imported delta carried ONLY an age override. Clearing it must leave the
+    // other override keys absent, not snapshot today's inherited values.
+    let stored = storedScenarios()[0]!;
+    expect(stored.overrides).toEqual({});
+    expect(stored.overrides).not.toHaveProperty("returnAssumptions");
+    expect(stored.overrides).not.toHaveProperty("withdrawalOrder");
+    expect(screen.queryByRole("button", { name: "Use base retirement age" })).toBeNull();
+
+    // Later base changes still reach the inherited scenario and its run.
+    const baseRegion = screen.getByRole("region", { name: "Base projection settings" });
+    fireEvent.click(within(baseRegion).getByText("Return assumptions"));
+    fireEvent.change(within(baseRegion).getByLabelText("Base equity return (%)"), { target: { value: "6.5" } });
+    fireEvent.click(within(baseRegion).getByText("Account withdrawal order"));
+    fireEvent.change(within(baseRegion).getByLabelText("Base withdrawal priority 1"), { target: { value: "rrsp" } });
+
+    stored = storedScenarios()[0]!;
+    expect(stored.overrides).not.toHaveProperty("returnAssumptions");
+    expect(stored.overrides).not.toHaveProperty("withdrawalOrder");
+
+    fireEvent.click(screen.getByRole("button", { name: "Run Imported age only" }));
+    await waitFor(() => expect(received).toHaveLength(1));
+    expect(received[0]!.retirementAge).toBe(DEFAULT_SCENARIO_BASE.retirementAge);
+    expect(received[0]!.returnAssumptions.equity).toBeCloseTo(0.065);
+    expect(received[0]!.withdrawalOrder[0]).toBe("rrsp");
   });
 });

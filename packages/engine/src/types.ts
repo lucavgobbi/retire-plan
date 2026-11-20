@@ -50,6 +50,8 @@ export interface IncomePlan {
   annualAmount: number;
   startAge: number;
   endAge?: number;
+  /** Employment only. When true, pay ends before the resolved retirement age. */
+  endAtRetirement?: boolean;
   raiseRate: number;
   /**
    * Optional annual bonus as a FRACTION of the raised annual base (10% = 0.1);
@@ -340,6 +342,15 @@ export function validatePlan(plan: Plan): string[] {
       errors.push(
         `Income "${income.id}" endAge (${income.endAge}) is before its startAge (${income.startAge}); it must end at or after when it starts.`,
       );
+    }
+    if (income.endAtRetirement !== undefined) {
+      if (typeof income.endAtRetirement !== "boolean") {
+        errors.push(`Income "${income.id}" endAtRetirement must be a boolean.`);
+      } else if (income.kind !== "employment") {
+        errors.push(`Income "${income.id}" endAtRetirement is supported only for employment income.`);
+      } else if (income.endAtRetirement && income.endAge !== undefined) {
+        errors.push(`Income "${income.id}" cannot specify both endAtRetirement and a fixed endAge.`);
+      }
     }
     if (income.bonusRate !== undefined) {
       if (!Number.isFinite(income.bonusRate) || income.bonusRate < 0) {

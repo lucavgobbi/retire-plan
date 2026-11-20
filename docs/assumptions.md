@@ -45,6 +45,20 @@ annual announcement (including RRIF factors, TFSA/RRSP dollar limits, and OAS/GI
 maximums) remain at their base-table amounts in v1; future announced values are not
 forecast.
 
+## Retirement-linked salary
+
+Employment streams set to **Until retirement** pay through the year before the
+retirement age resolved for the run. The base age applies unless a scenario
+overrides it. If the start age is at or after that retirement age, the linked
+stream pays nothing. Salary and bonus use the same active years. Fixed end ages
+are inclusive, and older streams without an end age or a retirement link stay
+ongoing. CPP, OAS, expenses and savings steps use their own ages.
+
+In a plan with retirement-linked employment, employer RRSP matching requires
+positive employment pay in the year. Fixed or ongoing employment can still
+qualify. In a year without employment pay, a match step becomes an ordinary
+employee RRSP contribution and follows the proactive-withdrawal guard.
+
 ## Employee payroll deductions
 
 The optional scenario payroll settings enable CPP and EI independently. Legacy
@@ -286,8 +300,8 @@ Absent (or `"manual"`) means the configured `withdrawalOrder` runs exactly as be
 - **Circular-redeposit guard:** in a year with a planned proactive draw, only
   EMPLOYEE `rrsp` savings-policy steps are suppressed (withdrawing does not recreate
   contribution room, so an immediate re-contribution of the same cash is artificial).
-  Employer `rrsp-match` steps and every tfsa/nonreg/cash/mortgage step continue;
-  `retirementAge` stays informational and no blanket savings disable exists. The
+  Employer `rrsp-match` steps are still subject to the plan's wage eligibility,
+  and every tfsa/nonreg/cash/mortgage step continues on its schedule. The
   exact suppression is visible per year (`contributions.rrsp === 0` in planned years
   where an rrsp step would otherwise contribute).
 - Planned draws are taxed like any RRSP withdrawal and count as GIS income the

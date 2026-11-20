@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { RunOutcome } from "../../domain/run";
 import type { SimulationRunner } from "../../store/simulationWorkerProtocol";
 import type { Scenario, SimulationResult, YearResult } from "@retire-plan/engine";
-import { StoreProvider, useWorkspace } from "../../store/api";
+import { StoreProvider, useRuns, useWorkspace } from "../../store/api";
 import { DEFAULT_SCENARIO_BASE } from "../../domain/defaults";
 import { makeRunOutPlan, makeSamplePlan, makeWorkspace } from "./testFixtures";
 import { ProjectionTable, columns } from "./ProjectionTable";
@@ -1139,5 +1139,76 @@ describe("YearDetailRow payroll card", () => {
     expect(text).toContain(fmtMoneyDetail(916));
     expect(text).toMatch(/single-employer annual approximation/i);
     expect(text).toMatch(/PRB/i);
+  });
+});
+
+describe("Reset runs", () => {
+  function RunsProbe() {
+    const runs = useRuns();
+    const { activeRunId, workspace } = useWorkspace();
+    return <output data-testid="runs-state">{JSON.stringify({
+      count: runs.length,
+      activeRunId,
+      plan: workspace.plan,
+      scenarios: workspace.scenarios,
+      baseScenario: workspace.baseScenario,
+      projectionScenarioId: workspace.projectionScenarioId,
+      hiddenProjectionColumns: workspace.hiddenProjectionColumns,
+    })}</output>;
+  }
+
+  it("is hidden with no run history, clears results after a run, and keeps the workspace intact", async () => {
+    const workspace = makeWorkspace();
+    workspace.scenarios.push({ id: "scen-a", name: "Scenario A", basePlanId: "plan-test", simMode: "deterministic", overrides: {} });
+    workspace.projectionScenarioId = "scen-a";
+    workspace.hiddenProjectionColumns = ["tax.total"];
+    render(
+      <StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={async () => emptyOutcome}>
+        <ProjectionView />
+        <RunsProbe />
+      </StoreProvider>,
+    );
+    expect(screen.queryByRole("button", { name: "Reset runs" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    await waitFor(() => expect(document.querySelector(".run-stamp")).toBeTruthy());
+    const before = JSON.parse(screen.getByTestId("runs-state").textContent ?? "{}");
+    expect(before.count).toBe(1);
+    expect(before.activeRunId).toBeTruthy();
+
+    const reset = screen.getByRole("button", { name: "Reset runs" });
+    expect(reset.getAttribute("aria-describedby")).toBe("reset-runs-hint");
+    expect(document.getElementById("reset-runs-hint")!.textContent).toMatch(/plan, scenarios, base settings and preferences are kept/i);
+    fireEvent.click(reset);
+
+    expect(document.querySelector(".run-stamp")).toBeNull();
+    expect(screen.getByText(/run the projection/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Reset runs" })).toBeNull();
+    const after = JSON.parse(screen.getByTestId("runs-state").textContent ?? "{}");
+    expect(after).toMatchObject({ count: 0, activeRunId: null });
+    expect(after.plan).toEqual(before.plan);
+    expect(after.scenarios).toEqual(before.scenarios);
+    expect(after.baseScenario).toEqual(before.baseScenario);
+    expect(after.projectionScenarioId).toBe("scen-a");
+    expect(after.hiddenProjectionColumns).toEqual(["tax.total"]);
+  });
+
+  it("works while a projection is running and discards its late completion", async () => {
+    let finish: (() => void) | undefined;
+    const simulationRunner: SimulationRunner = () => new Promise((resolve) => { finish = () => resolve(emptyOutcome); });
+    render(
+      <StoreProvider initialWorkspace={makeWorkspace()} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={simulationRunner}>
+        <ProjectionView />
+        <RunsProbe />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
+    expect(screen.getByText("Projection running in the background…")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Reset runs" }));
+    expect(screen.queryByText("Projection running in the background…")).toBeNull();
+    expect(screen.getByText(/run the projection/i)).toBeTruthy();
+    expect(JSON.parse(screen.getByTestId("runs-state").textContent ?? "{}").count).toBe(0);
+    finish?.();
+    await waitFor(() => expect(JSON.parse(screen.getByTestId("runs-state").textContent ?? "{}").count).toBe(0));
+    expect(document.querySelector(".run-stamp")).toBeNull();
   });
 });
