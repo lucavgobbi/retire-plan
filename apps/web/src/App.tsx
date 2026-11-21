@@ -72,7 +72,8 @@ export function AppShell({ provider, sample = false }: { provider?: StorageProvi
   useEffect(() => { if (activeRunId !== null) setRoute("Projection"); }, [activeRunId]);
   useEffect(() => {
     if (route !== "Projection" || activeRunId === null) return;
-    const target = document.getElementById("projection-year-table") ?? document.getElementById("projection-results");
+    const target = document.querySelector<HTMLElement>("#projection-panel-cashflow:not([hidden]) #projection-year-table")
+      ?? document.getElementById("projection-results");
     target?.scrollIntoView?.({ behavior: "smooth", block: "start" });
     target?.focus({ preventScroll: true });
   }, [route, activeRunId]);

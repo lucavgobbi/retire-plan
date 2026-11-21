@@ -167,6 +167,19 @@ export interface YearResult {
   rrifMinimumWithdrawal?: number;
   /** Per-item expense amounts before the annual total is rounded; optional for stored legacy runs. */
   expenseBreakdown?: { id: string; name?: string; amount: number }[];
+  /** Cash routing details captured by the stepper; absent in older stored runs. */
+  cashflow?: {
+    scheduledMortgagePayment: number;
+    /** Floating cash outside named accounts, before this year's sales and at year-end. */
+    openingIdleCash: number;
+    closingIdleCash: number;
+    assetSaleToIdleCash: number;
+    assetSaleToNonreg: number;
+    /** Already included in both income.other and contributions.rrsp. */
+    employerRrspMatch: number;
+    /** Already included in contributions.cash and closingIdleCash. */
+    cashContributionsToIdleCash: number;
+  };
   shortfall: number;
   balances: { tfsa: number; rrsp: number; nonreg: number; cash: number; home: number; debt: number; otherAssets?: number };
   /** Per-named-cash-account year-end balances; optional for legacy runs and plans without cash accounts. */

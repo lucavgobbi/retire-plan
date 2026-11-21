@@ -52,6 +52,28 @@ describe("workspace reducer", () => {
     expect("projectionScenarioId" in state.workspace).toBe(false);
     expect("projectionRunSummaryCollapsed" in state.workspace).toBe(false);
   });
+  it("stores and clears the projection tab and Sankey range independently of table and chart preferences", () => {
+    let state: StoreState = { workspace: createEmptyWorkspace(), runs: [] };
+    state = reducer(state, { type: "projection/setActiveTab", tab: "cashflow" });
+    state = reducer(state, { type: "projection/setSankeyRange", range: { startYear: 2030, endYear: 2040 } });
+    state = reducer(state, { type: "projection/setHiddenColumns", hiddenColumnIds: ["tax.total"] });
+    state = reducer(state, { type: "projection/setHiddenCharts", hiddenChartIds: ["tax"] });
+    expect(state.workspace).toMatchObject({
+      projectionActiveTab: "cashflow",
+      projectionSankeyRange: { startYear: 2030, endYear: 2040 },
+      hiddenProjectionColumns: ["tax.total"],
+      hiddenProjectionCharts: ["tax"],
+    });
+    state = reducer(state, { type: "projection/setSankeyRange", range: { startYear: 2031, endYear: 2032 } });
+    expect(state.workspace.hiddenProjectionColumns).toEqual(["tax.total"]);
+    expect(state.workspace.hiddenProjectionCharts).toEqual(["tax"]);
+    state = reducer(state, { type: "projection/setActiveTab", tab: null });
+    state = reducer(state, { type: "projection/setSankeyRange", range: null });
+    expect("projectionActiveTab" in state.workspace).toBe(false);
+    expect("projectionSankeyRange" in state.workspace).toBe(false);
+    expect(state.workspace.hiddenProjectionColumns).toEqual(["tax.total"]);
+    expect(state.workspace.hiddenProjectionCharts).toEqual(["tax"]);
+  });
   it("returns the selected projection to baseline when that scenario is removed", () => {
     const workspace = createEmptyWorkspace();
     const delta = { id: "chosen", name: "Chosen", basePlanId: "plan", simMode: "deterministic" as const, overrides: {} };

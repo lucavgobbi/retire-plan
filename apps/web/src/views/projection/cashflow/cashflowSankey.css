@@ -1,0 +1,93 @@
+.cashflow-sankey {
+  background: #fff;
+  border: 1px solid #dbe3eb;
+  border-radius: 12px;
+  color: #1f2933;
+  margin-block: 1rem;
+  min-width: 0;
+  padding: clamp(0.75rem, 2vw, 1.25rem);
+}
+
+.cashflow-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+}
+
+.cashflow-header h3 { margin: 0; }
+
+.cashflow-range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  min-width: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.cashflow-range legend, .cashflow-period {
+  color: #52606d;
+  font-size: 0.82rem;
+}
+
+.cashflow-range label { display: flex; align-items: center; gap: 0.4rem; }
+.cashflow-period { margin-block: 0.5rem 0; }
+.cashflow-figure { margin: 0.6rem 0 0; }
+
+.cashflow-tooltip {
+  align-items: center;
+  background: #f4f7fa;
+  border-radius: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.75rem;
+  justify-content: space-between;
+  min-height: 2.5rem;
+  padding: 0.4rem 0.75rem;
+}
+
+.cashflow-tooltip strong, .cashflow-breakdown dd { font-variant-numeric: tabular-nums; }
+.cashflow-plot { overflow-x: auto; }
+.cashflow-plot svg { display: block; min-width: 800px; width: min(100%, 1050px); margin-inline: auto; }
+.cashflow-svg-heading { fill: #52606d; font-size: 15px; font-weight: 700; }
+.cashflow-flow { cursor: pointer; }
+.cashflow-flow text { fill: #1f2933; font-size: 15px; }
+.cashflow-ribbon { fill: currentColor; fill-opacity: 0.32; }
+.cashflow-flow[data-active="true"] .cashflow-ribbon { fill-opacity: 0.78; }
+.cashflow-flow[data-active="true"] text, .cashflow-flow:focus-visible text { font-weight: 700; }
+.cashflow-flow:focus-visible { outline: none; }
+.cashflow-flow:focus-visible rect { stroke: #1f2933; stroke-width: 2; }
+
+.cashflow-notes p, .cashflow-breakdown p { font-size: 0.88rem; margin-block: 0.5rem; }
+.cashflow-notes strong { color: #9a3412; }
+.cashflow-direct-transfer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  border-inline-start: 3px solid #7c3aed;
+  background: #f6f3fc;
+  padding: 0.55rem 0.75rem;
+}
+.cashflow-direct-transfer span span { display: block; font-size: 0.82rem; color: #52606d; }
+.cashflow-breakdown { border-top: 1px solid #dbe3eb; padding-top: 0.7rem; margin-top: 0.5rem; }
+.cashflow-breakdown summary { cursor: pointer; font-weight: 650; width: fit-content; }
+
+.cashflow-breakdown-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+  gap: 0.7rem 1.25rem;
+  align-items: start;
+}
+
+.cashflow-breakdown h4 { margin-block: 0.75rem 0.4rem; }
+.cashflow-breakdown dl { margin: 0; }
+.cashflow-breakdown dl > div { display: flex; justify-content: space-between; gap: 0.75rem; padding-block: 0.2rem; }
+.cashflow-breakdown dd { margin: 0; text-align: right; white-space: nowrap; }
+
+@media print {
+  .cashflow-plot svg { min-width: 0; }
+}

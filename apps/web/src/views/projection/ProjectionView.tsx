@@ -1,15 +1,38 @@
 import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import type { ProjectionActiveTab } from "../../domain/types";
 import { useProjectionRun, useRuns, useWorkspace } from "../../store/api";
 import { DashboardSection, PROJECTION_CHARTS } from "./DashboardSection";
 import { ProjectionTable, columns, sanitizeHiddenColumns } from "./ProjectionTable";
 import { sanitizeHiddenIds } from "./hiddenIds";
 import { FailBanner } from "./FailBanner";
 import { RunAnalysisSummary } from "./RunAnalysisSummary";
+import { CashflowSankey } from "./cashflow/CashflowSankey";
+import { resolveSankeyRange, runYearRange } from "./sankeyRange";
 import "./projection.css";
 
+const PROJECTION_TABS: { id: ProjectionActiveTab; label: string }[] = [
+  { id: "charts", label: "Charts" },
+  { id: "cashflow", label: "Cashflow" },
+];
+
+function SettingsGear({ label }: { label: string }) {
+  return (
+    <summary aria-label={label} title={label}>
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+        <g fill="currentColor">
+          {[0, 45, 90, 135, 180, 225, 270, 315].map((angle) => <rect key={angle} x="11" y="2.5" width="2" height="5" rx="1" transform={`rotate(${angle} 12 12)`} />)}
+          <circle cx="12" cy="12" r="5.2" />
+        </g>
+        <circle cx="12" cy="12" r="2.2" fill="#fff" />
+      </svg>
+    </summary>
+  );
+}
+
 /**
- * Default (zero-prop) projection view: the deterministic year table with its audit
- * trail expansion, the run-out fail banner, and the dashboard charts above it.
+ * Projection run controls and shared results, with dashboard charts and cashflow
+ * on separate tabs.
  * Runs dispatch through the store hook — never `simulate` directly.
  *
  * A dropdown chooses WHAT to run: the baseline (the working plan with the base
@@ -21,6 +44,13 @@ import "./projection.css";
  * has a single run slot) — cancel means cancelling the running projection. The
  * selection is PERSISTED as workspace.projectionScenarioId (the Provider also
  * records each run's intent there at request time); the UI derives from it.
+ *
+ * The results are split into two subtabs (Charts | Cashflow) whose active tab is
+ * PERSISTED as workspace.projectionActiveTab (absent = Charts). Both panels stay
+ * mounted while a run exists, hidden via the native `hidden` attribute, so the
+ * table's expansion/scroll state and each chart's interaction state survive tab
+ * switches. The shared run selector, run status and analysis summary sit ABOVE
+ * the tablist; each panel owns only its contextual settings.
  */
 export function ProjectionView() {
   const [jumpAge, setJumpAge] = useState<number | null>(null);
@@ -57,6 +87,29 @@ export function ProjectionView() {
     : workspace.workspace.scenarios.find((item) => item.id === storedScenarioId) ?? null;
   const effectiveScenarioId = selectedScenario?.id ?? null;
   const { run, runProjection, stale, isRunning, runCancelled, cancelRun } = useProjectionRun(planId, effectiveScenarioId);
+
+  // Subtabs: persisted workspace preference (absent = Charts). Switching tabs only
+  // changes which mounted panel is exposed — it never dispatches a run.
+  const activeTab = workspace.workspace.projectionActiveTab ?? "charts";
+  const tabRefs = useRef<Partial<Record<ProjectionActiveTab, HTMLButtonElement | null>>>({});
+  const setActiveTab = (tab: ProjectionActiveTab) => {
+    if (tab === activeTab) return;
+    if (tab === "charts") setJumpAge(null);
+    workspace.dispatch({ type: "projection/setActiveTab", tab });
+  };
+  const onTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    const index = PROJECTION_TABS.findIndex((tab) => tab.id === activeTab);
+    let nextIndex: number | null = null;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % PROJECTION_TABS.length;
+    else if (event.key === "ArrowLeft") nextIndex = (index - 1 + PROJECTION_TABS.length) % PROJECTION_TABS.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = PROJECTION_TABS.length - 1;
+    if (nextIndex === null) return;
+    event.preventDefault();
+    const next = PROJECTION_TABS[nextIndex]!;
+    setActiveTab(next.id);
+    tabRefs.current[next.id]?.focus();
+  };
 
   // Column visibility: the workspace persists HIDDEN data-column ids (absent or
   // empty = all visible, so columns added later default visible; stale ids are
@@ -102,8 +155,14 @@ export function ProjectionView() {
   };
 
   const failureAge = run && !run.result.summary.success ? (run.result.summary.failureAge ?? null) : null;
+  // The SAME run snapshot birth year feeds the table and the Sankey so calendar
+  // years agree everywhere; a run's snapshot wins over the live plan profile.
   const birthYear = run?.birthYear ?? workspace.workspace.plan.profile.birthYear;
   const historicalSourceStartYear = run?.analysis?.mode === "historical" ? run.analysis.representativeStartYear : undefined;
+  // Sankey period: stored preference resolved against the CURRENT run span.
+  // A valid stored range is preserved exactly; out-of-span ranges are clamped for
+  // display only — mounting a run never rewrites the persisted preference.
+  const sankeyRange = run ? resolveSankeyRange(workspace.workspace.projectionSankeyRange, runYearRange(run.result.years, birthYear)) : null;
 
   return (
     <section id="projection-results" tabIndex={-1} aria-label="Projection" className="projection-view">
@@ -147,18 +206,103 @@ export function ProjectionView() {
             </p>
           </div>
         )}
-        <details className="projection-settings">
-          <summary aria-label="Projection settings" title="Projection settings">
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
-              <g fill="currentColor">
-                {[0, 45, 90, 135, 180, 225, 270, 315].map((angle) => <rect key={angle} x="11" y="2.5" width="2" height="5" rx="1" transform={`rotate(${angle} 12 12)`} />)}
-                <circle cx="12" cy="12" r="5.2" />
-              </g>
-              <circle cx="12" cy="12" r="2.2" fill="#fff" />
-            </svg>
-          </summary>
-          <div className="projection-settings-menu">
-            <div className="settings-section">
+        {isRunning && <>
+          <p role="status" aria-live="polite">Projection running in the background…</p>
+          <button type="button" onClick={cancelRun}>Cancel projection</button>
+        </>}
+        {runCancelled && <p role="status">Projection cancelled.</p>}
+        {runError && (
+          <p role="alert" className="run-error">
+            The projection could not run: {runError}
+          </p>
+        )}
+      </header>
+
+      {!run ? (
+        <p className="hint empty-state">
+          Run the projection to see charts, the year-by-year table and the cashflow diagram.
+        </p>
+      ) : (
+        <>
+          {/* Shared run context stays ABOVE the tablist so both subtabs describe
+              the same run: stamp, stale notice, fail banner and analysis summary. */}
+          <p className="hint run-stamp">
+            Results for <strong>{run.scenario.name}</strong>
+            {effectiveScenarioId === null
+              ? " (baseline)"
+              : selectedScenario?.name === run.scenario.name ? "" : " (saved scenario)"} · {new Date(run.createdAt).toLocaleString()}.
+            {stale && (
+              <>
+                {" "}
+                <strong>Plan or scenario changed since this run —</strong> re-run to refresh.
+              </>
+            )}
+          </p>
+          {failureAge !== null && <FailBanner summary={run.result.summary} onJump={(age) => {
+            setActiveTab("cashflow");
+            setJumpAge(age);
+            setJumpKey((key) => key + 1);
+          }} />}
+          {/* Run summary region (ALL modes that have one): RunAnalysisSummary —
+              deterministic = "Tax strategy planning comparison", MC = "Monte Carlo
+              ensemble", historical = "Historical rolling-window results" — in ONE
+              native collapsible, PERSISTED (projectionRunSummaryCollapsed: true =
+              collapsed, false = expanded; the field's absence is also expanded).
+              onToggle writes the actual state only when it differs — the toggle
+              never fires on mount, so nothing clobbers the stored preference. */}
+          {(run.analysis !== undefined || run.result.withdrawalPlan !== undefined) && (
+            <details
+              className="run-summary-collapse"
+              open={!summaryCollapsed}
+              onToggle={(event) => {
+                const collapsed = !event.currentTarget.open;
+                if (collapsed === summaryCollapsed) return;
+                workspace.dispatch({ type: "projection/setRunSummaryCollapsed", collapsed });
+              }}
+            >
+              <summary>Run analysis</summary>
+              <RunAnalysisSummary run={run} />
+              {run.analysis && <p className="hint">Year table audit counts and failures describe the representative path shown below.</p>}
+            </details>
+          )}
+
+        </>
+      )}
+
+      <div className="projection-tablist no-print" role="tablist" aria-label="Projection view">
+        {PROJECTION_TABS.map((tab) => {
+          const selected = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              ref={(element) => { tabRefs.current[tab.id] = element; }}
+              type="button"
+              role="tab"
+              id={`projection-tab-${tab.id}`}
+              aria-selected={selected}
+              aria-controls={`projection-panel-${tab.id}`}
+              tabIndex={selected ? 0 : -1}
+              onClick={() => setActiveTab(tab.id)}
+              onKeyDown={onTabKeyDown}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Keep both panels mounted to preserve their local state between tab switches. */}
+      <div
+        role="tabpanel"
+        id="projection-panel-charts"
+        aria-labelledby="projection-tab-charts"
+        className="projection-panel"
+        hidden={activeTab !== "charts"}
+      >
+        <div className="projection-panel-toolbar no-print">
+          <details className="projection-settings projection-chart-settings">
+            <SettingsGear label="Chart settings" />
+            <div className="projection-settings-menu">
               <p className="settings-heading">Dashboard charts</p>
               {PROJECTION_CHARTS.map((chart) => (
                 <label key={chart.id}>
@@ -171,15 +315,30 @@ export function ProjectionView() {
                 </label>
               ))}
             </div>
-            <div className="settings-section">
+          </details>
+        </div>
+        {run && <DashboardSection result={run.result} analysis={run.analysis} />}
+      </div>
+
+      <div
+        role="tabpanel"
+        id="projection-panel-cashflow"
+        aria-labelledby="projection-tab-cashflow"
+        className="projection-panel"
+        hidden={activeTab !== "cashflow"}
+      >
+        <div className="projection-panel-toolbar projection-table-toolbar">
+          <h3>Year-by-year results</h3>
+          <details className="projection-settings projection-table-settings no-print">
+            <SettingsGear label="Table settings" />
+            <div className="projection-settings-menu">
               <p className="settings-heading">Table columns</p>
               {/* ONE bulk action for TABLE columns only (charts unaffected): a native
                   checkbox — checked when every selectable column is visible, unchecked
                   when none is, DOM-`indeterminate` (announced as "mixed") in any
                   partial state. Clicking in a partial or none state selects all;
-                  clicking while checked unselects all. The visible count stays beside
-                  the stable accessible label. Pinned Age/calendar-year and Audit
-                  columns are never selectable, so they always remain. */}
+                  clicking while checked unselects all. Pinned Age/calendar-year and
+                  Audit columns are never selectable, so they always remain. */}
               <div className="bulk-columns">
                 <label>
                   <input
@@ -205,7 +364,7 @@ export function ProjectionView() {
                     <label key={col.id}>
                       <input
                         type="checkbox"
-                        checked={!(hiddenIds ?? new Set<string>()).has(col.id)}
+                        checked={!hiddenIds?.has(col.id)}
                         onChange={() => toggleColumn(col.id)}
                       />{" "}
                       {col.label}
@@ -214,67 +373,28 @@ export function ProjectionView() {
                 </div>
               ))}
             </div>
-           </div>
-         </details>
-        {isRunning && <>
-          <p role="status" aria-live="polite">Projection running in the background…</p>
-          <button type="button" onClick={cancelRun}>Cancel projection</button>
-        </>}
-        {runCancelled && <p role="status">Projection cancelled.</p>}
-        {runError && (
-          <p role="alert" className="run-error">
-            The projection could not run: {runError}
-          </p>
-        )}
-      </header>
-
-      {!run ? (
-        <p className="hint empty-state">
-          Run the projection to see the year-by-year table, audit trail and dashboard charts.
-        </p>
-      ) : (
-        <>
-          <p className="hint run-stamp">
-            Results for <strong>{run.scenario.name}</strong>
-            {effectiveScenarioId === null
-              ? " (baseline)"
-              : selectedScenario?.name === run.scenario.name ? "" : " (saved scenario)"} · {new Date(run.createdAt).toLocaleString()}.
-            {stale && (
-              <>
-                {" "}
-                <strong>Plan or scenario changed since this run —</strong> re-run to refresh.
-              </>
-            )}
-          </p>
-          {failureAge !== null && <FailBanner summary={run.result.summary} onJump={(age) => { setJumpAge(age); setJumpKey((key) => key + 1); }} />}
-          {/* Run summary region (ALL modes that have one): RunAnalysisSummary —
-              deterministic = "Tax strategy planning comparison", MC = "Monte Carlo
-              ensemble", historical = "Historical rolling-window results" — in ONE
-              native collapsible, PERSISTED (projectionRunSummaryCollapsed: true =
-              collapsed, false = expanded; the field's absence is also expanded).
-              onToggle writes the actual state only when it differs — the toggle
-              never fires on mount, so nothing clobbers the stored preference.
-              Context stamp, failure banner, run controls and charts stay outside.
-              No box is invented for plain manual-order deterministic runs. */}
-          {(run.analysis !== undefined || run.result.withdrawalPlan !== undefined) && (
-            <details
-              className="run-summary-collapse"
-              open={!summaryCollapsed}
-              onToggle={(event) => {
-                const collapsed = !event.currentTarget.open;
-                if (collapsed === summaryCollapsed) return;
-                workspace.dispatch({ type: "projection/setRunSummaryCollapsed", collapsed });
-              }}
-            >
-              <summary>Run analysis</summary>
-              <RunAnalysisSummary run={run} />
-              {run.analysis && <p className="hint">Year table audit counts and failures describe the representative path shown below.</p>}
-            </details>
-          )}
-          <DashboardSection result={run.result} />
-          <ProjectionTable result={run.result} birthYear={birthYear} historicalSourceStartYear={historicalSourceStartYear} jumpAge={jumpAge} jumpKey={jumpKey} hiddenColumnIds={hiddenIds} />
-        </>
-      )}
+          </details>
+        </div>
+        {run && <ProjectionTable
+          result={run.result}
+          birthYear={birthYear}
+          historicalSourceStartYear={historicalSourceStartYear}
+          jumpAge={jumpAge}
+          jumpKey={jumpKey}
+          hiddenColumnIds={hiddenIds}
+          visible={activeTab === "cashflow"}
+        />}
+        {run && (sankeyRange ? (
+          <CashflowSankey
+            years={run.result.years}
+            birthYear={birthYear}
+            range={sankeyRange}
+            onRangeChange={(range) => workspace.dispatch({ type: "projection/setSankeyRange", range })}
+          />
+        ) : (
+          <p className="hint">No projection years are available for the cashflow diagram.</p>
+        ))}
+      </div>
     </section>
   );
 }

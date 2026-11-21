@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useLayoutEffect, useRef, useState } from "react";
 import type { SimulationResult, YearResult } from "@retire-plan/engine";
 import { fmtMoney, fmtPercent, yearForAge } from "./fmt";
 import { EventsCell, YearDetailRow } from "./YearDetailRow";
@@ -92,7 +92,7 @@ function summarize(col: Column, years: YearResult[]): number {
 }
 
 /** Ten consecutive result years per collapsed row; each can reveal its yearly audit trail. */
-export function ProjectionTable({ result, birthYear, jumpAge, jumpKey, historicalSourceStartYear, hiddenColumnIds }: { result: SimulationResult; birthYear: number; jumpAge?: number | null; jumpKey?: number; historicalSourceStartYear?: number; hiddenColumnIds?: ReadonlySet<string> }) {
+export function ProjectionTable({ result, birthYear, jumpAge, jumpKey, historicalSourceStartYear, hiddenColumnIds, visible = true }: { result: SimulationResult; birthYear: number; jumpAge?: number | null; jumpKey?: number; historicalSourceStartYear?: number; hiddenColumnIds?: ReadonlySet<string>; visible?: boolean }) {
   // Visible columns only — the filter runs BEFORE group spans, colgroups, header
   // cells, body cells and detail-row colSpan are derived, so grouping metadata,
   // colspan mapping and column-group band parity all follow the visible set.
@@ -113,6 +113,7 @@ export function ProjectionTable({ result, birthYear, jumpAge, jumpKey, historica
   });
 
   useLayoutEffect(() => {
+    if (!visible) return;
     const updateHeaderOffset = () => {
       const height = groupHeaderRef.current?.getBoundingClientRect().height;
       if (height !== undefined) tableRef.current?.style.setProperty("--projection-group-header-height", `${height}px`);
@@ -124,16 +125,21 @@ export function ProjectionTable({ result, birthYear, jumpAge, jumpKey, historica
     if (observer && groupHeaderRef.current) observer.observe(groupHeaderRef.current);
     window.addEventListener("resize", updateHeaderOffset);
     return () => { observer?.disconnect(); window.removeEventListener("resize", updateHeaderOffset); };
-  }, []);
+  }, [visible]);
 
-  useEffect(() => {
-    if (jumpAge == null) return;
+  useLayoutEffect(() => {
+    if (!visible || jumpAge == null) return;
     const groupIndex = result.years.findIndex((year) => year.age === jumpAge);
     if (groupIndex < 0) return;
     const decadeIndex = Math.floor(groupIndex / 10);
     setExpandedGroups((current) => new Set(current).add(decadeIndex));
-    window.setTimeout(() => document.getElementById(`projection-year-${jumpAge}`)?.scrollIntoView?.({ behavior: "smooth", block: "center" }), 0);
-  }, [jumpAge, jumpKey, result.years]);
+    const timer = window.setTimeout(() => {
+      const row = tableRef.current?.querySelector(`#projection-year-${jumpAge}`);
+      row?.querySelector<HTMLButtonElement>(".year-detail-toggle")?.focus({ preventScroll: true });
+      row?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [visible, jumpAge, jumpKey, result.years]);
 
   const failureAge = result.summary.success || result.summary.failureAge === undefined ? null : result.summary.failureAge;
   const groupSpans: { label: string | null; span: number; parity: "even" | "odd" | null }[] = [];

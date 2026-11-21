@@ -13,20 +13,24 @@ export function FailBanner({ summary, onJump }: { summary: FailSummary; onJump?:
   const worstAge = summary.worstShortfallAge;
   const jump = () => {
     if (failureAge === undefined) return;
-    onJump?.(failureAge);
+    if (onJump) {
+      onJump(failureAge);
+      return;
+    }
     const row = document.getElementById(`projection-year-${failureAge}`);
     if (row && typeof (row as { scrollIntoView?: () => void }).scrollIntoView === "function") {
       row.scrollIntoView({ behavior: "smooth", block: "center" });
     }
   };
   return (
-    <p role="status" className="fail-banner" onClick={jump}>
+    <p role="status" className="fail-banner">
       <strong>
         Plan fails at age {failureAge ?? "unknown"}
       </strong>
       {worstAge !== undefined && <> — worst shortfall at age {worstAge}</>}
       {" "}
-      <span className="hint">The remaining years still run (run-out is a first-class outcome); click to jump to the failing year.</span>
+      <span className="hint">The remaining years still run.</span>
+      {failureAge !== undefined && <>{" "}<button type="button" className="fail-banner-jump" onClick={jump}>Jump to failing year</button></>}
     </p>
   );
 }

@@ -58,6 +58,28 @@ export const SAVINGS_TARGETS = ["rrsp-match", "rrsp", "tfsa", "nonreg", "cash", 
 /** The tax tables ship Ontario-only today; the engine profile type is literally "ON". */
 export const SUPPORTED_PROVINCES = ["ON"] as const;
 export const WITHDRAWAL_STRATEGIES = ["manual", "tax-minimizing"] as const;
+export const PROJECTION_TABS = ["charts", "cashflow"] as const;
+
+function validateProjectionPreferences(value: Record<string, unknown>, label: string): string[] {
+  const errors: string[] = [];
+  if (value.projectionActiveTab !== undefined && !isEnum(value.projectionActiveTab, PROJECTION_TABS)) {
+    errors.push(`${label} projectionActiveTab must be "charts" or "cashflow" when present.`);
+  }
+  if (value.projectionSankeyRange !== undefined) {
+    const range = value.projectionSankeyRange;
+    if (
+      !isRecord(range) ||
+      !isInteger(range.startYear) ||
+      !isInteger(range.endYear) ||
+      (range.startYear as number) > (range.endYear as number)
+    ) {
+      errors.push(
+        `${label} projectionSankeyRange must be { startYear, endYear } whole calendar years with startYear <= endYear when present.`,
+      );
+    }
+  }
+  return errors;
+}
 
 function validateScenarioOptions(value: Record<string, unknown>, label: string): string[] {
   const errors: string[] = [];
@@ -463,6 +485,7 @@ export function validateWorkspace(value: unknown): string[] {
   if (value.projectionRunSummaryCollapsed !== undefined && typeof value.projectionRunSummaryCollapsed !== "boolean") {
     errors.push("Workspace projectionRunSummaryCollapsed must be a boolean when present.");
   }
+  errors.push(...validateProjectionPreferences(value, "Workspace"));
   if (value.baseScenario !== undefined) errors.push(...validateBaseScenario(value.baseScenario));
   errors.push(...validatePlanShape(value.plan).map((e) => `Workspace plan: ${e}`));
   if (!Array.isArray(value.scenarios)) {
@@ -503,6 +526,7 @@ export function validatePlanFile(value: unknown): string[] {
   if (value.projectionRunSummaryCollapsed !== undefined && typeof value.projectionRunSummaryCollapsed !== "boolean") {
     errors.push("File projectionRunSummaryCollapsed must be a boolean when present.");
   }
+  errors.push(...validateProjectionPreferences(value, "File"));
   value.plans.forEach((p, i) => {
     if (!isRecord(p) || p.meta === undefined || p.plan === undefined) {
       errors.push(`File plan entry ${i + 1} needs both "meta" and "plan".`);

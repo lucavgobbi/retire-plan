@@ -1,5 +1,5 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { useState } from "react";
 import type { RunOutcome } from "../../domain/run";
 import type { SimulationRunner } from "../../store/simulationWorkerProtocol";
@@ -21,6 +21,14 @@ function renderView(workspace = makeWorkspace(), simulationRunner?: SimulationRu
       <ProjectionView />
     </StoreProvider>,
   );
+}
+
+function selectProjectionTab(name: "Charts" | "Cashflow") {
+  fireEvent.click(screen.getByRole("tab", { name }));
+}
+
+function openProjectionSettings(label: "Chart settings" | "Table settings") {
+  fireEvent.click(screen.getByLabelText(label));
 }
 
 const emptyOutcome = { result: { years: [], summary: { success: true, finalNetWorth: 0 } } } as RunOutcome;
@@ -208,6 +216,7 @@ describe("ProjectionView", () => {
     plan.profile.endAge = plan.profile.currentAge + 1;
     const base = { ...DEFAULT_SCENARIO_BASE, simMode: "historical" as const, historicalConfig: { startYear: 1872 } };
     renderView(makeWorkspace(plan), undefined, base);
+    selectProjectionTab("Cashflow");
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
     const summary = await screen.findByRole("complementary", { name: "Historical results" });
     expect(summary.textContent).toContain("148 complete rolling windows");
@@ -239,6 +248,7 @@ describe("ProjectionView", () => {
   it("prompts to run before any projection exists, and runs on demand", async () => {
     renderView();
     expect(screen.getByText(/run the projection/i)).toBeTruthy();
+    selectProjectionTab("Cashflow");
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
     await waitFor(() => expect(document.querySelectorAll(".decade-row")).toHaveLength(6));
     // Results begin as six consecutive decade summaries (the final group is partial).
@@ -258,6 +268,7 @@ describe("ProjectionView", () => {
 
   it("shows accessible chevrons for decade and year disclosure controls", async () => {
     renderView();
+    selectProjectionTab("Cashflow");
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
     await waitFor(() => expect(document.querySelectorAll(".decade-row")).toHaveLength(6));
 
@@ -294,23 +305,36 @@ describe("ProjectionView", () => {
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
     await waitFor(() => expect(document.querySelector(".fail-banner")).toBeTruthy());
     const banner = document.querySelector(".fail-banner")!;
+    const jump = screen.getByRole("button", { name: "Jump to failing year" });
     expect(banner.textContent).toMatch(/fails at age \d+/i);
     expect(banner.textContent).toMatch(/worst shortfall/i);
     // Rows continue rendering after the failure age.
     expect(document.querySelectorAll(".decade-row")).toHaveLength(6);
     expect(document.body.textContent).not.toContain("NaN");
-    // The banner anchors to the failing year's row.
-    fireEvent.click(banner);
+    const failingRow = document.querySelector('[data-failed="true"]') as HTMLElement;
+    const disclosure = failingRow.querySelector<HTMLButtonElement>(".year-detail-toggle")!;
+    const scroll = vi.fn(() => {
+      expect(failingRow.closest("[hidden]")).toBeNull();
+      expect(screen.getByRole("tab", { name: "Cashflow", selected: true })).toBeTruthy();
+      expect(document.activeElement).toBe(disclosure);
+    });
+    failingRow.scrollIntoView = scroll;
+    expect(screen.getByRole("tab", { name: "Charts", selected: true })).toBeTruthy();
+    expect(scroll).not.toHaveBeenCalled();
+    jump.focus();
+    fireEvent.click(jump);
     expect(screen.getByRole("button", { name: /collapse ages 45–54/i }).getAttribute("aria-expanded")).toBe("true");
-    const failingRow = document.querySelector('[data-failed="true"]');
-    expect(failingRow).toBeTruthy();
+    await waitFor(() => expect(scroll).toHaveBeenCalledOnce());
     fireEvent.click(screen.getByRole("button", { name: /collapse ages 45–54/i }));
-    fireEvent.click(banner);
+    jump.focus();
+    fireEvent.click(jump);
     expect(screen.getByRole("button", { name: /collapse ages 45–54/i }).getAttribute("aria-expanded")).toBe("true");
+    await waitFor(() => expect(scroll).toHaveBeenCalledTimes(2));
   });
 
   it("expanding a year shows its events and warnings audit trail", async () => {
     renderView(makeWorkspace(makeRunOutPlan()));
+    selectProjectionTab("Cashflow");
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
     await screen.findByRole("button", { name: /expand ages 45–54/i });
     fireEvent.click(screen.getByRole("button", { name: /expand ages 45–54/i }));
@@ -342,6 +366,7 @@ describe("ProjectionView", () => {
       { id: "nonreg", priority: 2, target: "nonreg" },
     ];
     renderView(makeWorkspace(plan));
+    selectProjectionTab("Cashflow");
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
     await waitFor(() => expect(document.querySelector('[data-age="71"]')).toBeTruthy());
     const yearRow = document.querySelector('[data-age="71"]');
@@ -372,6 +397,92 @@ describe("ProjectionView", () => {
   });
 });
 
+describe("Projection subtabs", () => {
+  it("uses roving focus, wraps the arrow keys, and exposes only the selected panel", () => {
+    renderView();
+    const charts = screen.getByRole("tab", { name: "Charts" });
+    const cashflow = screen.getByRole("tab", { name: "Cashflow" });
+    expect(screen.getByRole("tabpanel", { name: "Charts" }).id).toBe(charts.getAttribute("aria-controls"));
+    expect(screen.queryByRole("tabpanel", { name: "Cashflow" })).toBeNull();
+    expect(cashflow.tabIndex).toBe(-1);
+    charts.focus();
+    for (const [from, key, to] of [
+      [charts, "ArrowLeft", cashflow],
+      [cashflow, "ArrowRight", charts],
+      [charts, "End", cashflow],
+      [cashflow, "Home", charts],
+    ] as const) {
+      fireEvent.keyDown(from, { key });
+      expect(document.activeElement).toBe(to);
+      expect(to.getAttribute("aria-selected")).toBe("true");
+      expect(to.tabIndex).toBe(0);
+      expect(from.tabIndex).toBe(-1);
+    }
+  });
+
+  it("keeps the Sankey period independent of table rows, expansion, scroll and columns", async () => {
+    const plan = makeSamplePlan();
+    plan.profile.endAge = 56;
+    renderView(makeWorkspace(plan));
+    fireEvent.click(screen.getByRole("button", { name: "Run projection" }));
+    await screen.findByRole("figure", { name: "Net worth chart" });
+    expect(screen.queryByRole("table")).toBeNull();
+    selectProjectionTab("Cashflow");
+    const table = screen.getByRole("region", { name: "Year-by-year projection results" });
+    const diagram = screen.getByRole("region", { name: "Cashflow diagram" });
+    const start = within(diagram).getByRole<HTMLSelectElement>("combobox", { name: "Start year" });
+    const end = within(diagram).getByRole<HTMLSelectElement>("combobox", { name: "End year" });
+    expect([start.value, end.value]).toEqual(["2026", "2037"]);
+    fireEvent.click(within(table).getByRole("button", { name: /expand ages 45–54/i }));
+    fireEvent.click(within(table).getByRole("button", { name: "Show details for age 45" }));
+    openProjectionSettings("Table settings");
+    expect(screen.queryByRole("checkbox", { name: "Tax by component" })).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Interest" }));
+    expect([start.value, end.value]).toEqual(["2026", "2037"]);
+
+    fireEvent.change(start, { target: { value: "2032" } });
+    fireEvent.change(end, { target: { value: "2032" } });
+    expect(within(diagram).getByText("2032 · CAD")).toBeTruthy();
+    expect(table.querySelectorAll(".yearly-row")).toHaveLength(12);
+    expect(within(table).getByRole("button", { name: "Hide details for age 45" })).toBeTruthy();
+    expect(within(table).queryByRole("columnheader", { name: "Interest" })).toBeNull();
+    table.scrollLeft = 120;
+    table.scrollTop = 40;
+
+    selectProjectionTab("Charts");
+    expect(screen.queryByRole("region", { name: "Cashflow diagram" })).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: "Interest" })).toBeNull();
+    expect(screen.getByRole("figure", { name: "Net worth chart" })).toBeTruthy();
+    selectProjectionTab("Cashflow");
+    expect(screen.getByRole("region", { name: "Year-by-year projection results" })).toBe(table);
+    expect([table.scrollLeft, table.scrollTop]).toEqual([120, 40]);
+    expect([start.value, end.value]).toEqual(["2032", "2032"]);
+    expect(within(table).getByRole("button", { name: "Hide details for age 45" })).toBeTruthy();
+    expect(within(table).queryByRole("columnheader", { name: "Interest" })).toBeNull();
+  });
+
+  it("clamps the displayed range to the run without overwriting the saved preference", async () => {
+    const workspace = makeWorkspace();
+    workspace.plan.profile.endAge = 46;
+    workspace.projectionActiveTab = "cashflow";
+    workspace.projectionSankeyRange = { startYear: 2020, endYear: 2050 };
+    function SavedRange() {
+      return <output data-testid="saved-range">{JSON.stringify(useWorkspace().workspace.projectionSankeyRange)}</output>;
+    }
+    render(
+      <StoreProvider initialWorkspace={workspace}>
+        <ProjectionView />
+        <SavedRange />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Run projection" }));
+    const start = await screen.findByRole<HTMLSelectElement>("combobox", { name: "Start year" });
+    const end = screen.getByRole<HTMLSelectElement>("combobox", { name: "End year" });
+    expect([start.value, end.value]).toEqual(["2026", "2027"]);
+    expect(JSON.parse(screen.getByTestId("saved-range").textContent!)).toEqual({ startYear: 2020, endYear: 2050 });
+  });
+});
+
 function HiddenColumnsProbe() {
   const { workspace } = useWorkspace();
   return (
@@ -393,6 +504,7 @@ describe("projection table column selector", () => {
         <ProjectionView />
       </StoreProvider>,
     );
+    selectProjectionTab("Cashflow");
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
     await waitFor(() => expect(document.querySelector(".projection-table")).toBeTruthy());
     // The whole Income group (members AND its total) is hidden → its group header
@@ -417,12 +529,14 @@ describe("projection table column selector", () => {
         <HiddenColumnsProbe />
       </StoreProvider>,
     );
+    selectProjectionTab("Cashflow");
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
     await waitFor(() => expect(document.querySelector(".projection-table")).toBeTruthy());
     // Default (no stored preference): every column visible, nothing persisted.
     expect(screen.getByRole("columnheader", { name: "Interest" })).toBeTruthy();
     expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toBeNull();
 
+    openProjectionSettings("Table settings");
     fireEvent.click(screen.getByRole("checkbox", { name: "Interest" }));
     expect(screen.queryByRole("columnheader", { name: "Interest" })).toBeNull();
     expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toEqual(["cash.interest"]);
@@ -441,9 +555,11 @@ describe("projection table column selector", () => {
         <HiddenColumnsProbe />
       </StoreProvider>,
     );
+    selectProjectionTab("Cashflow");
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
     await waitFor(() => expect(document.querySelector(".projection-table")).toBeTruthy());
     expect(screen.getByRole("columnheader", { name: "CPP base" })).toBeTruthy();
+    openProjectionSettings("Table settings");
     fireEvent.click(screen.getByRole("checkbox", { name: "CPP base" }));
     expect(screen.queryByRole("columnheader", { name: "CPP base" })).toBeNull();
     // Other Payroll members (and the group total, matched via its note id since
@@ -452,7 +568,7 @@ describe("projection table column selector", () => {
     expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toEqual(["payroll.cppBase"]);
   });
 
-  it("projection settings gear opens with its accessible name; chart toggles persist and default to all visible", async () => {
+  it("Chart settings exposes only chart visibility and defaults to all applicable charts visible", async () => {
     render(
       <StoreProvider initialWorkspace={makeWorkspace()} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
         <ProjectionView />
@@ -466,18 +582,10 @@ describe("projection table column selector", () => {
     expect(screen.getAllByRole("figure").length).toBe(10);
     expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toBeNull();
 
-    // The gear trigger is a native disclosure summary: keyboard-activatable with
-    // the accessible name "Projection settings" (summary has an implicit button
-    // role in browsers; jsdom needs the attribute assertions).
-    const gear = document.querySelector(".projection-settings summary") as HTMLElement;
-    expect(gear).toBeTruthy();
-    expect(gear.getAttribute("aria-label")).toBe("Projection settings");
-    expect(gear.querySelector("svg")).toBeTruthy();
-
-    // Opening the menu shows both configuration groups in one place.
-    fireEvent.click(gear);
-    expect(document.querySelector(".projection-settings")!.hasAttribute("open")).toBe(true);
-    expect(screen.getByRole("checkbox", { name: "Interest" })).toBeTruthy();
+    openProjectionSettings("Chart settings");
+    expect(document.querySelector(".projection-chart-settings")!.hasAttribute("open")).toBe(true);
+    expect(screen.queryByRole("checkbox", { name: "Interest" })).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: "Select all columns" })).toBeNull();
     expect(screen.getByRole("checkbox", { name: "Tax by component" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Tax by component" }));
@@ -654,7 +762,8 @@ describe("bulk table-column toggle (native Select all columns checkbox)", () => 
   function openGear() {
     // Native closed <details> hides its controls from users — open the gear
     // BEFORE querying the bulk checkbox (real browser behavior).
-    fireEvent.click(document.querySelector(".projection-settings summary")!);
+    selectProjectionTab("Cashflow");
+    openProjectionSettings("Table settings");
   }
   function clickBulk() {
     fireEvent.click(screen.getByRole("checkbox", { name: "Select all columns" }));
@@ -728,7 +837,7 @@ describe("bulk table-column toggle (native Select all columns checkbox)", () => 
     const bulk = screen.getByRole("checkbox", { name: "Select all columns" }) as HTMLInputElement;
     expect(bulk.checked).toBe(true);
     // Chart checkboxes are separate controls, unaffected by the bulk control.
-    expect(screen.getAllByRole("checkbox", { name: /.+/ }).length).toBeGreaterThan(1);
+    expect(screen.queryByRole("checkbox", { name: "Tax by component" })).toBeNull();
     clickBulk();
     expect(document.querySelectorAll(".chart-grid figure").length).toBe(chartsBefore);
   });
@@ -969,7 +1078,8 @@ describe("canonical column order: each named group's Total is last", () => {
         <ProjectionView />
       </StoreProvider>,
     );
-    fireEvent.click(document.querySelector(".projection-settings summary")!);
+    selectProjectionTab("Cashflow");
+    openProjectionSettings("Table settings");
     const groups = Array.from(document.querySelectorAll(".projection-settings-menu .settings-group"));
     // "Other" holds the standalone Taxable column, which sits canonically between
     // the Cash accounts and Tax groups; Payroll sits right after Income.
@@ -985,6 +1095,7 @@ describe("canonical column order: each named group's Total is last", () => {
 
   it("rendered table: the Tax band's last column header is the Total, Marginal right before it; Income band likewise", async () => {
     renderView();
+    selectProjectionTab("Cashflow");
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
     await waitFor(() => expect(document.querySelector(".projection-table")).toBeTruthy());
     const results = screen.getByRole("region", { name: "Year-by-year projection results" });

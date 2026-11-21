@@ -85,6 +85,20 @@ export function reducer(state: StoreState, action: Action): StoreState {
       }
       return { ...state, workspace: { ...workspace, projectionRunSummaryCollapsed: action.collapsed } };
     }
+    case "projection/setActiveTab": {
+      if (action.tab === null) {
+        const { projectionActiveTab: _removed, ...rest } = workspace;
+        return { ...state, workspace: rest };
+      }
+      return { ...state, workspace: { ...workspace, projectionActiveTab: action.tab } };
+    }
+    case "projection/setSankeyRange": {
+      if (action.range === null) {
+        const { projectionSankeyRange: _removed, ...rest } = workspace;
+        return { ...state, workspace: rest };
+      }
+      return { ...state, workspace: { ...workspace, projectionSankeyRange: { ...action.range } } };
+    }
     case "run/store": return { ...state, runs: [...state.runs.filter(run => run.id !== action.record.id), deepFreeze(structuredClone(action.record))].slice(-20) };
     // Generated-run history lives beside the workspace, never inside it: resetting
     // results must not touch the plan, scenarios, base settings or preferences.

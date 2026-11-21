@@ -3,6 +3,8 @@ import type { RunAnalysis } from "./run";
 export type * from "@retire-plan/engine";
 
 export interface PlanMeta { id: string; name: string; updatedAt: string }
+export type ProjectionActiveTab = "charts" | "cashflow";
+export interface ProjectionSankeyRange { startYear: number; endYear: number }
 export type { BenefitSettings, PayrollSettings, WithdrawalStrategy };
 export interface ScenarioBase {
   simMode?: Scenario["simMode"];
@@ -40,6 +42,10 @@ export interface Workspace {
   projectionScenarioId?: string;
   /** Run analysis disclosure preference; absent/false means expanded. */
   projectionRunSummaryCollapsed?: boolean;
+  /** Active Projection subtab; absent means Charts. */
+  projectionActiveTab?: ProjectionActiveTab;
+  /** Saved Sankey calendar-year range; absent means the full current run. */
+  projectionSankeyRange?: ProjectionSankeyRange;
 }
 export interface PlanFile {
   schemaVersion: number;
@@ -50,6 +56,8 @@ export interface PlanFile {
   hiddenProjectionCharts?: string[];
   projectionScenarioId?: string;
   projectionRunSummaryCollapsed?: boolean;
+  projectionActiveTab?: ProjectionActiveTab;
+  projectionSankeyRange?: ProjectionSankeyRange;
 }
 export type RunId = string;
 export interface RunRecord {

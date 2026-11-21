@@ -1,4 +1,5 @@
 import type { SimulationResult } from "@retire-plan/engine";
+import type { RunAnalysis } from "../../domain/run";
 import { useProjectionRun, useWorkspace } from "../../store/api";
 import {
   accountFlowsSeries,
@@ -60,8 +61,8 @@ export const PROJECTION_CHARTS: { id: string; title: string }[] = [
   { id: "shortfall-risk", title: "Shortfall risk by age (Monte Carlo)" },
 ];
 
-/** Dashboard charts above the year table; each chart reads its data via an adapter. */
-export function DashboardSection({ result }: { result?: SimulationResult }) {
+/** Projection dashboard charts; each chart reads its data via an adapter. */
+export function DashboardSection({ result, analysis }: { result?: SimulationResult; analysis?: RunAnalysis }) {
   const { run, runProjection, error, isRunning, cancelRun, runCancelled } = useProjectionRun();
   const { workspace } = useWorkspace();
   if (!result) {
@@ -80,6 +81,7 @@ export function DashboardSection({ result }: { result?: SimulationResult }) {
       );
     }
     result = run.result;
+    analysis = run.analysis;
   }
 
   // Chart visibility: the workspace persists HIDDEN chart ids (absent or empty =
@@ -93,7 +95,7 @@ export function DashboardSection({ result }: { result?: SimulationResult }) {
   const breakdown = expenseBreakdownSeries(result.years);
   const rrifPoints = rrifWithdrawalSeries(result.years);
   const oasPoints = oasKeptSeries(result.years);
-  const mcAnalysis = run?.analysis?.mode === "montecarlo" ? run.analysis : undefined;
+  const mcAnalysis = analysis?.mode === "montecarlo" ? analysis : undefined;
   const mcStats = ensembleStatPoints(mcAnalysis);
   const rerun = (message: string) => <p className="hint" data-chart-state="rerun">{message}</p>;
   const mcCharts = mcAnalysis === undefined ? [] : [

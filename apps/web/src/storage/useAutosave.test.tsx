@@ -48,6 +48,8 @@ describe("useAutosave serialization (stale-completion blocker regression)", () =
       },
       projectionScenarioId: "sample",
       projectionRunSummaryCollapsed: true,
+      projectionActiveTab: "cashflow",
+      projectionSankeyRange: { startYear: 2028, endYear: 2035 },
       hiddenProjectionColumns: ["tax.total"],
       hiddenProjectionCharts: ["net-worth"],
     };
@@ -59,6 +61,8 @@ describe("useAutosave serialization (stale-completion blocker regression)", () =
     if (restored.kind === "loaded") {
       expect(restored.workspace.projectionScenarioId).toBe("sample");
       expect(restored.workspace.projectionRunSummaryCollapsed).toBe(true);
+      expect(restored.workspace.projectionActiveTab).toBe("cashflow");
+      expect(restored.workspace.projectionSankeyRange).toEqual({ startYear: 2028, endYear: 2035 });
       expect(restored.workspace.plan.accounts.find((account) => account.type === "cash")).toMatchObject({ balance: 9_250, interestRate: 0.03 });
       expect(restored.workspace.hiddenProjectionColumns).toEqual(["tax.total"]);
       expect(restored.workspace.hiddenProjectionCharts).toEqual(["net-worth"]);

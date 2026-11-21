@@ -145,6 +145,31 @@ describe("parsePlanFile", () => {
     if (expanded.ok) expect(expanded.workspace.projectionRunSummaryCollapsed).toBe(false);
   });
 
+  it("round-trips the active projection tab and Sankey range; legacy JSON without them keeps defaults", () => {
+    const ws = makeSampleWorkspace();
+    ws.projectionActiveTab = "cashflow";
+    ws.projectionSankeyRange = { startYear: 2030, endYear: 2038 };
+    const file = buildPlanFile(ws);
+    expect(file.projectionActiveTab).toBe("cashflow");
+    expect(file.projectionSankeyRange).toEqual({ startYear: 2030, endYear: 2038 });
+    const parsed = parsePlanFile(JSON.parse(planFileToText(file)));
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.workspace.projectionActiveTab).toBe("cashflow");
+      expect(parsed.workspace.projectionSankeyRange).toEqual({ startYear: 2030, endYear: 2038 });
+      expect(parsed.planFile.projectionActiveTab).toBe("cashflow");
+      expect(parsed.planFile.projectionSankeyRange).toEqual({ startYear: 2030, endYear: 2038 });
+    }
+    const legacy = parsePlanFile(JSON.parse(workspaceToText(makeSampleWorkspace())));
+    expect(legacy.ok).toBe(true);
+    if (legacy.ok) {
+      expect(legacy.workspace.projectionActiveTab).toBeUndefined();
+      expect(legacy.workspace.projectionSankeyRange).toBeUndefined();
+      expect("projectionActiveTab" in buildPlanFile(legacy.workspace)).toBe(false);
+      expect("projectionSankeyRange" in buildPlanFile(legacy.workspace)).toBe(false);
+    }
+  });
+
   it("maps a stale imported projection scenario id to explicit baseline", () => {
     const file = buildPlanFile(makeSampleWorkspace());
     file.projectionScenarioId = "removed-scenario";

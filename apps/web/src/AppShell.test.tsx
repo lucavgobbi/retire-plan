@@ -27,12 +27,28 @@ describe("local workspace integration", () => {
     }, { timeout: 2000 });
     fireEvent.click(screen.getByRole("button", { name: "Projection" }));
     fireEvent.click(screen.getByRole("button", { name: "Run projection" }));
-    await screen.findByRole("table");
+    await screen.findByRole("figure", { name: "Net worth chart" });
+    fireEvent.click(screen.getByRole("tab", { name: "Cashflow" }));
     expect(screen.getByRole("table").textContent).not.toContain("NaN");
+    const startYear = screen.getByRole<HTMLSelectElement>("combobox", { name: "Start year" });
+    const selectedStart = startYear.options[1]!.value;
+    fireEvent.change(startYear, { target: { value: selectedStart } });
+    await waitFor(async () => {
+      const loaded = await provider.load();
+      expect(loaded.kind).toBe("loaded");
+      if (loaded.kind === "loaded") {
+        expect(loaded.workspace.projectionActiveTab).toBe("cashflow");
+        expect(loaded.workspace.projectionSankeyRange?.startYear).toBe(Number(selectedStart));
+      }
+    }, { timeout: 2000 });
     first.unmount();
     render(<App storageProvider={provider} />);
     await screen.findByLabelText("Current age");
     expect((screen.getByLabelText("Current age") as HTMLInputElement).value).toBe("46");
+    fireEvent.click(screen.getByRole("button", { name: "Projection" }));
+    expect(screen.getByRole("tab", { name: "Cashflow", selected: true })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Run projection" }));
+    expect((await screen.findByRole<HTMLSelectElement>("combobox", { name: "Start year" })).value).toBe(selectedStart);
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     expect((screen.getByLabelText("Base retirement age") as HTMLInputElement).value).toBe("62");
     fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
@@ -103,7 +119,7 @@ describe("local workspace integration", () => {
     render(<StoreProvider initialWorkspace={makeSampleWorkspace()}><AppShell /><RunProbe /></StoreProvider>);
     fireEvent.click(screen.getByRole("button", { name: "Projection" }));
     fireEvent.click(screen.getByRole("button", { name: "Run projection" }));
-    await screen.findByRole("table");
+    await screen.findByRole("figure", { name: "Net worth chart" });
     // Provenance: packages/engine/tests/golden/golden.test.ts:79 pins year-one
     // net worth to 660_532.60 with precision 0 (±$0.50). The current engine emits
     // 660_532.49 due to mortgage monthly rounding, within that documented pin.
@@ -126,13 +142,14 @@ describe("local workspace integration", () => {
     expect(screen.getByRole("table").textContent).toContain("Δ");
   });
 
-  it("opens and focuses the projection table after running directly from Plan", async () => {
+  it("opens and focuses Projection with Charts selected after running directly from Plan", async () => {
     render(<StoreProvider initialWorkspace={makeSampleWorkspace()}><AppShell /></StoreProvider>);
     fireEvent.click(screen.getByRole("button", { name: "Run projection" }));
-    await screen.findByRole("table");
+    await screen.findByRole("figure", { name: "Net worth chart" });
     expect(screen.getByRole("button", { name: "Projection" }).getAttribute("aria-current")).toBe("page");
-    expect(document.activeElement?.id).toBe("projection-year-table");
-    expect(screen.getByRole("table")).toBeTruthy();
+    expect(document.activeElement?.id).toBe("projection-results");
+    expect(screen.getByRole("tabpanel", { name: "Charts" })).toBeTruthy();
+    expect(screen.queryByRole("table")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Plan" })).toBeNull();
   });
 
@@ -141,12 +158,15 @@ describe("local workspace integration", () => {
     workspace.scenarios = [{ id: "early", name: "Early retirement", basePlanId: workspace.meta!.id, simMode: "deterministic", overrides: { retirementAge: 62 } }];
     render(<StoreProvider initialWorkspace={workspace}><AppShell /></StoreProvider>);
     fireEvent.click(screen.getByRole("button", { name: "Run projection" }));
-    await screen.findByRole("table");
+    await screen.findByRole("figure", { name: "Net worth chart" });
     fireEvent.click(screen.getByRole("button", { name: "Scenarios" }));
     fireEvent.click(screen.getByRole("button", { name: "Run Early retirement" }));
-    await screen.findByRole("table");
+    await waitFor(() => expect(document.querySelector(".run-stamp")?.textContent).toContain("Early retirement"));
     expect(screen.getByRole("button", { name: "Projection" }).getAttribute("aria-current")).toBe("page");
-    expect(document.activeElement?.id).toBe("projection-year-table");
+    expect(document.activeElement?.id).toBe("projection-results");
+    expect(screen.getByRole("tab", { name: "Charts", selected: true })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Cashflow" }));
+    fireEvent.click(document.querySelector('[data-group-start-age="55"] button')!);
     fireEvent.click(screen.getByRole("button", { name: "Show details for age 62" }));
     expect(screen.getByRole("table").textContent).toMatch(/retirement/i);
   });
@@ -157,14 +177,17 @@ describe("local workspace integration", () => {
     render(<StoreProvider initialWorkspace={workspace}><AppShell /></StoreProvider>);
     fireEvent.click(screen.getByRole("button", { name: "Scenarios" }));
     fireEvent.click(screen.getByRole("button", { name: "Run Early retirement" }));
-    await screen.findByRole("table");
+    await screen.findByRole("figure", { name: "Net worth chart" });
     // Projection auto-navigates on the activeRun change (AppShell) and shows the
     // SAVED scenario's completed run, not the base result.
     const select = screen.getByRole("combobox", { name: /scenario to run/i }) as HTMLSelectElement;
     expect(select.value).toBe("early");
     expect(document.querySelector(".run-stamp")?.textContent).toContain("Early retirement");
     // The run carries the scenario's actual assumptions (retirement age 62 override).
-    expect(screen.getAllByRole("button", { name: /^Show details for age 62$/ }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole("tab", { name: "Charts", selected: true })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Cashflow" }));
+    fireEvent.click(document.querySelector('[data-group-start-age="55"] button')!);
+    expect(screen.getByRole("button", { name: "Show details for age 62" })).toBeTruthy();
     expect(document.querySelectorAll('[data-age="62"]').length).toBeGreaterThanOrEqual(1);
   });
 

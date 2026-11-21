@@ -51,8 +51,60 @@
   min-width: 0;
 }
 
-/* Projection settings: a details disclosure in the toolbar; the gear-only trigger
-   carries the accessible name, the menu overlays the table. */
+.projection-tablist {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #d3d9de;
+}
+
+.projection-tablist button {
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 5px 5px 0 0;
+  background: transparent;
+  color: #52606d;
+  padding: 10px 16px 8px;
+  min-height: 44px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.projection-tablist button:hover { background: #f0f4f8; }
+.projection-tablist button[aria-selected="true"] {
+  border-bottom-color: #245d9e;
+  background: #eef4fb;
+  color: #163b69;
+}
+
+.projection-tablist button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -3px;
+}
+
+.projection-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+@media screen {
+  .projection-panel[hidden] { display: none !important; }
+}
+
+.projection-panel-toolbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.projection-table-toolbar { justify-content: space-between; }
+.projection-table-toolbar h3 { margin: 0; font-size: 1rem; }
+
+/* The settings menu overlays the associated charts or table. */
 .projection-settings { position: relative; }
 .projection-settings summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; justify-content: center; padding: 6px 10px; border: 1px solid #d3d9de; border-radius: 6px; background: #fff; color: #52606d; }
 .projection-settings summary:hover { background: #e8eef2; }
@@ -72,17 +124,10 @@
   max-height: 60vh;
   overflow: auto;
 }
-/* Narrow screens: the toolbar wraps and the gear lands on a row at the viewport's
-   LEFT edge, so the fixed-width, right-anchored menu hangs mostly offscreen. Anchor
-   it to the full toolbar container instead (gear goes static), spanning the
-   toolbar's viewport-bound width so every checkbox label stays readable with no
-   body overflow; the menu itself still scrolls within max-height. */
 @media (max-width: 650px) {
-  .projection-controls { position: relative; }
   .projection-settings { position: static; }
   .projection-settings-menu { left: 0; right: 0; width: auto; }
 }
-.projection-settings-menu .settings-section { margin: 0 0 10px; }
 .projection-settings-menu .settings-heading { margin: 0 0 4px; font-weight: 600; font-size: 12px; color: #52606d; }
 .projection-settings-menu .settings-group { margin: 0 0 8px; }
 .projection-settings-menu .settings-group-name { margin: 0 0 2px; font-size: 11px; font-weight: 600; color: #7b8794; }
@@ -98,7 +143,7 @@
 /* Visually hidden composition note for total headers (aria-describedby). */
 .projection-table .col-note { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-/* Run analysis collapsible: native details, expanded by default, no persistence. */
+/* Run analysis collapsible: native details, expanded by default. */
 .run-summary-collapse { margin: 0; }
 .run-summary-collapse > summary { cursor: pointer; font-weight: 600; color: #52606d; margin: 0 0 6px; }
 .run-summary-collapse[open] > summary { margin-bottom: 10px; }
@@ -109,9 +154,10 @@
   color: #7f1d1d;
   padding: 8px 12px;
   border-radius: 6px;
-  cursor: pointer;
   margin: 0;
 }
+
+.fail-banner-jump { color: inherit; }
 
 .run-error {
   border: 1px solid #b45309;
@@ -479,6 +525,12 @@ table.projection-table thead th[data-group-parity="odd"] { background: #e9eff3; 
   .no-print {
     display: none;
   }
+
+  /* Preserve the complete report regardless of the active screen tab. */
+  .projection-panel,
+  .projection-panel[hidden] { display: block; }
+  .projection-panel + .projection-panel { margin-top: 16px; }
+  .projection-table-toolbar { margin-bottom: 8px; }
 
   .projection-table-wrap {
     max-height: none;

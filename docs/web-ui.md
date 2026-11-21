@@ -61,13 +61,21 @@ the same funds; employer-match RRSP deposits and other savings rules can still a
 or is retained as cash. If manual order is infeasible but the selected policy succeeds, their tax totals are not an apples-to-apples
 tax-saving comparison.
 
-On **Projection**, press **Run projection** to create a result snapshot. The four
-charts summarize net worth, income and spending, tax, and account balances. The
-year table includes uninvested cash and other assets; expand an age for its events,
-warnings, and detailed amounts. A failed plan still displays every projected year.
-After changing inputs, results are marked stale until explicitly run again.
-Running from Plan or Scenarios opens Projection and focuses the new run's year
-table. Charts resize with the view; the wide audit table scrolls inside its region.
+On **Projection**, press **Run projection** to create a result snapshot. The run
+selector, status, and analysis summary sit above **Charts** and **Cashflow**.
+Running from Plan or Scenarios opens Projection on the saved tab, which defaults
+to Charts. Results are marked stale after an input change until you run again.
+
+**Charts** shows the dashboard charts for the selected run. The **Chart settings**
+gear controls which charts appear. **Cashflow** contains the year-by-year table
+and a Sankey diagram. Expand an age in the table for its events, warnings, and
+detailed amounts. Use the **Table settings** gear beside the table to choose
+columns. The diagram's **Start year** and **End year** are inclusive and affect only
+the diagram. A failed plan still displays every projected year. **Jump to failing
+year** opens Cashflow and focuses the disclosure for that year.
+
+The active tab, chart visibility, table columns, and diagram year range autosave
+with the workspace and are included in JSON exports.
 
 On **Scenarios**, create named variations and run them. **Compare** selects stored
 runs and an optional baseline to show differences and net-worth curves. Up to 20

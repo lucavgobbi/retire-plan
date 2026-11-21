@@ -337,6 +337,9 @@ export function simulate(
 
     // ---- 1b. Asset sales (value grown through prior years; sold assets never grow again).
     // Initial value is the v1 cost-base proxy; gain = net proceeds − initial value.
+    const openingIdleCash = cashBalance;
+    let assetSaleToIdleCash = 0;
+    let assetSaleToNonreg = 0;
     let capitalGains = 0;
     let saleProceeds = 0;
     const soldAssetIds = new Set<string>();
@@ -355,8 +358,10 @@ export function simulate(
     if (soldAssetIds.size > 0 && saleProceeds > 0) {
       injectCash(accounts, "nonreg", saleProceeds);
       if (accounts.some((a) => a.type === "nonreg")) {
+        assetSaleToNonreg = saleProceeds;
         nonregBook += saleProceeds; // fresh cash: basis = its value (asset gain taxed separately)
       } else {
+        assetSaleToIdleCash = saleProceeds;
         cashBalance += saleProceeds;
       }
     }
@@ -687,6 +692,15 @@ export function simulate(
       expenses: roundCent(expenses),
       rrifMinimumWithdrawal: roundCent(rrifDue),
       expenseBreakdown,
+      cashflow: {
+        scheduledMortgagePayment: roundCent(mortgageCash),
+        openingIdleCash: roundCent(openingIdleCash),
+        closingIdleCash: roundCent(cashBalance),
+        assetSaleToIdleCash: roundCent(assetSaleToIdleCash),
+        assetSaleToNonreg: roundCent(assetSaleToNonreg),
+        employerRrspMatch: employerMatch,
+        cashContributionsToIdleCash: hasNamedCash ? 0 : contributionsCash,
+      },
       shortfall: roundCent(shortfall),
       balances: {
         tfsa: roundBal(accounts, "tfsa"),
