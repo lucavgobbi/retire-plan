@@ -9,7 +9,7 @@ import { createMemoryStorageProvider } from "./storage";
 import type { StorageProvider } from "./storage";
 
 describe("local workspace integration", () => {
-  it("loads the golden sample on first launch, runs a projection, and persists profile edits across reload", async () => {
+  it("loads the sample, runs a projection, and persists profile and Sankey edits across reload", async () => {
     const provider = createMemoryStorageProvider();
     const first = render(<App storageProvider={provider} />);
     await screen.findByText(/Sample plan — edit the example/);
@@ -33,12 +33,18 @@ describe("local workspace integration", () => {
     const startYear = screen.getByRole<HTMLSelectElement>("combobox", { name: "Start year" });
     const selectedStart = startYear.options[1]!.value;
     fireEvent.change(startYear, { target: { value: selectedStart } });
+    const showAccounts = screen.getByRole<HTMLInputElement>("checkbox", { name: "Show accounts" });
+    expect(showAccounts.checked).toBe(false);
+    fireEvent.click(showAccounts);
+    expect(showAccounts.checked).toBe(true);
+    expect(startYear.value).toBe(selectedStart);
     await waitFor(async () => {
       const loaded = await provider.load();
       expect(loaded.kind).toBe("loaded");
       if (loaded.kind === "loaded") {
         expect(loaded.workspace.projectionActiveTab).toBe("cashflow");
         expect(loaded.workspace.projectionSankeyRange?.startYear).toBe(Number(selectedStart));
+        expect(loaded.workspace.projectionSankeyShowAccounts).toBe(true);
       }
     }, { timeout: 2000 });
     first.unmount();
@@ -49,10 +55,18 @@ describe("local workspace integration", () => {
     expect(screen.getByRole("tab", { name: "Cashflow", selected: true })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Run projection" }));
     expect((await screen.findByRole<HTMLSelectElement>("combobox", { name: "Start year" })).value).toBe(selectedStart);
+    const restoredShowAccounts = screen.getByRole<HTMLInputElement>("checkbox", { name: "Show accounts" });
+    expect(restoredShowAccounts.checked).toBe(true);
+    fireEvent.click(restoredShowAccounts);
+    await waitFor(async () => {
+      const loaded = await provider.load();
+      expect(loaded.kind).toBe("loaded");
+      if (loaded.kind === "loaded") expect(loaded.workspace.projectionSankeyShowAccounts).toBe(false);
+    }, { timeout: 2000 });
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     expect((screen.getByLabelText("Base retirement age") as HTMLInputElement).value).toBe("62");
     fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
-  });
+  }, 10_000);
 
   it("does not autosave or overwrite an unreadable row before the user chooses recovery", async () => {
     const raw = { broken: true };

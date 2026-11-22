@@ -62,6 +62,9 @@ export const PROJECTION_TABS = ["charts", "cashflow"] as const;
 
 function validateProjectionPreferences(value: Record<string, unknown>, label: string): string[] {
   const errors: string[] = [];
+  if (value.projectionSankeyShowAccounts !== undefined && typeof value.projectionSankeyShowAccounts !== "boolean") {
+    errors.push(`${label} projectionSankeyShowAccounts must be a boolean when present.`);
+  }
   if (value.projectionActiveTab !== undefined && !isEnum(value.projectionActiveTab, PROJECTION_TABS)) {
     errors.push(`${label} projectionActiveTab must be "charts" or "cashflow" when present.`);
   }

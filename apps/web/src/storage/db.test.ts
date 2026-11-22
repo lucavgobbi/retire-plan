@@ -11,6 +11,7 @@ describe("IndexedDB-backed provider", () => {
     const workspace = makeSampleWorkspace({ id: "prefs-idb", name: "Saved preferences", updatedAt: savedAt });
     workspace.projectionScenarioId = "sample";
     workspace.projectionRunSummaryCollapsed = true;
+    workspace.projectionSankeyShowAccounts = false;
     workspace.hiddenProjectionColumns = ["tax.total"];
     workspace.hiddenProjectionCharts = ["net-worth"];
     workspace.baseScenario = {
@@ -28,6 +29,7 @@ describe("IndexedDB-backed provider", () => {
     if (reloaded.kind !== "loaded") return;
     expect(reloaded.workspace).toMatchObject({
       projectionScenarioId: "sample", projectionRunSummaryCollapsed: true,
+      projectionSankeyShowAccounts: false,
       hiddenProjectionColumns: ["tax.total"], hiddenProjectionCharts: ["net-worth"],
       baseScenario: workspace.baseScenario,
     });

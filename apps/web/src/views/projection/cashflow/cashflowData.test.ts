@@ -21,6 +21,149 @@ function withoutCashflow(row: YearResult): YearResult {
 }
 
 describe("aggregateCashflow", () => {
+  it("splits two RRSPs, incomes, and expenses by saved name without changing period totals", () => {
+    const plan = planAt(45, 46);
+    const assetMix = { equity: 0, bond: 0, cash: 1 };
+    plan.accounts = [
+      { id: "retirement-a", name: "Retirement", type: "rrsp", balance: 3_000, assetMix },
+      { id: "retirement-b", name: "Retirement", type: "rrsp", balance: 1_000, assetMix },
+    ];
+    plan.incomes = [
+      { id: "job-a", name: "Library", kind: "employment", annualAmount: 1_000, startAge: 45, endAge: 45, raiseRate: 0 },
+      { id: "job-b", name: "Weekend shift", kind: "employment", annualAmount: 100, startAge: 45, endAge: 45, raiseRate: 0 },
+    ];
+    plan.expenses = [
+      { id: "bill-a", name: "Rent", annualAmount: 500.005, startAge: 45, inflationRate: 0 },
+      { id: "bill-b", name: "Groceries", annualAmount: 100.005, startAge: 45, inflationRate: 0 },
+    ];
+    plan.savingsPolicy = [{ id: "match", target: "rrsp-match", priority: 1, perYearCap: 100, matchRate: 0.5 }, { id: "deposit", target: "rrsp", priority: 2 }];
+    const { years } = runDeterministic(plan, scenario);
+    const period = year(2026, 2027);
+    const grouped = aggregateCashflow(years, 1981, period);
+    const named = aggregateCashflow(years, 1981, period, true);
+    const amounts = (items: CashflowAmount[], pattern: RegExp) => items.filter(({ label }) => pattern.test(label)).map(({ label, cents }) => [label, cents]);
+    expect(named.named).toBe(true);
+    expect(named.sourceCents).toBe(grouped.sourceCents);
+    expect(named.useCents).toBe(grouped.useCents);
+    expect(named.unreconciledUseCents).toBe(0);
+    expect(named.unreconciledSourceCents).toBe(0);
+    expect(amounts(named.sources, /Library|Weekend shift/)).toEqual([["Library", 100_000], ["Weekend shift", 10_000]]);
+    expect(amounts(named.sources, /Retirement .* withdrawals/)).toEqual(years[1]!.accountBreakdown!.map((account, index) =>
+      [`Retirement (${index + 1}) withdrawals`, Math.round(account.withdrawals * 100)]));
+    expect(amounts(named.uses, /Retirement .* contributions/)).toEqual(years[0]!.accountBreakdown!.map((account, index) =>
+      [`Retirement (${index + 1}) contributions`, Math.round((account.contributions - (account.employerRrspMatch ?? 0)) * 100)]));
+    expect(amounts(named.uses, /Rent|Groceries/)).toEqual([["Rent", 100_002], ["Groceries", 20_000]]);
+    expect(named.matches.map(({ label, cents }) => [label, cents])).toEqual([
+      ["Employer match → Retirement (1)", 3_750], ["Employer match → Retirement (2)", 1_250],
+    ]);
+  });
+
+  it("keeps repeated IDs separate across years and retains named obligations during a shortfall", () => {
+    const plan = planAt(45, 46);
+    plan.incomes = [{ id: "income", name: "Pension", kind: "other", annualAmount: 50, startAge: 45, raiseRate: 0 }];
+    plan.expenses = [
+      { id: "same", name: "Utilities", annualAmount: 30, startAge: 45, inflationRate: 0 },
+      { id: "same", name: "Utilities", annualAmount: 40, startAge: 45, inflationRate: 0 },
+    ];
+    const { years } = runDeterministic(plan, scenario);
+    const withoutIndices = years.map((row) => ({
+      ...row, expenseBreakdown: row.expenseBreakdown?.map(({ sourceIndex, ...item }) => item),
+    }));
+    const named = aggregateCashflow(withoutIndices, 1981, year(2026, 2027), true);
+    expect(named.shortfallCents).toBe(4_000);
+    expect(named.uses).toMatchObject([{ label: "Covered obligations", cents: 10_000 }]);
+    expect(named.obligations).toMatchObject([
+      { label: "Utilities (1)", cents: 6_000 },
+      { label: "Utilities (2)", cents: 8_000 },
+    ]);
+  });
+
+  it("uses the captured plan indices to separate identical items active in different years", () => {
+    const plan = planAt(45, 46);
+    plan.incomes = [45, 46].map((age) => ({
+      id: "income", name: "Contract", kind: "employment", annualAmount: (age - 44) * 100, startAge: age, endAge: age, raiseRate: 0,
+    }));
+    plan.expenses = [45, 46].map((age) => ({
+      id: "expense", name: "Utilities", annualAmount: (age - 44) * 20, startAge: age, endAge: age, inflationRate: 0,
+    }));
+    const { years } = runDeterministic(plan, scenario);
+    const named = aggregateCashflow(years, 1981, year(2026, 2027), true);
+    expect(named.sources.filter(({ kind }) => kind === "income")).toMatchObject([
+      { label: "Contract (1)", cents: 10_000 }, { label: "Contract (2)", cents: 20_000 },
+    ]);
+    expect(named.uses.filter(({ kind }) => kind === "expense")).toMatchObject([
+      { label: "Utilities (1)", cents: 2_000 }, { label: "Utilities (2)", cents: 4_000 },
+    ]);
+  });
+
+  it("reconciles an aggregate withdrawal cent without changing a captured account debit", () => {
+    const plan = planAt();
+    plan.accounts = [{ id: "rrsp", name: "Work RRSP", type: "rrsp", balance: 200, assetMix: { equity: 0, bond: 0, cash: 1 } }];
+    plan.expenses = [{ id: "bill", annualAmount: 100, startAge: 45, inflationRate: 0 }];
+    const { years } = runDeterministic(plan, scenario);
+    const row = years[0]!;
+    const recorded = row.accountBreakdown![0]!;
+    const saved = { ...row, accountBreakdown: [{ ...recorded, withdrawals: recorded.withdrawals - 0.01 }] };
+    const grouped = aggregateCashflow([saved], 1981, year(2026));
+    const named = aggregateCashflow([saved], 1981, year(2026), true);
+    expect(named.sourceCents).toBe(grouped.sourceCents);
+    expect(named.useCents).toBe(grouped.useCents);
+    expect(named.hasNamedGaps).toBe(true);
+    expect(named.sources).toMatchObject([
+      { label: "Work RRSP withdrawals", cents: 9_999 },
+      { label: "RRSP / RRIF withdrawals (rounding difference)", cents: 1 },
+    ]);
+  });
+
+  it("keeps the category net total when named charges and credits offset one another", () => {
+    const plan = planAt();
+    plan.incomes = [{ id: "income", name: "Pension", kind: "other", annualAmount: 50, startAge: 45, raiseRate: 0 }];
+    plan.expenses = [
+      { id: "charge", name: "Utilities", annualAmount: 100, startAge: 45, inflationRate: 0 },
+      { id: "credit", name: "Utility credit", annualAmount: -50, startAge: 45, inflationRate: 0 },
+    ];
+    const { years } = runDeterministic(plan, scenario);
+    const grouped = aggregateCashflow(years, 1981, year(2026));
+    const named = aggregateCashflow(years, 1981, year(2026), true);
+    expect(named.sources).toContainEqual(expect.objectContaining({ label: "Utility credit reversal", cents: 5_000 }));
+    expect(named.uses).toContainEqual(expect.objectContaining({ label: "Utilities", cents: 10_000 }));
+    expect(named.categoryOffsetCents).toBe(5_000);
+    expect(named.sourceCents - named.categoryOffsetCents).toBe(grouped.sourceCents);
+    expect(named.useCents - named.categoryOffsetCents).toBe(grouped.useCents);
+  });
+
+  it("uses saved asset sale and receiving account names without putting direct deposits in the pool", () => {
+    const plan = planAt();
+    plan.assets = [{ id: "asset", name: "Cabin", kind: "other", value: 100, appreciationRate: 0, sellEvent: { age: 45, costsPct: 0 } }];
+    const withoutAccount = runDeterministic(plan, scenario);
+    expect(aggregateCashflow(withoutAccount.years, 1981, year(2026), true).sources).toMatchObject([
+      { label: "Cabin sale", cents: 10_000 },
+    ]);
+
+    plan.accounts = [{ id: "nonreg", name: "Brokerage", type: "nonreg", balance: 0, assetMix: { equity: 0, bond: 0, cash: 1 } }];
+    const withAccount = runDeterministic(plan, scenario);
+    const named = aggregateCashflow(withAccount.years, 1981, year(2026), true);
+    expect(named.sources.every(({ cents }) => cents === 0)).toBe(true);
+    expect(named.assetSaleToNonreg).toBe(10_000);
+    expect(named.directSales).toMatchObject([{ label: "Cabin sale", cents: 10_000 }]);
+    expect(named.saleDeposits).toMatchObject([{ label: "Brokerage", cents: 10_000 }]);
+  });
+
+  it("falls back across a mixed saved range and uses item detail when only captured years are selected", () => {
+    const plan = planAt(45, 46);
+    plan.incomes = [{ id: "income", name: "Library", kind: "employment", annualAmount: 1_000, startAge: 45, raiseRate: 0 }];
+    const { years } = runDeterministic(plan, scenario);
+    const { incomeBreakdown, ...legacy } = years[0]!;
+    const mixed = [legacy, years[1]!];
+    expect(aggregateCashflow(mixed, 1981, year(2026, 2027), true)).toMatchObject({
+      named: false, namedUnavailable: true, sources: [{ label: "Employment", cents: 200_000 }],
+    });
+    expect(aggregateCashflow(mixed, 1981, year(2027), true)).toMatchObject({
+      named: true, namedUnavailable: false,
+      sources: [{ label: "Library", cents: 100_000 }, { label: "Idle cash brought forward", cents: 100_000 }],
+    });
+  });
+
   it("uses the inclusive household calendar range and counts idle cash at the two boundaries", () => {
     const plan = planAt();
     plan.assets.push({ id: "asset", kind: "other", value: 1_000, appreciationRate: 1, sellEvent: { age: 45, costsPct: 0.1 } });

@@ -143,8 +143,8 @@ describe("simulate — focused, hand-checked cases", () => {
     expect(y.income.employment).toBe(120_000);
     expect(y.expenses).toBe(80_000);
     expect(y.expenseBreakdown).toEqual([
-      { id: "living", name: "Living costs", amount: 30_000 },
-      { id: "travel", name: "Travel", amount: 50_000 },
+      { id: "living", name: "Living costs", amount: 30_000, sourceIndex: 0 },
+      { id: "travel", name: "Travel", amount: 50_000, sourceIndex: 1 },
     ]);
     expect(y.expenseBreakdown!.reduce((sum, item) => sum + item.amount, 0)).toBeCloseTo(y.expenses, 2);
     const t = combinedTax({ employmentIncome: 120_000, otherTaxableIncome: 0, rrspWithdrawals: 0, pensionEligibleIncome: 0, capitalGains: 0, dividendsEligible: 0, age: 40 });

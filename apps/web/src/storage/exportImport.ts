@@ -41,6 +41,7 @@ export function buildPlanFile(w: Workspace, options: BuildPlanFileOptions = {}):
     ...(w.projectionRunSummaryCollapsed !== undefined ? { projectionRunSummaryCollapsed: w.projectionRunSummaryCollapsed } : {}),
     ...(w.projectionActiveTab !== undefined ? { projectionActiveTab: w.projectionActiveTab } : {}),
     ...(w.projectionSankeyRange !== undefined ? { projectionSankeyRange: { ...w.projectionSankeyRange } } : {}),
+    ...(w.projectionSankeyShowAccounts !== undefined ? { projectionSankeyShowAccounts: w.projectionSankeyShowAccounts } : {}),
     plans: [{ meta, plan: structuredCopy(w.plan) }],
     scenarios: w.scenarios.map((s) => structuredCopy(s)),
   };
@@ -104,6 +105,7 @@ export function parsePlanFile(json: unknown): ParseOk | ParseFailure {
     ...(planFile.projectionRunSummaryCollapsed !== undefined ? { projectionRunSummaryCollapsed: planFile.projectionRunSummaryCollapsed } : {}),
     ...(planFile.projectionActiveTab !== undefined ? { projectionActiveTab: planFile.projectionActiveTab } : {}),
     ...(planFile.projectionSankeyRange !== undefined ? { projectionSankeyRange: { ...planFile.projectionSankeyRange } } : {}),
+    ...(planFile.projectionSankeyShowAccounts !== undefined ? { projectionSankeyShowAccounts: planFile.projectionSankeyShowAccounts } : {}),
     plan: entry.plan,
     scenarios: planFile.scenarios.filter(
       (scenario) =>

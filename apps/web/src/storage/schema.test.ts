@@ -191,6 +191,8 @@ describe("structural schema checks", () => {
     expect(validateWorkspace({ ...workspace, projectionSankeyRange: { startYear: 2035, endYear: 2026 } }).join(" ")).toMatch(/projectionSankeyRange/);
     expect(validateWorkspace({ ...workspace, projectionSankeyRange: { startYear: 2026.5, endYear: 2035 } }).join(" ")).toMatch(/projectionSankeyRange/);
     expect(validateWorkspace({ ...workspace, projectionSankeyRange: "full" }).join(" ")).toMatch(/projectionSankeyRange/);
+    expect(validateWorkspace({ ...workspace, projectionSankeyShowAccounts: false })).toEqual([]);
+    expect(validateWorkspace({ ...workspace, projectionSankeyShowAccounts: "true" }).join(" ")).toMatch(/projectionSankeyShowAccounts/);
 
     const file = {
       schemaVersion: 1,
@@ -200,6 +202,8 @@ describe("structural schema checks", () => {
     expect(validatePlanFile({ ...file, projectionActiveTab: "cashflow", projectionSankeyRange: { startYear: 2026, endYear: 2035 } })).toEqual([]);
     expect(validatePlanFile({ ...file, projectionActiveTab: "both" }).join(" ")).toMatch(/projectionActiveTab/);
     expect(validatePlanFile({ ...file, projectionSankeyRange: { startYear: 2035, endYear: 2026 } }).join(" ")).toMatch(/projectionSankeyRange/);
+    expect(validatePlanFile({ ...file, projectionSankeyShowAccounts: true })).toEqual([]);
+    expect(validatePlanFile({ ...file, projectionSankeyShowAccounts: null }).join(" ")).toMatch(/projectionSankeyShowAccounts/);
   });
 
   it("validates the whole PlanFile envelope", () => {

@@ -21,4 +21,5 @@ export type Action =
   | { type: "projection/setScenarioId"; /** null clears the preference to the legacy/default baseline. */ scenarioId: string | null }
   | { type: "projection/setRunSummaryCollapsed"; /** null clears the preference to default-open. */ collapsed: boolean | null }
   | { type: "projection/setActiveTab"; /** null clears the preference to the default Charts tab. */ tab: ProjectionActiveTab | null }
-  | { type: "projection/setSankeyRange"; /** null clears the preference to the full current run. */ range: ProjectionSankeyRange | null };
+  | { type: "projection/setSankeyRange"; /** null clears the preference to the full current run. */ range: ProjectionSankeyRange | null }
+  | { type: "projection/setSankeyShowAccounts"; showAccounts: boolean };

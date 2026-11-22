@@ -99,6 +99,8 @@ export function reducer(state: StoreState, action: Action): StoreState {
       }
       return { ...state, workspace: { ...workspace, projectionSankeyRange: { ...action.range } } };
     }
+    case "projection/setSankeyShowAccounts":
+      return { ...state, workspace: { ...workspace, projectionSankeyShowAccounts: action.showAccounts } };
     case "run/store": return { ...state, runs: [...state.runs.filter(run => run.id !== action.record.id), deepFreeze(structuredClone(action.record))].slice(-20) };
     // Generated-run history lives beside the workspace, never inside it: resetting
     // results must not touch the plan, scenarios, base settings or preferences.

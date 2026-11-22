@@ -12,9 +12,11 @@ interface CashflowSankeyProps {
   birthYear: number;
   range: CashflowRange;
   onRangeChange: (range: CashflowRange) => void;
+  showAccounts: boolean;
+  onShowAccountsChange: (showAccounts: boolean) => void;
 }
 
-const widths = { chart: 980, node: 14, left: 242, center: 483, right: 724 };
+const nodeWidth = 14;
 const bandHeight = 208;
 const labelGap = 27;
 const pool = "Cashflow pool";
@@ -41,19 +43,30 @@ function groupSmall(items: CashflowAmount[], total: number, side: "sources" | "u
   }];
 }
 
+function labelColumnWidth(items: CashflowAmount[]) {
+  // Allow room for wide glyphs, bold focus labels, and the node gap.
+  return items.reduce((width, item) => Math.max(width, Array.from(item.label).length * 17 + 20), 242);
+}
+
 function ribbon(x1: number, y1: number, x2: number, y2: number, height: number) {
   const mid = (x1 + x2) / 2;
   return `M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2} V${y2 + height} C${mid},${y2 + height} ${mid},${y1 + height} ${x1},${y1 + height} Z`;
 }
 
-function FlowDiagram({ sources, uses, sourceCents, useCents }: Pick<ReturnType<typeof aggregateCashflow>, "sources" | "uses" | "sourceCents" | "useCents">) {
+type FlowDiagramProps = Pick<ReturnType<typeof aggregateCashflow>, "sources" | "uses" | "sourceCents" | "useCents" | "named" | "categoryOffsetCents">;
+
+function FlowDiagram({ sources, uses, sourceCents, useCents, named, categoryOffsetCents }: FlowDiagramProps) {
   const titleId = useId();
   const [hovered, setHovered] = useState<string>();
   const [focused, setFocused] = useState<string>();
   const [pinned, setPinned] = useState<string>();
   const total = Math.max(sourceCents, useCents);
-  const left = groupSmall(sources, total, "sources");
-  const right = groupSmall(uses, total, "uses");
+  const left = named ? sources.filter(({ cents }) => cents > 0) : groupSmall(sources, total, "sources");
+  const right = named ? uses.filter(({ cents }) => cents > 0) : groupSmall(uses, total, "uses");
+  const leftX = named ? labelColumnWidth(left) : 242;
+  const centerX = leftX + 241;
+  const rightX = centerX + 241;
+  const chartWidth = rightX + nodeWidth + (named ? labelColumnWidth(right) : 242);
   const plotHeight = bandHeight + labelGap * (Math.max(left.length, right.length) - 1);
   const chartHeight = plotHeight + 92;
   const poolY = 48 + (plotHeight - bandHeight) / 2;
@@ -80,23 +93,23 @@ function FlowDiagram({ sources, uses, sourceCents, useCents }: Pick<ReturnType<t
   return <figure className="cashflow-figure">
     <figcaption className="cashflow-tooltip" role="status" aria-atomic="true">
       {active ? <><span>{active.from} → {active.to}</span><strong>{money(active.cents)}</strong></>
-        : sourceCents === useCents ? <><span>Period flow</span><strong>{money(total)}</strong></>
-          : <><span>Sources <strong>{money(sourceCents)}</strong></span><span>Uses <strong>{money(useCents)}</strong></span></>}
+        : sourceCents === useCents ? <><span>Period flow</span><strong>{money(total - categoryOffsetCents)}</strong></>
+          : <><span>Sources <strong>{money(sourceCents - categoryOffsetCents)}</strong></span><span>Uses <strong>{money(useCents - categoryOffsetCents)}</strong></span></>}
     </figcaption>
-    <div className="cashflow-plot">
-      <svg viewBox={`0 0 ${widths.chart} ${chartHeight}`} role="group" aria-labelledby={titleId}>
+    <div className={`cashflow-plot${named ? " cashflow-plot-named" : ""}`}>
+      <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} width={named ? chartWidth : undefined} role="group" aria-labelledby={titleId}>
         <title id={titleId}>Cashflow Sankey diagram</title>
         <g className="cashflow-svg-heading" aria-hidden="true">
-          <text x={widths.left} y="24" textAnchor="end">Sources</text>
-          <text x={widths.center + widths.node / 2} y="24" textAnchor="middle">{pool}</text>
-          <text x={widths.right + widths.node} y="24">Uses</text>
+          <text x={leftX} y="24" textAnchor="end">Sources</text>
+          <text x={centerX + nodeWidth / 2} y="24" textAnchor="middle">{pool}</text>
+          <text x={rightX + nodeWidth} y="24">Uses</text>
         </g>
-        <rect x={widths.center} y={poolY} width={widths.node} height={bandHeight} rx="2" fill={PALETTE.ink} aria-hidden="true" />
+        <rect x={centerX} y={poolY} width={nodeWidth} height={bandHeight} rx="2" fill={PALETTE.ink} aria-hidden="true" />
         {flows.map((flow) => {
           const source = flow.side === "source";
-          const x = source ? widths.left : widths.right;
-          const path = source ? ribbon(x + widths.node, flow.outerY, widths.center, flow.innerY, flow.thickness)
-            : ribbon(widths.center + widths.node, flow.innerY, x, flow.outerY, flow.thickness);
+          const x = source ? leftX : rightX;
+          const path = source ? ribbon(x + nodeWidth, flow.outerY, centerX, flow.innerY, flow.thickness)
+            : ribbon(centerX + nodeWidth, flow.innerY, x, flow.outerY, flow.thickness);
           const labelY = flow.outerY + flow.thickness / 2;
           const label = `${flow.from} to ${flow.to}, ${money(flow.cents)}`;
           return <g key={flow.key} role="button" tabIndex={0} aria-label={label} aria-pressed={pinned === flow.key}
@@ -116,8 +129,8 @@ function FlowDiagram({ sources, uses, sourceCents, useCents }: Pick<ReturnType<t
               }
             }}>
             <path className="cashflow-ribbon" d={path} />
-            <rect x={x} y={flow.outerY} width={widths.node} height={flow.thickness} fill="currentColor" rx="2" />
-            <text x={source ? x - 10 : x + widths.node + 10} y={labelY} textAnchor={source ? "end" : "start"} dominantBaseline="central">{flow.label}</text>
+            <rect x={x} y={flow.outerY} width={nodeWidth} height={flow.thickness} fill="currentColor" rx="2" />
+            <text x={source ? x - 10 : x + nodeWidth + 10} y={labelY} textAnchor={source ? "end" : "start"} dominantBaseline="central">{flow.label}</text>
           </g>;
         })}
       </svg>
@@ -131,18 +144,22 @@ function BreakdownList({ heading, items }: { heading: string; items: CashflowAmo
     <div key={item.id}><dt>{item.label}</dt><dd>{money(item.cents)}</dd></div>)}</dl></div>;
 }
 
-export function CashflowSankey({ years, birthYear, range, onRangeChange }: CashflowSankeyProps) {
+export function CashflowSankey({ years, birthYear, range, onRangeChange, showAccounts, onShowAccountsChange }: CashflowSankeyProps) {
   const id = useId();
   const options = useMemo(() => cashflowYears(years, birthYear), [years, birthYear]);
   const startYear = options.includes(range.startYear) ? range.startYear : options[0];
   const endYear = options.includes(range.endYear) && (startYear === undefined || range.endYear >= startYear)
     ? range.endYear : options.at(-1);
   const data = useMemo(() => startYear === undefined || endYear === undefined ? undefined
-    : aggregateCashflow(years, birthYear, { startYear, endYear }), [years, birthYear, startYear, endYear]);
+    : aggregateCashflow(years, birthYear, { startYear, endYear }, showAccounts), [years, birthYear, startYear, endYear, showAccounts]);
 
   return <section className="cashflow-sankey" aria-labelledby={id}>
     <div className="cashflow-header">
       <h3 id={id}>Cashflow diagram</h3>
+      <label className="cashflow-show-accounts no-print">
+        <input type="checkbox" checked={showAccounts} onChange={(event) => onShowAccountsChange(event.currentTarget.checked)} />
+        Show accounts
+      </label>
       {startYear !== undefined && endYear !== undefined && <fieldset className="cashflow-range no-print">
         <legend>Diagram years</legend>
         <label>Start year <select value={startYear} onChange={(event) => {
@@ -161,14 +178,17 @@ export function CashflowSankey({ years, birthYear, range, onRangeChange }: Cashf
     </div>
     {data ? <>
       <p className="cashflow-period">{startYear === endYear ? startYear : `${startYear}–${endYear}`} · CAD</p>
-      {data.sourceCents > 0 || data.useCents > 0 ? <FlowDiagram key={`${birthYear}-${startYear}-${endYear}`} {...data} />
+      {data.sourceCents > 0 || data.useCents > 0 ? <FlowDiagram key={`${birthYear}-${startYear}-${endYear}-${data.named}`} {...data} />
         : <p className="hint">No pooled cash movements to show for the selected years.</p>}
-      {data.employerRrspMatch > 0 && <p className="cashflow-direct-transfer">
-        <span><strong>Employer match → RRSP</strong> <span>Direct transfer outside the cashflow pool</span></span>
-        <strong>{money(data.employerRrspMatch)}</strong>
-      </p>}
+      {data.matches.map(({ id, label, cents }) => <p key={id} className="cashflow-direct-transfer">
+          <span><strong>{label}</strong> <span>Direct transfer outside the cashflow pool</span></span>
+          <strong>{money(cents)}</strong>
+        </p>)}
       <div className="cashflow-notes">
-        {data.shortfallCents > 0 && <p><strong>Unmet obligations {money(data.shortfallCents)}</strong>. The diagram groups covered obligations where complete records are available. The breakdown shows the reported obligations.</p>}
+        {data.namedUnavailable && <p>Account and item details are unavailable for some selected years. The diagram and breakdown show categories. Run the projection again to show named flows.</p>}
+        {data.hasNamedGaps && <p>Difference rows reconcile the reported category totals with the amounts recorded for individual items.</p>}
+        {data.categoryOffsetCents > 0 && <p>The diagram and breakdown include {money(data.categoryOffsetCents)} in offsetting items on each side. The period total nets those items.</p>}
+        {data.shortfallCents > 0 && <p><strong>Unmet obligations {money(data.shortfallCents)}</strong>. The diagram groups covered obligations where complete records are available. The breakdown shows the reported obligations{data.named ? " by item before any shortfall" : ""}.</p>}
         {data.unknownCoverageYears > 0 && <p>Some shortfall years lack the records needed to calculate covered obligations.</p>}
         {data.legacyYears > 0 && <p>Some saved years lack cashflow detail such as scheduled mortgage payments, idle cash and asset-sale routing. Their saved Other income and RRSP deposit totals can include employer match. Run the projection again for those details.</p>}
         {data.missingPayrollYears > 0 && <p>Some saved years lack payroll deduction data.</p>}
@@ -179,12 +199,15 @@ export function CashflowSankey({ years, birthYear, range, onRangeChange }: Cashf
         </div>}
         {data.unavailableYears > 0 && <p>Some years contain unavailable amounts and are excluded from the diagram and breakdown.</p>}
       </div>
-      {(data.sourceCents > 0 || data.useCents > 0 || data.obligations.length > 0 || data.assetSaleToNonreg > 0 || data.cashContributionsToIdleCash > 0) && <details className="cashflow-breakdown">
+      {(data.sources.length > 0 || data.uses.length > 0 || data.obligations.length > 0 || data.matches.length > 0 || data.assetSaleToNonreg > 0 || data.cashContributionsToIdleCash > 0) && <details className="cashflow-breakdown">
         <summary>Cashflow breakdown</summary>
         <div className="cashflow-breakdown-columns">
           <BreakdownList heading="Sources" items={data.sources} />
-          <BreakdownList heading="Uses shown in the diagram" items={data.uses} />
+          <BreakdownList heading={data.named ? "Uses" : "Uses shown in the diagram"} items={data.uses} />
           {data.shortfallCents > 0 && <BreakdownList heading="Reported obligations before shortfalls" items={data.obligations} />}
+          <BreakdownList heading="Direct transfers outside the cashflow pool" items={data.matches} />
+          <BreakdownList heading="Asset sales routed outside the pool" items={data.directSales} />
+          <BreakdownList heading="Accounts credited with asset sales" items={data.saleDeposits} />
         </div>
         {data.assetSaleToNonreg > 0 && <p>Asset sales deposited into non-registered accounts totaled {money(data.assetSaleToNonreg)}. Any amounts used for bills enter the diagram through withdrawals.</p>}
         {data.cashContributionsToIdleCash > 0 && <p>Cash contributions allocated to idle cash totaled {money(data.cashContributionsToIdleCash)}. These amounts stay in the idle cash pool until used or carried forward.</p>}

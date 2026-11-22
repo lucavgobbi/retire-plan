@@ -165,8 +165,40 @@ export interface YearResult {
   expenses: number;
   /** Actual required minimum included in RRSP withdrawals; absent only in legacy results, zero when no minimum is due. */
   rrifMinimumWithdrawal?: number;
-  /** Per-item expense amounts before the annual total is rounded; optional for stored legacy runs. */
-  expenseBreakdown?: { id: string; name?: string; amount: number }[];
+  /** Per-item expense amounts before the annual total is rounded. sourceIndex is the position before filtering by age. */
+  expenseBreakdown?: { id: string; name?: string; amount: number; sourceIndex?: number }[];
+  /** Run-time account snapshot, including accounts with zero balances and flows. */
+  accountBreakdown?: {
+    id: string;
+    name?: string;
+    type: AccountType;
+    openingBalance: number;
+    closingBalance: number;
+    withdrawals: number;
+    contributions: number;
+    /** Included in contributions. */
+    employerRrspMatch?: number;
+    cashInterest?: number;
+    /** Sale proceeds deposited directly, separate from contributions. */
+    assetSaleDeposit?: number;
+  }[];
+  /** Modeled plan streams, including employment bonuses. sourceIndex is the position before age and benefit filtering. */
+  incomeBreakdown?: { id: string; name?: string; kind: IncomePlan["kind"]; amount: number; sourceIndex?: number }[];
+  assetBreakdown?: {
+    id: string;
+    name?: string;
+    kind: AssetPlan["kind"];
+    closingBalance: number;
+    sale?: { proceeds: number; destination: "idleCash" | "nonreg" };
+  }[];
+  /** The single mortgage modeled by this run. */
+  mortgageBreakdown?: {
+    id: string;
+    openingBalance: number;
+    closingBalance: number;
+    scheduledPayment: number;
+    prepayment: number;
+  };
   /** Cash routing details captured by the stepper; absent in older stored runs. */
   cashflow?: {
     scheduledMortgagePayment: number;
@@ -182,7 +214,7 @@ export interface YearResult {
   };
   shortfall: number;
   balances: { tfsa: number; rrsp: number; nonreg: number; cash: number; home: number; debt: number; otherAssets?: number };
-  /** Per-named-cash-account year-end balances; optional for legacy runs and plans without cash accounts. */
+  /** Per-named-cash-account year-end balances, rounded together for new runs. */
   cashAccounts?: { id: string; name?: string; balance: number }[];
   netWorth: number;
   tfsaRoom: number;

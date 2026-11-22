@@ -33,6 +33,33 @@ function roundCent4(x: number): number {
   return Math.round(x * 1_000_000) / 1_000_000;
 }
 
+/** Round recorded shares together, in plan order, without changing the underlying operations. */
+function reportCents(shares: number[], total: number, caps?: number[]): number[] {
+  let last = shares.length - 1;
+  while (last >= 0 && shares[last] === 0) last--;
+  const totalCents = Math.round(total * 100);
+  let remainingCapacity = caps?.reduce((sum, cap) => sum + Math.round(cap * 100), 0) ?? 0;
+  let applied = 0;
+  let reportedCents = 0;
+  return shares.map((share, index) => {
+    if (share === 0) return 0;
+    applied += share;
+    let nextCents = index === last ? totalCents : Math.round(applied * 100);
+    if (caps) {
+      const cap = Math.round(caps[index]! * 100);
+      remainingCapacity -= cap;
+      // Keep this share within its deposit while reserving enough capacity to finish allocating the match.
+      nextCents = Math.max(totalCents - remainingCapacity, Math.min(nextCents, reportedCents + cap));
+    }
+    const amount = (nextCents - reportedCents) / 100;
+    reportedCents = nextCents;
+    return amount;
+  });
+}
+
+type AccountDetail = NonNullable<YearResult["accountBreakdown"]>[number];
+const accountTypes = ["tfsa", "rrsp", "nonreg", "cash"] as const;
+
 interface AccountState {
   id: string;
   name?: string;
@@ -44,6 +71,7 @@ interface AccountState {
 
 interface AssetState {
   id: string;
+  name?: string;
   kind: "primary-home" | "other";
   value: number;
   originalValue: number; // ACB = value at projection start
@@ -57,6 +85,15 @@ function sumType(accounts: AccountState[], type: AccountPlan["type"]): number {
 
 function roundBal(accounts: AccountState[], type: AccountPlan["type"]): number {
   return roundCent(sumType(accounts, type));
+}
+
+function reportBalances(accounts: AccountState[], details: Map<AccountState, AccountDetail>, key: "openingBalance" | "closingBalance"): void {
+  for (const type of accountTypes) {
+    const group = accounts.filter((account) => account.type === type);
+    const balances = group.map((account) => account.balance);
+    const rounded = reportCents(balances, balances.reduce((sum, balance) => sum + balance, 0));
+    group.forEach((account, index) => { details.get(account)![key] = rounded[index]!; });
+  }
 }
 
 /** Full-year tax (federal + Ontario incl. surtax + OAS recovery) on an income shape. */
@@ -188,6 +225,7 @@ export function simulate(
   }));
   const assetStates: AssetState[] = plan.assets.map((h) => ({
       id: h.id,
+      ...(h.name === undefined ? {} : { name: h.name }),
       kind: h.kind,
       value: h.value,
       originalValue: h.value,
@@ -242,6 +280,16 @@ export function simulate(
     const r = returnByAge.get(age) ?? { age, equity: 0, bond: 0, cash: 0 };
     const events: string[] = [];
     const warnings: string[] = [];
+    const accountDetails = new Map<AccountState, AccountDetail>(accounts.map((account) => [account, {
+      id: account.id,
+      ...(account.name === undefined ? {} : { name: account.name }),
+      type: account.type,
+      openingBalance: 0,
+      closingBalance: 0,
+      withdrawals: 0,
+      contributions: 0,
+    }]));
+    reportBalances(accounts, accountDetails, "openingBalance");
 
     // ---- 0. Cash interest (documented timing): interest accrues on the OPENING
     // named-cash balances and is credited to the accounts BEFORE any flows, so the
@@ -258,6 +306,7 @@ export function simulate(
       const interest = roundCent(a.balance * rate);
       a.balance = roundCent(a.balance + interest);
       cashInterest += interest;
+      if (interest !== 0) accountDetails.get(a)!.cashInterest = interest;
     }
     // Per-account interest is cent-rounded; round the aggregate too so the
     // reported field carries no floating-point noise into JSON/tax inputs.
@@ -281,10 +330,12 @@ export function simulate(
     let cpp = 0;
     let oas = 0;
     let otherPlan = 0;
-    for (const s of plan.incomes) {
+    const incomeBreakdown: NonNullable<YearResult["incomeBreakdown"]> = [];
+    for (const [sourceIndex, s] of plan.incomes.entries()) {
       if (!isActive(s)) continue;
       if (s.kind === "employment" && s.endAtRetirement && age >= scenario.retirementAge) continue;
       const amount = grown(s);
+      let received = amount;
       if (s.kind === "employment") {
         // Annual bonus (optional fraction of the raised base, 10% = 0.1): paid the
         // same year as the raised base — no separate payout date — and counted ONCE
@@ -293,11 +344,14 @@ export function simulate(
         // all see it through their normal paths. Absent/0 = no bonus (legacy).
         const bonusRate = s.bonusRate ?? 0;
         const bonus = bonusRate > 0 ? roundCent(amount * bonusRate) : 0;
-        employment += amount + bonus;
+        received = amount + bonus;
+        employment += received;
       }
       else if (s.kind === "cpp" && benefits.cpp) cpp += amount;
       else if (s.kind === "oas" && benefits.oas) oas += amount;
       else if (s.kind === "other") otherPlan += amount;
+      else continue;
+      incomeBreakdown.push({ id: s.id, ...(s.name === undefined ? {} : { name: s.name }), kind: s.kind, amount: roundCent(received), sourceIndex });
       // Gated-off CPP/OAS streams contribute nothing this year — they are not
       // reclassified as other income and no entitlement amount is invented.
       if (s.startAge === age && ((s.kind === "cpp" && benefits.cpp) || (s.kind === "oas" && benefits.oas))) {
@@ -328,11 +382,11 @@ export function simulate(
 
     let expenses = 0;
     const expenseBreakdown: NonNullable<YearResult["expenseBreakdown"]> = [];
-    for (const e of plan.expenses) {
+    for (const [sourceIndex, e] of plan.expenses.entries()) {
       if (!isActive(e)) continue;
       const amount = e.annualAmount * Math.pow(1 + e.inflationRate, age - e.startAge);
       expenses += amount;
-      expenseBreakdown.push({ id: e.id, ...(e.name === undefined ? {} : { name: e.name }), amount });
+      expenseBreakdown.push({ id: e.id, ...(e.name === undefined ? {} : { name: e.name }), amount, sourceIndex });
     }
 
     // ---- 1b. Asset sales (value grown through prior years; sold assets never grow again).
@@ -342,22 +396,27 @@ export function simulate(
     let assetSaleToNonreg = 0;
     let capitalGains = 0;
     let saleProceeds = 0;
-    const soldAssetIds = new Set<string>();
+    const assetSales = new Map<AssetState, number>();
     for (const asset of assetStates) {
       if (asset.sellEvent && age === asset.sellEvent.age) {
         const netProceeds = asset.value * (1 - asset.sellEvent.costsPct);
         saleProceeds += netProceeds;
         capitalGains += Math.max(0, netProceeds - asset.originalValue);
-        soldAssetIds.add(asset.id);
+        assetSales.set(asset, netProceeds);
         events.push(asset.kind === "primary-home" ? "home-sold" : "other-asset-sold");
       }
     }
 
     // ---- 1c. Asset-sale proceeds land in non-registered BEFORE this year's funding,
     // so the freed-up cash can pay the same year's obligations.
-    if (soldAssetIds.size > 0 && saleProceeds > 0) {
-      injectCash(accounts, "nonreg", saleProceeds);
-      if (accounts.some((a) => a.type === "nonreg")) {
+    const saleDestination = accounts.some((a) => a.type === "nonreg") ? "nonreg" : "idleCash";
+    if (assetSales.size > 0 && saleProceeds > 0) {
+      if (saleDestination === "nonreg") {
+        const deposits = distributeAccountFlow(accounts, "nonreg", saleProceeds, false);
+        const amounts = reportCents(deposits.map(({ amount }) => amount), saleProceeds);
+        deposits.forEach(({ account }, index) => {
+          if (amounts[index] !== 0) accountDetails.get(account)!.assetSaleDeposit = amounts[index]!;
+        });
         assetSaleToNonreg = saleProceeds;
         nonregBook += saleProceeds; // fresh cash: basis = its value (asset gain taxed separately)
       } else {
@@ -573,7 +632,7 @@ export function simulate(
     if (contributionsCash > 0) contributions.cash = contributionsCash;
 
     // ---- 5b. Flows into the accounts (proportional among same-type accounts)
-    applyFlows(accounts, withdrawals, contributions);
+    applyFlows(accounts, withdrawals, contributions, employerMatch, accountDetails);
 
     // ---- 6. Growth on post-flow balances, each account at its own mix.
     // Non-reg basis grows with the market (Task 14 convention: ACB absorbs the
@@ -598,7 +657,7 @@ export function simulate(
     let homeValue = 0;
     let otherAssetValue = 0;
     for (const asset of assetStates) {
-      if (soldAssetIds.has(asset.id)) {
+      if (assetSales.has(asset)) {
         asset.sellEvent = undefined;
         asset.value = 0;
       } else {
@@ -647,6 +706,19 @@ export function simulate(
     );
 
     const namedCash = accounts.filter((a) => a.type === "cash");
+    reportBalances(accounts, accountDetails, "closingBalance");
+    const saleAmounts = reportCents([...assetSales.values()], saleProceeds);
+    [...assetSales.keys()].forEach((asset, index) => assetSales.set(asset, saleAmounts[index]!));
+    const assetBreakdown: NonNullable<YearResult["assetBreakdown"]> = assetStates.map((asset) => {
+      const proceeds = assetSales.get(asset);
+      return {
+        id: asset.id,
+        ...(asset.name === undefined ? {} : { name: asset.name }),
+        kind: asset.kind,
+        closingBalance: roundCent(asset.value),
+        ...(proceeds === undefined ? {} : { sale: { proceeds, destination: saleDestination } }),
+      };
+    });
     const year: YearResult = {
       age,
       income: {
@@ -692,6 +764,16 @@ export function simulate(
       expenses: roundCent(expenses),
       rrifMinimumWithdrawal: roundCent(rrifDue),
       expenseBreakdown,
+      accountBreakdown: [...accountDetails.values()],
+      incomeBreakdown,
+      assetBreakdown,
+      ...(debt ? { mortgageBreakdown: {
+        id: debt.id,
+        openingBalance: roundCent(mortgageStart),
+        closingBalance: roundCent(debtEnd),
+        scheduledPayment: roundCent(mortgageCash),
+        prepayment: roundCent(mortgagePrepay),
+      } } : {}),
       cashflow: {
         scheduledMortgagePayment: roundCent(mortgageCash),
         openingIdleCash: roundCent(openingIdleCash),
@@ -717,7 +799,7 @@ export function simulate(
             cashAccounts: namedCash.map((a) => ({
               id: a.id,
               ...(a.name === undefined ? {} : { name: a.name }),
-              balance: roundCent(a.balance),
+              balance: accountDetails.get(a)!.closingBalance,
             })),
           }
         : {}),
@@ -756,48 +838,55 @@ export function simulate(
 }
 
 /**
- * Applies the year's withdrawals and contributions across same-type accounts
- * proportionally to their starting balances; fresh contributions (and asset-sale
- * proceeds) land on the first account of the type when the type holds no balance yet.
+ * Applies each flow using the original balance weights. Capture the applied dollars
+ * and weights before growth and before the next flow changes account balances.
  */
+function distributeAccountFlow(accounts: AccountState[], type: AccountType, total: number, withdraw: boolean) {
+  if (total === 0) return [];
+  const list = accounts.filter((a) => a.type === type);
+  if (list.length === 0) return [];
+  const sum = list.reduce((s, a) => s + a.balance, 0);
+  if (sum <= 0) {
+    if (withdraw) return [];
+    const account = list[0]!;
+    account.balance += total;
+    return [{ account, amount: total, weight: 1 }];
+  }
+  return list.map((account) => {
+    const weight = account.balance / sum;
+    const share = weight * total;
+    const amount = withdraw ? Math.min(share, account.balance) : share;
+    account.balance += withdraw ? -amount : amount;
+    return { account, amount, weight };
+  });
+}
+
 function applyFlows(
   accounts: AccountState[],
   withdrawals: YearResult["withdrawals"],
   contributions: YearResult["contributions"],
+  employerMatch: number,
+  details: Map<AccountState, AccountDetail>,
 ): void {
-  const distribute = (total: number, type: AccountPlan["type"], sign: number): void => {
-    if (total === 0) return;
-    const list = accounts.filter((a) => a.type === type);
-    if (list.length === 0) return; // flows toward a non-existent account vanish (v1)
-    const sum = list.reduce((s, a) => s + a.balance, 0);
-    if (sum <= 0) {
-      if (sign > 0) list[0]!.balance += total;
-      return;
-    }
-    for (const a of list) {
-      const share = (a.balance / sum) * total;
-      a.balance += sign > 0 ? share : -Math.min(share, a.balance);
-    }
-  };
+  for (const type of accountTypes) {
+    const withdrawal = withdrawals[type] ?? 0;
+    const draws = distributeAccountFlow(accounts, type, withdrawal, true);
+    // A capped draw can debit less than the requested aggregate after rounding.
+    const appliedDraw = draws.reduce((sum, { amount }) => sum + amount, 0);
+    const drawAmounts = reportCents(draws.map(({ amount }) => amount), appliedDraw);
+    draws.forEach(({ account }, index) => { details.get(account)!.withdrawals = drawAmounts[index]!; });
 
-  distribute(withdrawals.tfsa, "tfsa", -1);
-  distribute(contributions.tfsa, "tfsa", 1);
-  distribute(withdrawals.rrsp, "rrsp", -1);
-  distribute(contributions.rrsp, "rrsp", 1);
-  distribute(withdrawals.nonreg, "nonreg", -1);
-  distribute(contributions.nonreg, "nonreg", 1);
-  distribute(withdrawals.cash ?? 0, "cash", -1);
-  distribute(contributions.cash ?? 0, "cash", 1);
-}
-
-/** Adds external cash (e.g. asset-sale proceeds) to accounts of one type. */
-function injectCash(accounts: AccountState[], type: AccountPlan["type"], amount: number): void {
-  const list = accounts.filter((a) => a.type === type);
-  if (list.length === 0) return;
-  const sum = list.reduce((s, a) => s + a.balance, 0);
-  if (sum <= 0) {
-    list[0]!.balance += amount;
-    return;
+    const contribution = contributions[type] ?? 0;
+    const deposits = distributeAccountFlow(accounts, type, contribution, false);
+    const match = type === "rrsp" ? employerMatch : 0;
+    const gross = reportCents(deposits.map(({ amount }) => amount), contribution);
+    // A rounded employer share cannot exceed this account's rounded total deposit.
+    const matches = match === 0 ? [] : reportCents(deposits.map(({ weight }) => weight * match), match, gross);
+    deposits.forEach(({ account }, index) => {
+      const detail = details.get(account)!;
+      const accountMatch = matches[index] ?? 0;
+      detail.contributions = gross[index]!;
+      if (accountMatch !== 0) detail.employerRrspMatch = accountMatch;
+    });
   }
-  for (const a of list) a.balance += (a.balance / sum) * amount;
 }

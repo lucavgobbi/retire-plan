@@ -178,6 +178,16 @@ describe("parsePlanFile", () => {
     if (parsed.ok) expect(parsed.workspace.projectionScenarioId).toBe("");
   });
 
+  it.each([true, false, undefined])("round-trips the Sankey account preference %s through JSON", (showAccounts) => {
+    const workspace = makeSampleWorkspace();
+    if (showAccounts !== undefined) workspace.projectionSankeyShowAccounts = showAccounts;
+    const json = JSON.parse(workspaceToText(workspace));
+    expect(json.projectionSankeyShowAccounts).toBe(showAccounts);
+    const restored = parsePlanFile(json);
+    expect(restored.ok).toBe(true);
+    if (restored.ok) expect(restored.workspace.projectionSankeyShowAccounts).toBe(showAccounts);
+  });
+
   it("exports valid plan, account, base, scenario, mode and projection configuration together", () => {
     const ws = makeSampleWorkspace({ id: "prefs-plan" });
     const nonreg = ws.plan.accounts.find(account => account.type === "nonreg")!;

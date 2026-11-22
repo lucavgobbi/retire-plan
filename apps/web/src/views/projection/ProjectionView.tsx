@@ -390,6 +390,8 @@ export function ProjectionView() {
             birthYear={birthYear}
             range={sankeyRange}
             onRangeChange={(range) => workspace.dispatch({ type: "projection/setSankeyRange", range })}
+            showAccounts={workspace.workspace.projectionSankeyShowAccounts === true}
+            onShowAccountsChange={(showAccounts) => workspace.dispatch({ type: "projection/setSankeyShowAccounts", showAccounts })}
           />
         ) : (
           <p className="hint">No projection years are available for the cashflow diagram.</p>

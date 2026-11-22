@@ -445,6 +445,11 @@ describe("Projection subtabs", () => {
     expect(within(diagram).getByText("2032 · CAD")).toBeTruthy();
     expect(table.querySelectorAll(".yearly-row")).toHaveLength(12);
     expect(within(table).getByRole("button", { name: "Hide details for age 45" })).toBeTruthy();
+    const showAccounts = within(diagram).getByRole<HTMLInputElement>("checkbox", { name: "Show accounts" });
+    fireEvent.click(showAccounts);
+    expect(showAccounts.checked).toBe(true);
+    expect([start.value, end.value]).toEqual(["2032", "2032"]);
+    expect(within(table).getByRole("button", { name: "Hide details for age 45" })).toBeTruthy();
     expect(within(table).queryByRole("columnheader", { name: "Interest" })).toBeNull();
     table.scrollLeft = 120;
     table.scrollTop = 40;
@@ -1223,7 +1228,7 @@ describe("YearDetailRow payroll card", () => {
   it("shows an honest older-run hint when payroll is missing, and a fresh no-wages/zero copy when nothing was withheld", () => {
     const missing = renderCard();
     expect(screen.getByText(/no payroll breakdown was recorded for this saved result/i)).toBeTruthy();
-    expect(screen.getByText(/re-run the projection/i)).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Payroll deductions" })).getByText(/re-run the projection/i)).toBeTruthy();
     missing.unmount();
     // Zero withholding does NOT mean payroll is off — no wages or age-ineligibility can cause it.
     const zero = renderCard({ cppBase: 0, cppAdditional: 0, cpp2: 0, ei: 0, total: 0, enhancedCppDeduction: 0, eiRefund: 0 });

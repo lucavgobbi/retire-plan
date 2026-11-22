@@ -46,6 +46,7 @@ export interface Workspace {
   projectionActiveTab?: ProjectionActiveTab;
   /** Saved Sankey calendar-year range; absent means the full current run. */
   projectionSankeyRange?: ProjectionSankeyRange;
+  projectionSankeyShowAccounts?: boolean;
 }
 export interface PlanFile {
   schemaVersion: number;
@@ -58,6 +59,7 @@ export interface PlanFile {
   projectionRunSummaryCollapsed?: boolean;
   projectionActiveTab?: ProjectionActiveTab;
   projectionSankeyRange?: ProjectionSankeyRange;
+  projectionSankeyShowAccounts?: boolean;
 }
 export type RunId = string;
 export interface RunRecord {
