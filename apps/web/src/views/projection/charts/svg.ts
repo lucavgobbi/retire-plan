@@ -70,16 +70,13 @@ export function stackedBandPaths(xs: number[], bands: number[][], yDomain: [numb
       // lower boundary never silently drops to zero and invents coverage.
       const prev = cum[i] ?? 0;
       const isGap = raw === undefined || !Number.isFinite(raw);
-      cum[i] = isGap ? NaN : (Number.isFinite(prev) ? prev + value : NaN);
+      cum[i] = isGap ? NaN : Number.isFinite(prev) ? prev + value : NaN;
       next.push(cum[i] ?? NaN);
     }
     return next;
   });
   return cumulative.map((upper, bandIndex) => {
-    const lower =
-      bandIndex === 0
-        ? xs.map(() => 0)
-        : (cumulative[bandIndex - 1] ?? []);
+    const lower = bandIndex === 0 ? xs.map(() => 0) : (cumulative[bandIndex - 1] ?? []);
     const firstX = xs[0];
     const lastX = xs[xs.length - 1];
     if (firstX === undefined || lastX === undefined) return "";
@@ -88,12 +85,17 @@ export function stackedBandPaths(xs: number[], bands: number[][], yDomain: [numb
     let open: { top: string; bottom: string }[] = [];
     const flush = () => {
       if (open.length > 1) {
-        segments.push(bandPath(open.map((point) => point.top), open.map((point) => point.bottom)));
+        segments.push(
+          bandPath(
+            open.map((point) => point.top),
+            open.map((point) => point.bottom),
+          ),
+        );
       } else if (open.length === 1) {
         // Single (non-adjacent) point: render a 3px-wide sliver spanning the band's
         // OWN lower→upper slice (never down to the baseline — zero-area stays zero,
         // lower bands are not covered).
-        const px = (open[0]!.bottom.split(",")[0] ?? "0");
+        const px = open[0]!.bottom.split(",")[0] ?? "0";
         const topY = open[0]!.top.split(",")[1] ?? "0";
         const bottomY = open[0]!.bottom.split(",")[1] ?? "0";
         segments.push(`M${px},${bottomY} L${px},${topY} L${Number(px) + 3},${topY} L${Number(px) + 3},${bottomY} Z`);
@@ -144,7 +146,12 @@ export function bandBetweenPaths(xs: number[], top: number[], bottom: number[], 
   let open: { top: string; bottom: string }[] = [];
   const flush = () => {
     if (open.length > 1) {
-      segments.push(bandPath(open.map((point) => point.top), open.map((point) => point.bottom)));
+      segments.push(
+        bandPath(
+          open.map((point) => point.top),
+          open.map((point) => point.bottom),
+        ),
+      );
     } else if (open.length === 1) {
       const px = open[0]!.bottom.split(",")[0] ?? "0";
       const topY = open[0]!.top.split(",")[1] ?? "0";

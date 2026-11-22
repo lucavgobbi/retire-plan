@@ -35,7 +35,13 @@ describe("generateMonteCarloRun", () => {
   it("treats standard deviations as absolute returns and never permits losses below -100%", () => {
     const stable = generateMonteCarloRun(seededRandom(5), assumptions, { equity: 0, bond: 0, cash: 0 }, 60, 60);
     expect(stable.years[0]).toMatchObject(assumptions);
-    const volatile = generateMonteCarloRun(seededRandom(1), { equity: 0.01, bond: 0.01, cash: 0.01 }, { equity: 1, bond: 1, cash: 1 }, 60, 100);
+    const volatile = generateMonteCarloRun(
+      seededRandom(1),
+      { equity: 0.01, bond: 0.01, cash: 0.01 },
+      { equity: 1, bond: 1, cash: 1 },
+      60,
+      100,
+    );
     for (const year of volatile.years) {
       expect(year.equity).toBeGreaterThanOrEqual(-1);
       expect(year.bond).toBeGreaterThanOrEqual(-1);
@@ -58,10 +64,7 @@ describe("generateMonteCarloRun", () => {
 });
 
 describe("runMonteCarlo — aggregation over an injected (stub) simulate", () => {
-  function stubSimulate(
-    outcomes: boolean[],
-    failureAge = 80,
-  ): { fn: SimulateFn; series: ReturnSeries[] } {
+  function stubSimulate(outcomes: boolean[], failureAge = 80): { fn: SimulateFn; series: ReturnSeries[] } {
     const series: ReturnSeries[] = [];
     let call = 0;
     const fn: SimulateFn = (_plan, _scenario, s) => {
@@ -144,11 +147,14 @@ describe("runMonteCarlo — aggregation over an injected (stub) simulate", () =>
     const fn: SimulateFn = (_plan, _scenario, returns) => {
       const path = perRun[call++]!;
       return {
-        years: returns.years.map((row, index) => ({
-          age: row.age,
-          netWorth: path.netWorth[index]!,
-          shortfall: path.shortfall[index]!,
-        } as SimulationResult["years"][number])),
+        years: returns.years.map(
+          (row, index) =>
+            ({
+              age: row.age,
+              netWorth: path.netWorth[index]!,
+              shortfall: path.shortfall[index]!,
+            }) as SimulationResult["years"][number],
+        ),
         summary: { success: false, finalNetWorth: path.netWorth.at(-1)!, failureAge: 60 },
       };
     };
@@ -170,11 +176,14 @@ describe("runMonteCarlo — aggregation over an injected (stub) simulate", () =>
     let call = 0;
     const fn: SimulateFn = (_plan, _scenario, returns) => {
       const thisCall = call++;
-      const years = returns.years.slice(0, thisCall === 0 ? 2 : 3).map((row, index) => ({
-        age: row.age,
-        netWorth: 1_000 * (thisCall + index + 1),
-        shortfall: thisCall === 1 && index === 1 ? 1 : 0,
-      } as SimulationResult["years"][number]));
+      const years = returns.years.slice(0, thisCall === 0 ? 2 : 3).map(
+        (row, index) =>
+          ({
+            age: row.age,
+            netWorth: 1_000 * (thisCall + index + 1),
+            shortfall: thisCall === 1 && index === 1 ? 1 : 0,
+          }) as SimulationResult["years"][number],
+      );
       return { years, summary: { success: true, finalNetWorth: years.at(-1)?.netWorth ?? 0 } };
     };
     const out = runMonteCarlo(plan, mcScenario(2), stubTables(), fn);
@@ -189,6 +198,13 @@ describe("runMonteCarlo — aggregation over an injected (stub) simulate", () =>
   it("rejects invalid run counts and deviations instead of returning empty statistics", () => {
     const { fn } = stubSimulate([true]);
     expect(() => runMonteCarlo(makePlan(), mcScenario(0), stubTables(), fn)).toThrow(/runs must be/);
-    expect(() => runMonteCarlo(makePlan(), { ...mcScenario(1), mcConfig: { ...mcScenario(1).mcConfig!, stdDev: { ...stdDev, equity: -0.1 } } }, stubTables(), fn)).toThrow(/stdDev/);
+    expect(() =>
+      runMonteCarlo(
+        makePlan(),
+        { ...mcScenario(1), mcConfig: { ...mcScenario(1).mcConfig!, stdDev: { ...stdDev, equity: -0.1 } } },
+        stubTables(),
+        fn,
+      ),
+    ).toThrow(/stdDev/);
   });
 });

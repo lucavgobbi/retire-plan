@@ -10,13 +10,7 @@
 //   SC taupe checks (this module)  →  migrations (schema version)  →  plan semantics
 //   (engine validatePlan)  →  import/parse result  {ok:false, errors:[...]}  when any
 //   layer objects. Nothing here ever mutates or wipes data (see db.ts recovery flow).
-import type {
-  Plan,
-  PlanMeta,
-  PlanFile,
-  ScenarioDelta,
-  Workspace,
-} from "../domain/types";
+import type { Plan, PlanMeta, PlanFile, ScenarioDelta, Workspace } from "../domain/types";
 import { HISTORICAL_DATASET, validatePlan } from "@retire-plan/engine";
 
 /** Current PlanFile JSON payload version (NOT the IndexedDB layout version; see db.ts). */
@@ -88,7 +82,11 @@ function validateScenarioOptions(value: Record<string, unknown>, label: string):
   const errors: string[] = [];
   const benefits = value.benefits;
   if (benefits !== undefined) {
-    if (!isRecord(benefits) || Object.keys(benefits).length !== 3 || !["cpp", "oas", "gis"].every(key => typeof benefits[key] === "boolean")) {
+    if (
+      !isRecord(benefits) ||
+      Object.keys(benefits).length !== 3 ||
+      !["cpp", "oas", "gis"].every((key) => typeof benefits[key] === "boolean")
+    ) {
       errors.push(`${label} benefits must contain boolean cpp, oas, and gis options.`);
     } else if (benefits.oas === false && benefits.gis === true) {
       errors.push(`${label} benefits cannot enable GIS when OAS is disabled.`);
@@ -96,7 +94,11 @@ function validateScenarioOptions(value: Record<string, unknown>, label: string):
   }
   if (value.payroll !== undefined) {
     const payroll = value.payroll;
-    if (!isRecord(payroll) || Object.keys(payroll).length !== 3 || !["cpp", "ei", "cppOptOut65to69"].every(key => typeof payroll[key] === "boolean")) {
+    if (
+      !isRecord(payroll) ||
+      Object.keys(payroll).length !== 3 ||
+      !["cpp", "ei", "cppOptOut65to69"].every((key) => typeof payroll[key] === "boolean")
+    ) {
       errors.push(`${label} payroll must be an object with exactly the boolean flags cpp, ei, cppOptOut65to69.`);
     }
   }
@@ -120,8 +122,7 @@ function isAssetMix(value: unknown, label: string, errors: string[]): boolean {
     }
   }
   if (ok) {
-    const total =
-      (value.equity as number) + (value.bond as number) + (value.cash as number);
+    const total = (value.equity as number) + (value.bond as number) + (value.cash as number);
     if (Math.abs(total - 1) > 1e-6) {
       errors.push(`${label} assetMix shares must total 100% (got ${Math.round(total * 100)}%).`);
       ok = false;
@@ -183,8 +184,7 @@ export function validatePlanShape(value: unknown): string[] {
         case "accounts": {
           if (item.type !== undefined && !isEnum(item.type, ACCOUNT_TYPES)) {
             errors.push(
-              `${label} account type "${String(item.type)}" is not supported ` +
-                `(use ${ACCOUNT_TYPES.join(", ")}).`,
+              `${label} account type "${String(item.type)}" is not supported ` + `(use ${ACCOUNT_TYPES.join(", ")}).`,
             );
           }
           if (item.name !== undefined && item.name !== "" && !isNonEmptyString(item.name)) {
@@ -198,7 +198,8 @@ export function validatePlanShape(value: unknown): string[] {
             }
           } else {
             isAssetMix(item.assetMix, label, errors);
-            if (item.interestRate !== undefined) errors.push(`${label} interestRate is supported only for cash accounts.`);
+            if (item.interestRate !== undefined)
+              errors.push(`${label} interestRate is supported only for cash accounts.`);
           }
           if (item.balance !== undefined && !isFiniteNumber(item.balance)) {
             errors.push(`${label} balance must be a finite number.`);
@@ -211,8 +212,7 @@ export function validatePlanShape(value: unknown): string[] {
         case "assets": {
           if (item.kind !== undefined && !isEnum(item.kind, ASSET_KINDS)) {
             errors.push(
-              `${label} asset kind "${String(item.kind)}" is not supported ` +
-                `(use ${ASSET_KINDS.join(", ")}).`,
+              `${label} asset kind "${String(item.kind)}" is not supported ` + `(use ${ASSET_KINDS.join(", ")}).`,
             );
           }
           if (item.name !== undefined && item.name !== "" && !isNonEmptyString(item.name)) {
@@ -232,7 +232,9 @@ export function validatePlanShape(value: unknown): string[] {
                 errors.push(`${label} sellEvent.age must be a whole number of years.`);
               }
               if (
-                (!isFiniteNumber(item.sellEvent.costsPct) || item.sellEvent.costsPct < 0 || item.sellEvent.costsPct > 1)
+                !isFiniteNumber(item.sellEvent.costsPct) ||
+                item.sellEvent.costsPct < 0 ||
+                item.sellEvent.costsPct > 1
               ) {
                 errors.push(`${label} sellEvent.costsPct must be a non-negative number.`);
               }
@@ -243,8 +245,7 @@ export function validatePlanShape(value: unknown): string[] {
         case "debts": {
           if (item.kind !== undefined && !isEnum(item.kind, DEBT_KINDS)) {
             errors.push(
-              `${label} debt kind "${String(item.kind)}" is not supported ` +
-                `(use ${DEBT_KINDS.join(", ")}).`,
+              `${label} debt kind "${String(item.kind)}" is not supported ` + `(use ${DEBT_KINDS.join(", ")}).`,
             );
           }
           if (item.rate !== undefined && (!isFiniteNumber(item.rate) || (item.rate as number) < 0)) {
@@ -275,8 +276,7 @@ export function validatePlanShape(value: unknown): string[] {
         case "incomes": {
           if (item.kind !== undefined && !isEnum(item.kind, INCOME_KINDS)) {
             errors.push(
-              `${label} income kind "${String(item.kind)}" is not supported ` +
-                `(use ${INCOME_KINDS.join(", ")}).`,
+              `${label} income kind "${String(item.kind)}" is not supported ` + `(use ${INCOME_KINDS.join(", ")}).`,
             );
           }
           if (item.name !== undefined && item.name !== "" && !isNonEmptyString(item.name)) {
@@ -321,7 +321,10 @@ export function validatePlanShape(value: unknown): string[] {
           if (item.priority !== undefined && !isFiniteNumber(item.priority)) {
             errors.push(`${label} priority must be a finite number.`);
           }
-          if (item.matchRate !== undefined && (!isFiniteNumber(item.matchRate) || item.matchRate < 0 || item.matchRate > 1)) {
+          if (
+            item.matchRate !== undefined &&
+            (!isFiniteNumber(item.matchRate) || item.matchRate < 0 || item.matchRate > 1)
+          ) {
             errors.push(`${label} matchRate must be a finite number between 0 and 1.`);
           }
           if (item.perYearCap !== undefined && !isFiniteNumber(item.perYearCap)) {
@@ -361,9 +364,7 @@ export function validatePlanShape(value: unknown): string[] {
     errors.push(...validatePlan(value as unknown as Plan));
   } catch (error) {
     errors.push(
-      `The plan could not be validated internally (${
-        error instanceof Error ? error.message : "unknown error"
-      }).`,
+      `The plan could not be validated internally (${error instanceof Error ? error.message : "unknown error"}).`,
     );
   }
   return errors;
@@ -381,7 +382,6 @@ export function validatePlanMeta(value: unknown): string[] {
   }
   return errors;
 }
-
 
 export function validateScenarioDelta(value: unknown): string[] {
   if (!isRecord(value)) return ["A scenario entry is missing or not an object."];
@@ -422,8 +422,15 @@ export function validateScenarioDelta(value: unknown): string[] {
     }
   }
   if (value.historicalConfig !== undefined) {
-    if (!isRecord(value.historicalConfig) || !isInteger(value.historicalConfig.startYear) || value.historicalConfig.startYear < HISTORICAL_DATASET.coverageStart || value.historicalConfig.startYear > HISTORICAL_DATASET.coverageEnd) {
-      errors.push(`Scenario historicalConfig.startYear must be a whole year from ${HISTORICAL_DATASET.coverageStart} through ${HISTORICAL_DATASET.coverageEnd}.`);
+    if (
+      !isRecord(value.historicalConfig) ||
+      !isInteger(value.historicalConfig.startYear) ||
+      value.historicalConfig.startYear < HISTORICAL_DATASET.coverageStart ||
+      value.historicalConfig.startYear > HISTORICAL_DATASET.coverageEnd
+    ) {
+      errors.push(
+        `Scenario historicalConfig.startYear must be a whole year from ${HISTORICAL_DATASET.coverageStart} through ${HISTORICAL_DATASET.coverageEnd}.`,
+      );
     }
   }
   if (value.overrides === undefined) {
@@ -438,9 +445,7 @@ export function validateScenarioDelta(value: unknown): string[] {
     if (o.returnAssumptions !== undefined) {
       if (
         !isRecord(o.returnAssumptions) ||
-        !["equity", "bond", "cash"].every((k) =>
-          isFiniteNumber((o.returnAssumptions as Record<string, unknown>)[k]),
-        )
+        !["equity", "bond", "cash"].every((k) => isFiniteNumber((o.returnAssumptions as Record<string, unknown>)[k]))
       ) {
         errors.push(`Scenario override returnAssumptions needs finite equity/bond/cash numbers.`);
       }
@@ -448,11 +453,15 @@ export function validateScenarioDelta(value: unknown): string[] {
     if (o.withdrawalOrder !== undefined) {
       const order = o.withdrawalOrder;
       if (!Array.isArray(order) || (order.length !== 3 && order.length !== 4)) {
-        errors.push(`Scenario override withdrawalOrder must list the three investment account types and may include cash once.`);
+        errors.push(
+          `Scenario override withdrawalOrder must list the three investment account types and may include cash once.`,
+        );
       } else if (new Set(order).size !== order.length) {
         errors.push(`Scenario override withdrawalOrder cannot repeat an account type.`);
-      } else if (!order.every((v) => v === "tfsa" || v === "rrsp" || v === "nonreg" || v === "cash") ||
-        !["tfsa", "rrsp", "nonreg"].every(type => order.includes(type))) {
+      } else if (
+        !order.every((v) => v === "tfsa" || v === "rrsp" || v === "nonreg" || v === "cash") ||
+        !["tfsa", "rrsp", "nonreg"].every((type) => order.includes(type))
+      ) {
         errors.push(`Scenario override withdrawalOrder must include tfsa, rrsp, and nonreg, with optional cash.`);
       }
     }
@@ -561,10 +570,16 @@ export function asWorkspace(value: unknown): Workspace {
 export function validateBaseScenario(value: unknown): string[] {
   if (!isRecord(value)) return ["Working scenario settings must be an object."];
   const errors = validateScenarioDelta({
-    id: "settings", name: "settings", basePlanId: "settings", simMode: value.simMode ?? "deterministic",
-    mcConfig: value.mcConfig, historicalConfig: value.historicalConfig, benefits: value.benefits,
+    id: "settings",
+    name: "settings",
+    basePlanId: "settings",
+    simMode: value.simMode ?? "deterministic",
+    mcConfig: value.mcConfig,
+    historicalConfig: value.historicalConfig,
+    benefits: value.benefits,
     payroll: value.payroll,
-    withdrawalStrategy: value.withdrawalStrategy, overrides: value,
+    withdrawalStrategy: value.withdrawalStrategy,
+    overrides: value,
   });
   for (const key of ["retirementAge", "returnAssumptions", "withdrawalOrder"]) {
     if (value[key] === undefined) errors.push(`Working scenario settings require ${key}.`);

@@ -30,10 +30,7 @@ export function tfsaRoomNextYear(
   tables: TaxYearTables,
   eligibleAge: boolean = state.currentAge + 1 >= tables.tfsa.roomStartAge,
 ): number {
-  return Math.max(
-    0,
-    state.room + (eligibleAge ? tables.tfsa.annualLimit : 0) + withdrawalsThisYear,
-  );
+  return Math.max(0, state.room + (eligibleAge ? tables.tfsa.annualLimit : 0) + withdrawalsThisYear);
 }
 
 /**
@@ -52,9 +49,6 @@ export function rrspRoomEarn(
   void currentAge; // reserved for future age-gated rules; the room formula has none
   return (
     carryforward +
-    Math.min(
-      tables.rrsp.incomeRate * Math.max(0, earnedIncome - employerContributions),
-      tables.rrsp.annualLimit,
-    )
+    Math.min(tables.rrsp.incomeRate * Math.max(0, earnedIncome - employerContributions), tables.rrsp.annualLimit)
   );
 }

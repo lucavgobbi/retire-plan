@@ -133,20 +133,20 @@ describe("ca-2026 tax tables schema and invariants", () => {
 });
 
 describe("loadTables invariant rejections (fail fast on transposed or law-changed tables)", () => {
-  const cloneTables = () => JSON.parse(JSON.stringify(tablesJson)) as Record<string, any>;
+  const cloneTables = () => JSON.parse(JSON.stringify(tablesJson)) as typeof tablesJson;
 
   it("rejects a federal ladder with non-ascending thresholds", () => {
     const bad = cloneTables();
     // Swap the two top federal thresholds (181,440 / 258,482 -> out of order).
-    bad.federal.brackets[3].threshold = 300_000;
-    bad.federal.brackets[4].threshold = 200_000;
+    bad.federal.brackets[3]!.threshold = 300_000;
+    bad.federal.brackets[4]!.threshold = 200_000;
     expect(() => loadTables(bad)).toThrow(/federal\.brackets\[4\] threshold .*strictly ascending/i);
   });
 
   it("rejects a ladder with a non-increasing (equal) rate", () => {
     const bad = cloneTables();
     // Ontario tier-2 rate set equal to tier-1: 5.05%, 5.05% — not strictly increasing.
-    bad.ontario.brackets[1].rate = bad.ontario.brackets[0].rate;
+    bad.ontario.brackets[1]!.rate = bad.ontario.brackets[0]!.rate;
     expect(() => loadTables(bad)).toThrow(/ontario\.brackets\[1\] rate .* strictly greater/i);
   });
 
@@ -154,7 +154,7 @@ describe("loadTables invariant rejections (fail fast on transposed or law-change
     const bad = cloneTables();
     // Age 79 factor (0.0657) dropped below age 78 (0.0636) inverted -> 0.05.
     const at79 = bad.rrif.minimumFactors.findIndex((f: { age: number }) => f.age === 79);
-    bad.rrif.minimumFactors[at79].factor = 0.05;
+    bad.rrif.minimumFactors[at79]!.factor = 0.05;
     expect(() => loadTables(bad)).toThrow(
       /rrif\.minimumFactors factors must be non-decreasing with age below the 95 cap/i,
     );
@@ -213,9 +213,7 @@ describe("applyIndexation", () => {
     expect(shifted.federal.pensionIncomeCredit).toEqual(unshifted.federal.pensionIncomeCredit);
     // And the two are genuinely different for the high-bracket case: +30y threshold pair
     // (age amount vs pension threshold) does not collapse onto the +0y values.
-    expect(shifted.federal.ageCredit.reductionThreshold).not.toEqual(
-      unshifted.federal.ageCredit.reductionThreshold,
-    );
+    expect(shifted.federal.ageCredit.reductionThreshold).not.toEqual(unshifted.federal.ageCredit.reductionThreshold);
   });
 
   it("indexes Ontario surtax taxable-income thresholds by the Ontario factor", () => {

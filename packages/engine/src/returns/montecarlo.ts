@@ -1,4 +1,11 @@
-import type { PlannedWithdrawals, Plan, ReturnSeries, Scenario, SimulationResult, WithdrawalPlanMetadata } from "../types";
+import type {
+  PlannedWithdrawals,
+  Plan,
+  ReturnSeries,
+  Scenario,
+  SimulationResult,
+  WithdrawalPlanMetadata,
+} from "../types";
 import type { TaxYearTables } from "../tax/tables";
 import { seededRandom, type Rand } from "./seededRandom";
 import { simulate as realSimulate } from "../simulate";
@@ -115,9 +122,14 @@ export function runMonteCarlo(
   if (!Number.isInteger(cfg.seed) || cfg.seed < 0 || cfg.seed > 0xffff_ffff) {
     throw new Error("runMonteCarlo: mcConfig.seed must be an unsigned 32-bit integer.");
   }
-  if (!cfg.stdDev || !(Object.values({
-    equity: cfg.stdDev.equity, bond: cfg.stdDev.bond, cash: cfg.stdDev.cash,
-  }).every((value) => Number.isFinite(value) && value >= 0 && value <= 1))) {
+  if (
+    !cfg.stdDev ||
+    !Object.values({
+      equity: cfg.stdDev.equity,
+      bond: cfg.stdDev.bond,
+      cash: cfg.stdDev.cash,
+    }).every((value) => Number.isFinite(value) && value >= 0 && value <= 1)
+  ) {
     throw new Error("runMonteCarlo: mcConfig.stdDev values must be finite numbers from 0 to 1.");
   }
   if (!Object.values(scenario.returnAssumptions).every(Number.isFinite)) {

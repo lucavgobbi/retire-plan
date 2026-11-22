@@ -34,7 +34,10 @@ function smoothingPlan(expenses: number): Plan {
 
 function scenario(overrides: Partial<Scenario> = {}): Scenario {
   return {
-    id: "s", name: "S", simMode: "deterministic", retirementAge: 60,
+    id: "s",
+    name: "S",
+    simMode: "deterministic",
+    retirementAge: 60,
     returnAssumptions: ZERO,
     withdrawalOrder: ["tfsa", "nonreg", "rrsp"],
     benefits: { cpp: false, oas: false, gis: false },
@@ -91,9 +94,7 @@ describe("tax-minimizing withdrawal strategy — real efficacy", () => {
     // Invariant: manual-feasible => chosen feasible AND total tax <= manual's.
     expect(meta.comparison.optimizedTotalTax).toBeLessThanOrEqual(meta.comparison.manualTotalTax);
     // Deterministic mode result == the planner's chosen candidate evaluation exactly.
-    expect(
-      optimized.years.reduce((s, y) => s + y.tax.total, 0),
-    ).toBeCloseTo(meta.comparison.optimizedTotalTax, 6);
+    expect(optimized.years.reduce((s, y) => s + y.tax.total, 0)).toBeCloseTo(meta.comparison.optimizedTotalTax, 6);
     // The executed plan: proactive draws pre-71, above the RRIF minimum, all positive.
     const plannedAges = meta.plannedWithdrawals.map((w) => w.age);
     expect(plannedAges.length).toBeGreaterThan(0);

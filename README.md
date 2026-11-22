@@ -4,7 +4,7 @@ A local Canadian retirement planning app for Ontario, with a deterministic TypeS
 
 ## Run locally
 
-Use Node **20, 22, or 24+** and npm (verification used Node **24.5.0**). Run commands from the repository root:
+Use Node **20.19+ on the 20.x line**, **22.13+ on the 22.x line**, or **24+**, with npm. Run commands from the repository root:
 
 ```sh
 npm install
@@ -23,15 +23,35 @@ If saved data cannot be read, the recovery screen keeps it in place and offers a
 
 ## Verify
 
+The root runs ESLint across both workspaces, their tests, and the repository's JavaScript and TypeScript tooling. Prettier processes supported files tracked by Git, including files staged for addition. It skips the generated npm lockfile and historical returns dataset.
+
+```sh
+npm run lint          # Report lint violations
+npm run lint:fix      # Apply ESLint's automatic fixes
+npm run format        # Format tracked files
+npm run format:check  # Check formatting
+```
+
+GitHub Actions runs lint and formatting checks before building the Pages deployment.
+
+The Python historical data extractor is formatted separately. To check or apply its formatting locally, use Ruff through `uvx`.
+
+```sh
+uvx ruff@0.17.6 format --isolated --check packages/engine/data/historical/extract-usa-returns.py
+uvx ruff@0.17.6 format --isolated packages/engine/data/historical/extract-usa-returns.py
+```
+
+Run the test suites, typechecks, and production build from the root.
+
 ```sh
 npm test -w packages/engine
 npm test -w apps/web
-npx tsc --noEmit -p packages/engine
+npm run typecheck -w packages/engine
 npm run typecheck -w apps/web
 npm run build -w apps/web
 ```
 
-The root `npm test` runs the engine suite only. Tooling uses Vitest **4.1.12** and Vite **6.4.6**. Current verification: **187 engine tests** and **155 web tests** pass; both typechecks and the production build pass. Scoped Safari smoke (launch, run, projection, compare, reload) also passes; browser JSON file actions were not exercised. See the [web review](docs/validation/web-review.md). Final cosmetic tests, web typecheck, and production build also passed. The completed status is tracked in the [Phase 2 progress ledger](docs/superpowers/plans/2026-11-10-web-ui.md#8-progress-status).
+The root `npm test` runs the engine suite only. Tooling uses Vitest **4.1.12** and Vite **6.4.6**. Current verification covers **288 engine tests**, **428 web tests**, both typechecks, and the production build. See the [web review](docs/validation/web-review.md) for the earlier Safari smoke check covering launch, run, projection, compare, and reload. That check did not exercise browser JSON file actions. The completed status is tracked in the [Phase 2 progress ledger](docs/superpowers/plans/2026-11-10-web-ui.md#8-progress-status).
 
 ## Scope and assumptions
 

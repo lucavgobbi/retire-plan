@@ -26,15 +26,21 @@ export function annualPayroll(
 
   if (earnings > 0) {
     if (elected && !electedOut) {
-      warnings.push("CPP opt-out could not apply. It requires CPP payroll enabled, age 65–69, and active CPP retirement pension income.");
+      warnings.push(
+        "CPP opt-out could not apply. It requires CPP payroll enabled, age 65–69, and active CPP retirement pension income.",
+      );
     }
     if (!settings?.cpp && cppAgeEligible) warnings.push("CPP and CPP2 payroll deductions are off for this projection.");
     if (!settings?.ei) warnings.push("EI payroll deductions are off for this projection.");
     if (settings?.cpp || settings?.ei) {
-      warnings.push("Payroll assumes a single Ontario employer. CPP pension and post-retirement benefits require entered amounts. EI benefits are outside this calculation.");
+      warnings.push(
+        "Payroll assumes a single Ontario employer. CPP pension and post-retirement benefits require entered amounts. EI benefits are outside this calculation.",
+      );
     }
     if (settings?.cpp && (age === CPP_FIRST_AGE || age === CPP_END_AGE || electedOut)) {
-      warnings.push("CPP uses whole projection years for birthday and election cutoffs. Actual payroll can change partway through the year.");
+      warnings.push(
+        "CPP uses whole projection years for birthday and election cutoffs. Actual payroll can change partway through the year.",
+      );
     }
   }
 
@@ -49,7 +55,9 @@ export function annualPayroll(
     const cpp = roundCent(band * combinedRate);
     cppBase = roundCent(cpp * (tables.cppBaseRate / combinedRate));
     cppAdditional = roundCent(cpp - cppBase);
-    cpp2 = roundCent(Math.max(0, Math.min(earnings, tables.cppSecondCeiling) - tables.cppFirstCeiling) * tables.cpp2Rate);
+    cpp2 = roundCent(
+      Math.max(0, Math.min(earnings, tables.cppSecondCeiling) - tables.cppFirstCeiling) * tables.cpp2Rate,
+    );
   }
   if (tables && settings?.ei) {
     ei = roundCent(Math.min(earnings, tables.eiInsurableCeiling) * tables.eiRate);

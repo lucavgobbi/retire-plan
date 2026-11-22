@@ -18,7 +18,7 @@ figure comes from exactly one of two things:
    inside `crosscheck.test.ts` (bracket math, non-refundable credits, Ontario surtax,
    OAS recovery tax, GIS taper) using only those official constants plus the engine's
    documented indexation convention. It shares NO code with the engine; it reads only
-   the engine's *ledger outputs* (income components, withdrawal amounts) as input shapes
+   the engine's _ledger outputs_ (income components, withdrawal amounts) as input shapes
    and re-prices tax on them.
 
 This is a second, independent calculator — clearly distinct from an actual government
@@ -26,16 +26,16 @@ calculator's output, which remains documented here as a limitation (§6).
 
 ## 2. Official sources (all fetched live 2026-11-10)
 
-| Value used | Source page (canada.ca) |
-| --- | --- |
-| 2026 indexation 2.0%; federal thresholds 58,523 / 117,045 / 181,440 / 258,482; BPA $16,452; age amount $9,208 (threshold $46,432); Canada employment amount $1,501; OAS repayment threshold $95,323; TFSA 2026 limit $7,000 | [CRA: Indexation adjustment for personal income tax and benefit amounts](https://www.canada.ca/en/revenue-agency/services/tax/individuals/frequently-asked-questions-individuals/adjustment-personal-income-tax-benefit-amounts.html) |
-| Federal rates 14 / 20.5 / 26 / 29 / 33% ("For 2026 and subsequent tax year, the lowest federal tax rate will be 14%"); Ontario brackets 5.05 / 9.15 / 11.16 / 12.16 / 13.16% over 53,891 / 107,785; ON indexing 1.9% | [CRA T4127 payroll: Income tax rates and income thresholds](https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/payroll/payroll-deductions-contributions/income-tax/reducing-remuneration-subject-income-tax.html) |
-| Ontario surtax: 20% of basic ON tax over $5,818 **plus** 36% over $7,446; Ontario basic personal amount $12,989; Ontario health premium schedule (§5) | [CRA T4032-ON (E), effective Jan 1, 2026 — general information](https://www.canada.ca/en/revenue-agency/services/forms-publications/payroll/t4032-payroll-deductions-tables/t4032on-jan/t4032on-january-general-information.html) |
-| OAS max $742.31/mo (age 65–74) ⇒ $8,907.72/yr; GIS single max $1,108.74/mo ⇒ $13,304.88/yr; footnote 7: "The OAS pension repayment range in 2026 is for net world income from $95,323 to $154,708"; footnote 6: GIS cut-offs exclude the OAS pension and the first $5,000 of employment income (+50% band to $15,000) | [ESDC: Maximum Benefit Amounts — CPP (2026) and OAS (Jan–Mar 2026)](https://www.canada.ca/en/employment-social-development/programs/pensions/pension/statistics/2026-quarterly-january-march.html) |
-| Recovery rate 15% ("You must repay 15% of that amount"); threshold table showing income-year-2026 minimum threshold $95,323 | [CRA: Old Age Security pension recovery tax](https://www.canada.ca/en/services/benefits/publicpensions/old-age-security/recovery-tax.html) |
-| RRIF prescribed factors, "All other RRIFs" column (71: 5.28% … 72: 5.40% … 95+: 20.00%) | [CRA: Chart – Prescribed factors](https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/completing-slips-summaries/t4rsp-t4rif-information-returns/payments/chart-prescribed-factors.html) |
-| RRIF method: minimum = FMV at start of year × prescribed factor | [CRA: Minimum amount from a RRIF](https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/completing-slips-summaries/t4rsp-t4rif-information-returns/payments/minimum-amount-a-rrif.html) |
-| RRSP dollar limit $33,810 (2026); TFSA annual-limit history 2009–2026 (sums to $109,000) | [CRA: MP, DB, RRSP, DPSP, ALDA, TFSA limits, YMPE and the YAMPE](https://www.canada.ca/en/revenue-agency/services/tax/registered-plans-administrators/pspa/mp-rrsp-dpsp-tfsa-limits-ympe.html) |
+| Value used                                                                                                                                                                                                                                                                                                            | Source page (canada.ca)                                                                                                                                                                                                               |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026 indexation 2.0%; federal thresholds 58,523 / 117,045 / 181,440 / 258,482; BPA $16,452; age amount $9,208 (threshold $46,432); Canada employment amount $1,501; OAS repayment threshold $95,323; TFSA 2026 limit $7,000                                                                                           | [CRA: Indexation adjustment for personal income tax and benefit amounts](https://www.canada.ca/en/revenue-agency/services/tax/individuals/frequently-asked-questions-individuals/adjustment-personal-income-tax-benefit-amounts.html) |
+| Federal rates 14 / 20.5 / 26 / 29 / 33% ("For 2026 and subsequent tax year, the lowest federal tax rate will be 14%"); Ontario brackets 5.05 / 9.15 / 11.16 / 12.16 / 13.16% over 53,891 / 107,785; ON indexing 1.9%                                                                                                  | [CRA T4127 payroll: Income tax rates and income thresholds](https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/payroll/payroll-deductions-contributions/income-tax/reducing-remuneration-subject-income-tax.html) |
+| Ontario surtax: 20% of basic ON tax over $5,818 **plus** 36% over $7,446; Ontario basic personal amount $12,989; Ontario health premium schedule (§5)                                                                                                                                                                 | [CRA T4032-ON (E), effective Jan 1, 2026 — general information](https://www.canada.ca/en/revenue-agency/services/forms-publications/payroll/t4032-payroll-deductions-tables/t4032on-jan/t4032on-january-general-information.html)     |
+| OAS max $742.31/mo (age 65–74) ⇒ $8,907.72/yr; GIS single max $1,108.74/mo ⇒ $13,304.88/yr; footnote 7: "The OAS pension repayment range in 2026 is for net world income from $95,323 to $154,708"; footnote 6: GIS cut-offs exclude the OAS pension and the first $5,000 of employment income (+50% band to $15,000) | [ESDC: Maximum Benefit Amounts — CPP (2026) and OAS (Jan–Mar 2026)](https://www.canada.ca/en/employment-social-development/programs/pensions/pension/statistics/2026-quarterly-january-march.html)                                    |
+| Recovery rate 15% ("You must repay 15% of that amount"); threshold table showing income-year-2026 minimum threshold $95,323                                                                                                                                                                                           | [CRA: Old Age Security pension recovery tax](https://www.canada.ca/en/services/benefits/publicpensions/old-age-security/recovery-tax.html)                                                                                            |
+| RRIF prescribed factors, "All other RRIFs" column (71: 5.28% … 72: 5.40% … 95+: 20.00%)                                                                                                                                                                                                                               | [CRA: Chart – Prescribed factors](https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/completing-slips-summaries/t4rsp-t4rif-information-returns/payments/chart-prescribed-factors.html)                           |
+| RRIF method: minimum = FMV at start of year × prescribed factor                                                                                                                                                                                                                                                       | [CRA: Minimum amount from a RRIF](https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/completing-slips-summaries/t4rsp-t4rif-information-returns/payments/minimum-amount-a-rrif.html)                              |
+| RRSP dollar limit $33,810 (2026); TFSA annual-limit history 2009–2026 (sums to $109,000)                                                                                                                                                                                                                              | [CRA: MP, DB, RRSP, DPSP, ALDA, TFSA limits, YMPE and the YAMPE](https://www.canada.ca/en/revenue-agency/services/tax/registered-plans-administrators/pspa/mp-rrsp-dpsp-tfsa-limits-ympe.html)                                        |
 
 A second independent verifier re-confirmed the RRIF chart page.
 
@@ -44,21 +44,21 @@ A second independent verifier re-confirmed the RRIF chart page.
 Verified by `crosscheck.test.ts`, Part A (engine-independent: reads the data JSON, compares
 against constants hard-typed from the sources above):
 
-| Item | Engine | Official | Status |
-| --- | --- | --- | --- |
-| Federal brackets & rates (2026) | 14/20.5/26/29/33% over 58,523/117,045/181,440/258,482 | identical (T4127) | ✓ exact |
-| Federal indexation factor | 1.020 | 2.0% | ✓ |
-| BPA / employment amount | 16,452 / 1,501 | identical | ✓ |
-| Age amount $9,208, threshold $46,432, reduction 15% | identical | identical | ✓ |
-| Ontario brackets & rates | 5.05/9.15/11.16/12.16/13.16% over 53,891/107,785/150,000/220,000 | identical (T4127) | ✓ |
-| Ontario BPA / indexation | 12,989 / 1.9% | identical (T4032-ON) | ✓ |
-| Ontario surtax ladders | 20% over $5,818 + 36% over $7,446 (basic-tax dollars) | identical (T4032-ON) | ✓ |
-| OAS annual max / clawback threshold / recovery rate | 8,907.72 / 95,323 / 0.15 | identical (ESDC + CRA) | ✓ (handoff item c) |
-| GIS max single / taper / employment exclusion | 13,304.88 / 50% / $5,000 | identical (ESDC) | ✓ |
-| **RRIF factor at 72** | **0.0540** | **0.0540** | ✓ (handoff item b) |
-| **Full RRIF schedule, "All other RRIFs"** | see note below | 71–95+ chart | ✓ (after correction, see §4) |
-| **TFSA annual limit 2026 / cumulative room** | **7,000 / 109,000** | **7,000 / official-limit sum = 109,000** | ✓ (handoff item d) |
-| RRSP rate / 2026 dollar limit | 18% / 33,810 | identical (PSPA table) | ✓ |
+| Item                                                | Engine                                                           | Official                                 | Status                       |
+| --------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------- | ---------------------------- |
+| Federal brackets & rates (2026)                     | 14/20.5/26/29/33% over 58,523/117,045/181,440/258,482            | identical (T4127)                        | ✓ exact                      |
+| Federal indexation factor                           | 1.020                                                            | 2.0%                                     | ✓                            |
+| BPA / employment amount                             | 16,452 / 1,501                                                   | identical                                | ✓                            |
+| Age amount $9,208, threshold $46,432, reduction 15% | identical                                                        | identical                                | ✓                            |
+| Ontario brackets & rates                            | 5.05/9.15/11.16/12.16/13.16% over 53,891/107,785/150,000/220,000 | identical (T4127)                        | ✓                            |
+| Ontario BPA / indexation                            | 12,989 / 1.9%                                                    | identical (T4032-ON)                     | ✓                            |
+| Ontario surtax ladders                              | 20% over $5,818 + 36% over $7,446 (basic-tax dollars)            | identical (T4032-ON)                     | ✓                            |
+| OAS annual max / clawback threshold / recovery rate | 8,907.72 / 95,323 / 0.15                                         | identical (ESDC + CRA)                   | ✓ (handoff item c)           |
+| GIS max single / taper / employment exclusion       | 13,304.88 / 50% / $5,000                                         | identical (ESDC)                         | ✓                            |
+| **RRIF factor at 72**                               | **0.0540**                                                       | **0.0540**                               | ✓ (handoff item b)           |
+| **Full RRIF schedule, "All other RRIFs"**           | see note below                                                   | 71–95+ chart                             | ✓ (after correction, see §4) |
+| **TFSA annual limit 2026 / cumulative room**        | **7,000 / 109,000**                                              | **7,000 / official-limit sum = 109,000** | ✓ (handoff item d)           |
+| RRSP rate / 2026 dollar limit                       | 18% / 33,810                                                     | identical (PSPA table)                   | ✓                            |
 
 The $109,000 cumulative room is re-derived inside the test as the sum of the officially
 published annual limits 2009–2026 (the CRA PSPA page is itself the primary source; no
@@ -81,13 +81,13 @@ validation-only override (§5b). All figures CAD, plan conventions per
 
 ### 5a. Golden year 1 (age 45, employment 95,000) — handoff item (a)
 
-| Component | Engine | Independent official-formula reference | Handoff pin |
-| --- | --- | --- | --- |
-| Federal | 13,157.59 | 13,157.59 | 13,157.59 |
-| Ontario basic | 5,827.02 | 5,827.02 | 5,827.02 |
-| Ontario surtax | 1.80 | 1.80 | 1.80 |
-| OAS clawback | 0.00 | 0.00 | — |
-| **Total tax** | **18,986.41** | **18,986.41** | **18,986.41** |
+| Component      | Engine        | Independent official-formula reference | Handoff pin   |
+| -------------- | ------------- | -------------------------------------- | ------------- |
+| Federal        | 13,157.59     | 13,157.59                              | 13,157.59     |
+| Ontario basic  | 5,827.02      | 5,827.02                               | 5,827.02      |
+| Ontario surtax | 1.80          | 1.80                                   | 1.80          |
+| OAS clawback   | 0.00          | 0.00                                   | —             |
+| **Total tax**  | **18,986.41** | **18,986.41**                          | **18,986.41** |
 
 Exact to the cent, all three ways. This is the strongest check in the suite: official
 base-year values are exact, no extrapolation involved.
@@ -100,7 +100,7 @@ into retirement. That made the earlier "retirement years" comparisons employment
 labeled as retirement. For this validation, a **validation-only override** ends employment
 at 64, so ages 65–67 are genuinely post-employment years with analytically known inputs.
 The convention question for the shipped fixture (does an unended employment stream
-*intend* to continue past `retirementAge`?) is a design question flagged to the captain
+_intend_ to continue past `retirementAge`?) is a design question flagged to the captain
 (§6 item 8). The test asserts the analytic stream values directly (review item M2):
 employment 0 (post-endAge), CPP exactly 8,000.00, OAS exactly 8,907.72 every year.
 
@@ -110,11 +110,11 @@ per-year net income (income streams + GIS − tax), **and the GIS itself** again
 official formula. Tolerance per the plan: 10%. **Engine and reference agree to the cent on
 tax, net income, and GIS in every compared year:**
 
-| Age | Taxable income | Federal | ON basic | Surtax | OAS clawback | Total tax | GIS | Net income |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 65 | 16,907.72 | 0.00 | 0.00 | 0.00 | 0.00 | **0.00** | **9,304.88** | 26,212.60 |
-| 66 | 16,907.72 | 0.00 | 0.00 | 0.00 | 0.00 | **0.00** | **9,304.88** | 26,212.60 |
-| 67 | 16,907.72 | 0.00 | 0.00 | 0.00 | 0.00 | **0.00** | **9,304.88** | 26,212.60 |
+| Age | Taxable income | Federal | ON basic | Surtax | OAS clawback | Total tax | GIS          | Net income |
+| --- | -------------- | ------- | -------- | ------ | ------------ | --------- | ------------ | ---------- |
+| 65  | 16,907.72      | 0.00    | 0.00     | 0.00   | 0.00         | **0.00**  | **9,304.88** | 26,212.60  |
+| 66  | 16,907.72      | 0.00    | 0.00     | 0.00   | 0.00         | **0.00**  | **9,304.88** | 26,212.60  |
+| 67  | 16,907.72      | 0.00    | 0.00     | 0.00   | 0.00         | **0.00**  | **9,304.88** | 26,212.60  |
 
 Composition: CPP 8,000 + OAS 8,907.72 = 16,907.72 taxable; the retirement spending target
 is met entirely by TFSA withdrawals (78,674.51 / 80,309.05 in 65/66 — not income) and, once
@@ -135,6 +135,7 @@ rule (OAS excluded, no employment or RRSP income; see §6.4) on both sides.
    the same day.
 
 ### 5d. Pension income amount — fixed $2,000 statute, now matched by both engine and reference
+
 (review item M4, resolved)
 
 Official primary source ([CRA Line 31400](https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/about-your-tax-return/tax-return/completing-a-tax-return/deductions-credits-expenses/line-31400-pension-income-amount.html),
@@ -183,11 +184,11 @@ official law now agree; no open item.
    brackets are uniformly indexed by the engine — documented simplification
    (`docs/assumptions.md`).
 6. **Shared-interpretation note.** The independent reference re-implements the official
-   formulas but necessarily shares certain *interpretations* (age-credit reduction
+   formulas but necessarily shares certain _interpretations_ (age-credit reduction
    formula per Federal Worksheet 5000-D1; pension income amount with no income phase-out;
    credit conversion at the lowest rate). These interpretations are themselves sourced
    from official documents and are exact at base year (§5a matches to the cent), but the
-   cost of a *misinterpretation* would not be caught twice by this design. Base-year
+   cost of a _misinterpretation_ would not be caught twice by this design. Base-year
    discrepancies would appear prominently because the values are exact.
 7. **Emigration proration / room-vs-residency:** TFSA room is seeded at the full
    cumulative (appropriate for a resident eligible since 18, as in this plan); arrival
@@ -196,7 +197,7 @@ official law now agree; no open item.
    Engine semantics: `isActive` treats a missing `endAge` as "runs until `profile.endAge`",
    so the shipped golden fixture's employment stream produces salary at ages 65–67
    despite the plan being described as retired. Validation therefore uses a
-   validation-only override ending employment at 64 (§5b). Whether the *shipped* fixture
+   validation-only override ending employment at 64 (§5b). Whether the _shipped_ fixture
    intends continued employment past `retirementAge` is a fixture-intent question for the
    captain — the engine's semantics are internally consistent either way.
 

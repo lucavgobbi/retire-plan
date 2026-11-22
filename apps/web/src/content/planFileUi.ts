@@ -8,12 +8,7 @@
 import { useCallback, useState } from "react";
 import type { PlanFile, Workspace } from "../domain/types";
 import { createEmptyWorkspace } from "../domain/defaults";
-import {
-  parsePlanFile,
-  SCHEMA_VERSION,
-  workspaceToText,
-  type ParseOk,
-} from "../storage/exportImport";
+import { parsePlanFile, SCHEMA_VERSION, workspaceToText, type ParseOk } from "../storage/exportImport";
 import { storage, type StorageProvider } from "../storage/db";
 import { suspendAutosave } from "../storage/useAutosave";
 import { validateWorkspace } from "../storage/schema";
@@ -33,18 +28,15 @@ export function ambientDom(): DomHelpers | null {
   if (typeof document === "undefined") return null;
   return {
     doc: document,
-    createObjectURL: typeof URL.createObjectURL === "function"
-      ? (blob) => URL.createObjectURL(blob)
-      : undefined,
-    revokeObjectURL: typeof URL.revokeObjectURL === "function"
-      ? (url) => URL.revokeObjectURL(url)
-      : undefined,
+    createObjectURL: typeof URL.createObjectURL === "function" ? (blob) => URL.createObjectURL(blob) : undefined,
+    revokeObjectURL: typeof URL.revokeObjectURL === "function" ? (url) => URL.revokeObjectURL(url) : undefined,
   };
 }
 
 /** `retire-plan-[plan-slug]-YYYY-MM-DD.json` derived from the plan name (if named). */
 export function suggestedExportFilename(w: Workspace, now: Date = new Date()): string {
-  const slug = (w.meta?.name ?? "")
+  const slug =
+    (w.meta?.name ?? "")
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
@@ -74,7 +66,7 @@ export function downloadRawRowJson(row: unknown, dom: DomHelpers, fileName = "re
 }
 
 function triggerDownload(text: string, fileName: string, dom: DomHelpers): string {
-  let link = "";
+  let link: string;
   if (dom.createObjectURL) {
     const blob = new Blob([text], { type: "application/json" });
     link = dom.createObjectURL(blob);
@@ -98,10 +90,7 @@ function triggerDownload(text: string, fileName: string, dom: DomHelpers): strin
  * FileReader, but a stub keeps failure-order tests deterministic); default
  * resolves via FileReader with a plain-language rejection.
  */
-export function readImportFile(
-  file: File,
-  readText?: (f: File) => Promise<string>,
-): Promise<string> {
+export function readImportFile(file: File, readText?: (f: File) => Promise<string>): Promise<string> {
   if (readText) return readText(file);
   return new Promise((resolve, reject) => {
     try {
@@ -116,9 +105,7 @@ export function readImportFile(
 }
 
 /** parse + validate + migrate; errors are the exact array the view renders. */
-export function parseImportText(
-  text: string,
-): ({ ok: true } & Omit<ParseOk, "ok">) | { ok: false; errors: string[] } {
+export function parseImportText(text: string): ({ ok: true } & Omit<ParseOk, "ok">) | { ok: false; errors: string[] } {
   let json: unknown;
   try {
     json = JSON.parse(text);
@@ -230,7 +217,10 @@ export function useExportImport(options: { storage?: StorageProvider } = {}): Ex
         setCandidate({
           fileName: file.name,
           sourceText,
-          preview: { ...previewPlanFile(parsed.planFile, { fileName: file.name, importedFrom: parsed.migratedFrom }), profile: `age ${currentWorkspace.plan.profile.currentAge} → ${currentWorkspace.plan.profile.endAge} (ON)` },
+          preview: {
+            ...previewPlanFile(parsed.planFile, { fileName: file.name, importedFrom: parsed.migratedFrom }),
+            profile: `age ${currentWorkspace.plan.profile.currentAge} → ${currentWorkspace.plan.profile.endAge} (ON)`,
+          },
           workspace: currentWorkspace,
         });
       } catch (error) {
@@ -296,28 +286,31 @@ export function useExportImport(options: { storage?: StorageProvider } = {}): Ex
     }
   }, [busy, dispatch, provider, calendarYear]);
 
-  const startOver = useCallback(async (fresh: Workspace = createEmptyWorkspace()) => {
-    if (busy) return;
-    const resume = suspendAutosave(provider);
-    setBusy(true);
-    setErrors(null);
-    try {
-      const currentWorkspace = withCurrentAge(fresh, calendarYear);
-      await provider.runExclusive(async (p) => {
-        if (validateWorkspace(workspace).length === 0) await p.save(workspace);
-        await p.snapshot("start-fresh");
-        await p.save(currentWorkspace);
-      });
-      dispatch({ type: "workspace/loaded", workspace: currentWorkspace });
-      resume(currentWorkspace);
-      setNotice("Started fresh. The previous data remains available via restore.");
-    } catch (error) {
-      resume();
-      setErrors([error instanceof Error ? error.message : String(error)]);
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, dispatch, provider, workspace, calendarYear]);
+  const startOver = useCallback(
+    async (fresh: Workspace = createEmptyWorkspace()) => {
+      if (busy) return;
+      const resume = suspendAutosave(provider);
+      setBusy(true);
+      setErrors(null);
+      try {
+        const currentWorkspace = withCurrentAge(fresh, calendarYear);
+        await provider.runExclusive(async (p) => {
+          if (validateWorkspace(workspace).length === 0) await p.save(workspace);
+          await p.snapshot("start-fresh");
+          await p.save(currentWorkspace);
+        });
+        dispatch({ type: "workspace/loaded", workspace: currentWorkspace });
+        resume(currentWorkspace);
+        setNotice("Started fresh. The previous data remains available via restore.");
+      } catch (error) {
+        resume();
+        setErrors([error instanceof Error ? error.message : String(error)]);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [busy, dispatch, provider, workspace, calendarYear],
+  );
 
   const cancelPreview = useCallback(() => setCandidate(null), []);
   const dismissNotice = useCallback(() => setNotice(null), []);

@@ -26,13 +26,28 @@ import type { SimulationResult, YearResult } from "@retire-plan/engine";
 
 function renderView(workspace = makeWorkspace(), simulationRunner?: SimulationRunner) {
   return render(
-    <StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={simulationRunner}>
+    <StoreProvider
+      initialWorkspace={workspace}
+      initialBaseScenario={DEFAULT_SCENARIO_BASE}
+      simulationRunner={simulationRunner}
+    >
       <DashboardSection />
     </StoreProvider>,
   );
 }
 
-const CHART_TITLES = [/net worth/i, /income vs spending/i, /income sources/i, /tax by component/i, /contributions vs withdrawals/i, /account drawdown/i, /contribution room/i, /spending breakdown/i, /rrif vs rrsp withdrawals/i, /oas kept vs clawback/i];
+const CHART_TITLES = [
+  /net worth/i,
+  /income vs spending/i,
+  /income sources/i,
+  /tax by component/i,
+  /contributions vs withdrawals/i,
+  /account drawdown/i,
+  /contribution room/i,
+  /spending breakdown/i,
+  /rrif vs rrsp withdrawals/i,
+  /oas kept vs clawback/i,
+];
 
 describe("DashboardSection (integration: plan → run → charts)", () => {
   it("shows shared busy state and disables its standalone run control", () => {
@@ -78,7 +93,11 @@ describe("DashboardSection (integration: plan → run → charts)", () => {
 describe("legacy runs degrade honestly (no fabricated data)", () => {
   function renderDashboard(result: SimulationResult) {
     return render(
-      <StoreProvider initialWorkspace={makeWorkspace()} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={undefined}>
+      <StoreProvider
+        initialWorkspace={makeWorkspace()}
+        initialBaseScenario={DEFAULT_SCENARIO_BASE}
+        simulationRunner={undefined}
+      >
         <DashboardSection result={result} />
       </StoreProvider>,
     );
@@ -146,7 +165,8 @@ describe("Monte Carlo ensemble plumbing (production runner → charts)", () => {
     }
     // The ensemble percentiles at the final age ARE the terminal percentiles (same paths).
     const last = stats!.at(-1)!;
-    expect(last.netWorth.p10).toBeCloseTo(outcome.analysis!.percentileNetWorth.p10, 0);    expect(last.netWorth.p50).toBeCloseTo(outcome.analysis!.percentileNetWorth.p50, 0);
+    expect(last.netWorth.p10).toBeCloseTo(outcome.analysis!.percentileNetWorth.p10, 0);
+    expect(last.netWorth.p50).toBeCloseTo(outcome.analysis!.percentileNetWorth.p50, 0);
     expect(last.netWorth.p90).toBeCloseTo(outcome.analysis!.percentileNetWorth.p90, 0);
   });
 
@@ -164,10 +184,20 @@ describe("Monte Carlo ensemble plumbing (production runner → charts)", () => {
   });
 
   it("legacy MC analysis (no annual stats) shows honest rerun notes for both MC charts", async () => {
-    const result = runDeterministic(makeSamplePlan(), { id: "base", name: "Base", ...DEFAULT_SCENARIO_BASE, simMode: "deterministic" as const });
+    const result = runDeterministic(makeSamplePlan(), {
+      id: "base",
+      name: "Base",
+      ...DEFAULT_SCENARIO_BASE,
+      simMode: "deterministic" as const,
+    });
     const runner: SimulationRunner = async () => ({
       result,
-      analysis: { mode: "montecarlo", successRate: 0.9, percentileNetWorth: { p10: 100, p50: 200, p90: 300 }, representativeRun: 1 },
+      analysis: {
+        mode: "montecarlo",
+        successRate: 0.9,
+        percentileNetWorth: { p10: 100, p50: 200, p90: 300 },
+        representativeRun: 1,
+      },
     });
     renderView(makeWorkspace(), runner);
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
@@ -181,7 +211,10 @@ describe("Monte Carlo ensemble plumbing (production runner → charts)", () => {
 describe("new chart components (direct render)", () => {
   it("SpendingBreakdownChart: one band per item; tooltip shows items plus the authoritative total", () => {
     const series = {
-      items: [{ id: "e1", name: "Food" }, { id: "e2", name: "Travel" }],
+      items: [
+        { id: "e1", name: "Food" },
+        { id: "e2", name: "Travel" },
+      ],
       points: [
         { x: 60, total: 150.004, amounts: [100, 50] },
         { x: 61, total: 170, amounts: [110, 60] },
@@ -395,7 +428,7 @@ describe("individual charts render as SVG", () => {
       const marker = group.querySelector('line[data-series="Net worth"]')!;
       // The marker sits at the net-worth scale position, NOT at the owned-stack top.
       const debtVisual = group.querySelector('rect[data-series="Debt"]');
-      expect((debtVisual !== null) === (point.debt > 0)).toBe(true);
+      expect((debtVisual !== null) === point.debt > 0).toBe(true);
       expect(marker).toBeTruthy();
     }
   });
@@ -411,9 +444,7 @@ describe("individual charts render as SVG", () => {
     );
     expect(tax.container.querySelectorAll("path").length).toBeGreaterThanOrEqual(4);
 
-    const draw = render(
-      <DrawDownChart points={[{ x: 70, tfsa: 1, rrsp: 1, nonreg: 1, cash: 1 }]} />,
-    );
+    const draw = render(<DrawDownChart points={[{ x: 70, tfsa: 1, rrsp: 1, nonreg: 1, cash: 1 }]} />);
     expect(draw.container.querySelectorAll("path").length).toBeGreaterThanOrEqual(4);
   });
 
@@ -432,7 +463,8 @@ describe("individual charts render as SVG", () => {
     for (const path of bandPaths) {
       const d = path.getAttribute("d") ?? "";
       const series = path.getAttribute("data-series") ?? "";
-      if (series === "TFSA") expect(d).toContain(baseline); // bottom band owns the baseline
+      if (series === "TFSA")
+        expect(d).toContain(baseline); // bottom band owns the baseline
       else if (series === "RRSP" || series === "Cash accounts + reserve") {
         expect(d).not.toContain(`,${baseline}`); // upper bands stay on their lower boundary
       }
@@ -440,29 +472,41 @@ describe("individual charts render as SVG", () => {
   });
 
   it("IncomeSpendChart draws income and spending bands", () => {
-    const { container } = render(
-      <IncomeSpendChart points={[{ x: 45, income: 3, expenses: 2, shortfall: 0 }]} />,
-    );
+    const { container } = render(<IncomeSpendChart points={[{ x: 45, income: 3, expenses: 2, shortfall: 0 }]} />);
     expect(container.querySelectorAll("path, polyline").length).toBeGreaterThanOrEqual(2);
   });
 
   it("IncomeSourcesChart draws six source bands with cash interest as its own labeled series", () => {
     const { container } = render(
-      <IncomeSourcesChart points={[
-        { x: 60, employment: 40, other: 10, cashInterest: 5, cpp: 8, oas: 7, gis: 0 },
-        { x: 61, employment: 0, other: 10, cashInterest: 5, cpp: 8, oas: 7, gis: 2 },
-      ]} />,
+      <IncomeSourcesChart
+        points={[
+          { x: 60, employment: 40, other: 10, cashInterest: 5, cpp: 8, oas: 7, gis: 0 },
+          { x: 61, employment: 0, other: 10, cashInterest: 5, cpp: 8, oas: 7, gis: 2 },
+        ]}
+      />,
     );
-    const series = Array.from(container.querySelectorAll("path[data-series]")).map((p) => p.getAttribute("data-series"));
+    const series = Array.from(container.querySelectorAll("path[data-series]")).map((p) =>
+      p.getAttribute("data-series"),
+    );
     expect(series).toEqual(["Employment", "Other income", "Cash interest", "CPP", "OAS", "GIS"]);
   });
 
   it("AccountFlowsChart draws contributions above and withdrawals below zero; zero-flow ages draw no bars", () => {
     const { container } = render(
-      <AccountFlowsChart points={[
-        { x: 70, contributions: { tfsa: 2, rrsp: 0, nonreg: 0, cash: 0 }, withdrawals: { tfsa: 0, rrsp: 1, nonreg: 0, cash: 0 } },
-        { x: 71, contributions: { tfsa: 0, rrsp: 0, nonreg: 0, cash: 0 }, withdrawals: { tfsa: 0, rrsp: 0, nonreg: 0, cash: 0 } },
-      ]} />,
+      <AccountFlowsChart
+        points={[
+          {
+            x: 70,
+            contributions: { tfsa: 2, rrsp: 0, nonreg: 0, cash: 0 },
+            withdrawals: { tfsa: 0, rrsp: 1, nonreg: 0, cash: 0 },
+          },
+          {
+            x: 71,
+            contributions: { tfsa: 0, rrsp: 0, nonreg: 0, cash: 0 },
+            withdrawals: { tfsa: 0, rrsp: 0, nonreg: 0, cash: 0 },
+          },
+        ]}
+      />,
     );
     expect(container.querySelectorAll('rect[data-series="TFSA contributions"]').length).toBe(1);
     expect(container.querySelectorAll('rect[data-series="RRSP withdrawals"]').length).toBe(1);
@@ -473,15 +517,35 @@ describe("individual charts render as SVG", () => {
 
   it("AccountFlowsChart geometry: all four accounts nonzero render 8 non-overlapping segments with proportional heights", () => {
     const { container } = render(
-      <AccountFlowsChart points={[
-        { x: 70, contributions: { tfsa: 100, rrsp: 50, nonreg: 25, cash: 10 }, withdrawals: { tfsa: 40, rrsp: 30, nonreg: 20, cash: 10 } },
-      ]} />,
+      <AccountFlowsChart
+        points={[
+          {
+            x: 70,
+            contributions: { tfsa: 100, rrsp: 50, nonreg: 25, cash: 10 },
+            withdrawals: { tfsa: 40, rrsp: 30, nonreg: 20, cash: 10 },
+          },
+        ]}
+      />,
     );
-    const up = Array.from(container.querySelectorAll("g[data-bar-age] rect[data-series$='contributions']")) as SVGRectElement[];
-    const down = Array.from(container.querySelectorAll("g[data-bar-age] rect[data-series$='withdrawals']")) as SVGRectElement[];
+    const up = Array.from(
+      container.querySelectorAll("g[data-bar-age] rect[data-series$='contributions']"),
+    ) as SVGRectElement[];
+    const down = Array.from(
+      container.querySelectorAll("g[data-bar-age] rect[data-series$='withdrawals']"),
+    ) as SVGRectElement[];
     // Label→key mapping works: all 8 segments render (labels are not object keys).
-    expect(up.map((r) => r.getAttribute("data-series"))).toEqual(["TFSA contributions", "RRSP contributions", "Non-registered contributions", "Cash contributions"]);
-    expect(down.map((r) => r.getAttribute("data-series"))).toEqual(["TFSA withdrawals", "RRSP withdrawals", "Non-registered withdrawals", "Cash withdrawals"]);
+    expect(up.map((r) => r.getAttribute("data-series"))).toEqual([
+      "TFSA contributions",
+      "RRSP contributions",
+      "Non-registered contributions",
+      "Cash contributions",
+    ]);
+    expect(down.map((r) => r.getAttribute("data-series"))).toEqual([
+      "TFSA withdrawals",
+      "RRSP withdrawals",
+      "Non-registered withdrawals",
+      "Cash withdrawals",
+    ]);
     // Segments are actually drawn (the old label-as-key bug rendered zero-height bars).
     for (const rect of [...up, ...down]) expect(Number(rect.getAttribute("height"))).toBeGreaterThan(0);
     // Contributions heights proportional to 100/50/25/10 (reference: TFSA).
@@ -509,16 +573,30 @@ describe("individual charts render as SVG", () => {
 
   it("ContributionRoomChart draws the TFSA and RRSP room lines", () => {
     const { container } = render(
-      <ContributionRoomChart points={[{ x: 60, tfsaRoom: 6000, rrspRoom: 20000 }, { x: 61, tfsaRoom: 0, rrspRoom: 12000 }]} />,
+      <ContributionRoomChart
+        points={[
+          { x: 60, tfsaRoom: 6000, rrspRoom: 20000 },
+          { x: 61, tfsaRoom: 0, rrspRoom: 12000 },
+        ]}
+      />,
     );
-    const series = Array.from(container.querySelectorAll("polyline[data-series]")).map((p) => p.getAttribute("data-series"));
+    const series = Array.from(container.querySelectorAll("polyline[data-series]")).map((p) =>
+      p.getAttribute("data-series"),
+    );
     expect(series).toEqual(["TFSA room", "RRSP room"]);
   });
 
   it("empty and single-point charts degrade gracefully without NaN", () => {
     for (const [Chart, point] of [
       [IncomeSourcesChart, { x: 70, employment: 1, other: 1, cashInterest: 1, cpp: 1, oas: 1, gis: 1 }],
-      [AccountFlowsChart, { x: 70, contributions: { tfsa: 1, rrsp: 0, nonreg: 0, cash: 0 }, withdrawals: { tfsa: 0, rrsp: 0, nonreg: 0, cash: 0 } }],
+      [
+        AccountFlowsChart,
+        {
+          x: 70,
+          contributions: { tfsa: 1, rrsp: 0, nonreg: 0, cash: 0 },
+          withdrawals: { tfsa: 0, rrsp: 0, nonreg: 0, cash: 0 },
+        },
+      ],
       [ContributionRoomChart, { x: 70, tfsaRoom: 5, rrspRoom: 9 }],
     ] as const) {
       const empty = render(<Chart points={[]} />);

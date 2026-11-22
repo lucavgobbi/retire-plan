@@ -9,16 +9,31 @@ export function useStore() {
   if (!store) throw new Error("RetirePlan views require StoreProvider.");
   return store;
 }
-export function useWorkspace(): WorkspaceApi { return useStore(); }
-export function useRuns(): RunRecord[] { return useStore().runs; }
+export function useWorkspace(): WorkspaceApi {
+  return useStore();
+}
+export function useRuns(): RunRecord[] {
+  return useStore().runs;
+}
 export function useProjectionRun(activePlanId?: string | null, scenarioId?: string | null) {
   const store = useStore();
   const planId = activePlanId ?? store.workspace.meta?.id ?? "unsaved";
-  const selected = scenarioId === undefined ? store.runs.find(record => record.id === store.activeRunId && record.planId === planId) : undefined;
-  const selectedScenarioId = scenarioId === undefined ? selected?.scenarioId ?? null : scenarioId;
-  const run = selected ?? [...store.runs].reverse().find(record => record.planId === planId && record.scenarioId === selectedScenarioId) ?? null;
-  const delta = selectedScenarioId === null ? null : store.workspace.scenarios.find(item => item.id === selectedScenarioId) ?? null;
-  const stale = !!run?.inputFingerprint && run.inputFingerprint !== runFingerprint(store.workspace.plan, resolveScenario(delta, store.baseScenario));
+  const selected =
+    scenarioId === undefined
+      ? store.runs.find((record) => record.id === store.activeRunId && record.planId === planId)
+      : undefined;
+  const selectedScenarioId = scenarioId === undefined ? (selected?.scenarioId ?? null) : scenarioId;
+  const run =
+    selected ??
+    [...store.runs].reverse().find((record) => record.planId === planId && record.scenarioId === selectedScenarioId) ??
+    null;
+  const delta =
+    selectedScenarioId === null
+      ? null
+      : (store.workspace.scenarios.find((item) => item.id === selectedScenarioId) ?? null);
+  const stale =
+    !!run?.inputFingerprint &&
+    run.inputFingerprint !== runFingerprint(store.workspace.plan, resolveScenario(delta, store.baseScenario));
   return {
     run,
     stale,
@@ -26,7 +41,8 @@ export function useProjectionRun(activePlanId?: string | null, scenarioId?: stri
     runCancelled: store.runCancelled,
     cancelRun: store.cancelRun,
     runProjection: () => {
-      const delta = selectedScenarioId === null ? null : store.workspace.scenarios.find(item => item.id === selectedScenarioId);
+      const delta =
+        selectedScenarioId === null ? null : store.workspace.scenarios.find((item) => item.id === selectedScenarioId);
       if (selectedScenarioId !== null && !delta) return null;
       return store.runProjection(delta ?? null);
     },

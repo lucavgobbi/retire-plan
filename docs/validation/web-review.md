@@ -24,11 +24,11 @@ verification supersedes the earlier port 5174 responsive report below. No root
 overflow was hidden to obtain these results.
 
 | CSS viewport width | Plan client / page width | Projection client / page width | Uncontained overflowing elements |
-| --- | --- | --- | --- |
-| 320 | 320 / 320 | 320 / 320 | 0 |
-| 375 | 375 / 375 | 375 / 375 | 0 |
-| 768 | 768 / 768 | 768 / 768 | 0 |
-| 1280 | 1280 / 1280 | 1280 / 1280 | 0 |
+| ------------------ | ------------------------ | ------------------------------ | -------------------------------- |
+| 320                | 320 / 320                | 320 / 320                      | 0                                |
+| 375                | 375 / 375                | 375 / 375                      | 0                                |
+| 768                | 768 / 768                | 768 / 768                      | 0                                |
+| 1280               | 1280 / 1280              | 1280 / 1280                    | 0                                |
 
 All five main navigation labels fit within the viewport, wrapping into two rows
 at mobile widths. All six Plan section tabs also wrap on mobile. The sample-plan

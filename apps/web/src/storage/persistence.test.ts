@@ -13,11 +13,9 @@ const TICKS = [
 ];
 const nowAt = (i: number) => () => TICKS[i]!;
 
-const ws = (name: string, id = `${name}-plan`): Workspace =>
-  makeSampleWorkspace({ id, name, updatedAt: TICKS[0]! });
+const ws = (name: string, id = `${name}-plan`): Workspace => makeSampleWorkspace({ id, name, updatedAt: TICKS[0]! });
 
 /** Fresh provider + its seam, so tests can assert on RAW rows (no private poking). */
-type Harness = ReturnType<typeof buildHarness>;
 function buildHarness(options: Parameters<typeof createMemoryRowDb>[number] = {}) {
   const rowDb = createMemoryRowDb(options);
   return { rowDb, provider: createRowBackedStorageProvider(rowDb, { now: options.now ?? nowAt(0) }) };
@@ -148,9 +146,7 @@ describe("start-fresh writes a backup BEFORE clearing", () => {
 
     // The corrupt row content is preserved as a reachable backup:
     const backups = await rowDb.getBackupRows();
-    const hadCorrupt = backups.some(
-      (b) => (b.workspace as { half?: string }).half === "written",
-    );
+    const hadCorrupt = backups.some((b) => (b.workspace as { half?: string }).half === "written");
     expect(hadCorrupt).toBe(true);
     // restore() refuses to serve the corrupt snapshot — and it is the only one:
     const restored = await provider.restore();

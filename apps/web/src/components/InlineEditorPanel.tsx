@@ -31,8 +31,14 @@ export function InlineEditorPanel({
       <div className="inline-editor-heading">
         <h3>{title}</h3>
         <div className="inline-editor-actions">
-          {onRemove && <button type="button" className="plan-remove" onClick={onRemove}>Remove</button>}
-          <button type="button" aria-label="Close editor" onClick={close}>Close editor</button>
+          {onRemove && (
+            <button type="button" className="plan-remove" onClick={onRemove}>
+              Remove
+            </button>
+          )}
+          <button type="button" aria-label="Close editor" onClick={close}>
+            Close editor
+          </button>
         </div>
       </div>
       {children}

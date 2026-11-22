@@ -1,4 +1,14 @@
-import { createContext, useCallback, useEffect, useMemo, useReducer, useRef, useState, type Dispatch, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type Dispatch,
+  type ReactNode,
+} from "react";
 import { validatePlan, type AccountType } from "@retire-plan/engine";
 import type { Action } from "../domain/actions";
 import { createEmptyWorkspace, DEFAULT_SCENARIO_BASE } from "../domain/defaults";
@@ -37,7 +47,14 @@ export interface StoreProviderProps {
 }
 const makeRandomId = () => crypto.randomUUID();
 const isoNow = () => new Date().toISOString();
-export function StoreProvider({ children, initialWorkspace, initialBaseScenario, makeId = makeRandomId, now = isoNow, simulationRunner = runScenarioInWorker }: StoreProviderProps) {
+export function StoreProvider({
+  children,
+  initialWorkspace,
+  initialBaseScenario,
+  makeId = makeRandomId,
+  now = isoNow,
+  simulationRunner = runScenarioInWorker,
+}: StoreProviderProps) {
   const calendarYear = new Date(now()).getFullYear();
   const [state, rawDispatch] = useReducer(reducer, undefined, () => {
     const workspace = withCurrentAge(structuredClone(initialWorkspace ?? createEmptyWorkspace()), calendarYear);
@@ -63,32 +80,44 @@ export function StoreProvider({ children, initialWorkspace, initialBaseScenario,
     setRunCancelled(true);
     setRunError(null);
   }, [cancelCurrentRun]);
-  useEffect(() => () => {
-    cancelCurrentRun();
-  }, [cancelCurrentRun]);
-  const dispatch = useCallback<Dispatch<Action>>((action) => {
-    setRunCancelled(false);
-    if (action.type === "workspace/loaded") {
+  useEffect(
+    () => () => {
       cancelCurrentRun();
-      setIsRunning(false);
+    },
+    [cancelCurrentRun],
+  );
+  const dispatch = useCallback<Dispatch<Action>>(
+    (action) => {
       setRunCancelled(false);
-      rawDispatch({ ...action, workspace: withCurrentAge(action.workspace, calendarYear) });
-      setActiveRunId(null);
-      setRunError(null);
-      return;
-    }
-    if (action.type === "plan/setProfile") {
-      rawDispatch({ ...action, calendarYear });
-    } else rawDispatch(action);
-  }, [calendarYear, cancelCurrentRun]);
+      if (action.type === "workspace/loaded") {
+        cancelCurrentRun();
+        setIsRunning(false);
+        setRunCancelled(false);
+        rawDispatch({ ...action, workspace: withCurrentAge(action.workspace, calendarYear) });
+        setActiveRunId(null);
+        setRunError(null);
+        return;
+      }
+      if (action.type === "plan/setProfile") {
+        rawDispatch({ ...action, calendarYear });
+      } else rawDispatch(action);
+    },
+    [calendarYear, cancelCurrentRun],
+  );
   const validationErrors = useMemo(() => {
     const plan = state.workspace.plan;
     const errors = validatePlan(plan);
-    const ages = [plan.profile.birthYear, plan.profile.currentAge, plan.profile.endAge,
-      ...plan.incomes.flatMap(item => [item.startAge, item.endAge]),
-      ...plan.expenses.flatMap(item => [item.startAge, item.endAge]),
-      ...plan.assets.map(item => item.sellEvent?.age), ...plan.savingsPolicy.map(item => item.untilAge)];
-    if (ages.some(value => value !== undefined && (!Number.isInteger(value) || value <= 0))) errors.push("Years and ages must be positive whole numbers.");
+    const ages = [
+      plan.profile.birthYear,
+      plan.profile.currentAge,
+      plan.profile.endAge,
+      ...plan.incomes.flatMap((item) => [item.startAge, item.endAge]),
+      ...plan.expenses.flatMap((item) => [item.startAge, item.endAge]),
+      ...plan.assets.map((item) => item.sellEvent?.age),
+      ...plan.savingsPolicy.map((item) => item.untilAge),
+    ];
+    if (ages.some((value) => value !== undefined && (!Number.isInteger(value) || value <= 0)))
+      errors.push("Years and ages must be positive whole numbers.");
     function hasNonFinite(value: unknown): boolean {
       if (typeof value === "number") return !Number.isFinite(value);
       return !!value && typeof value === "object" && Object.values(value).some(hasNonFinite);
@@ -96,7 +125,10 @@ export function StoreProvider({ children, initialWorkspace, initialBaseScenario,
     if (hasNonFinite(plan)) errors.push("Plan amounts and rates must be finite numbers.");
     return errors;
   }, [state.workspace.plan]);
-  const setBaseScenario = useCallback((patch: Partial<ScenarioBase>) => dispatch({ type: "scenario/setBase", patch }), [dispatch]);
+  const setBaseScenario = useCallback(
+    (patch: Partial<ScenarioBase>) => dispatch({ type: "scenario/setBase", patch }),
+    [dispatch],
+  );
   const resetRuns = useCallback(() => {
     // Invalidate first: incrementing the sequence makes every in-flight completion
     // stale, and aborting terminates the worker computation. The reducer only
@@ -109,56 +141,109 @@ export function StoreProvider({ children, initialWorkspace, initialBaseScenario,
     setActiveRunId(null);
     dispatch({ type: "run/reset" });
   }, [cancelCurrentRun, dispatch]);
-  const runProjection = useCallback(async (delta: ScenarioDelta | null = null): Promise<RunRecord | null> => {
-    if (currentRun.current) return null;
-    const runSequence = ++sequence.current;
-    try {
-      if (validationErrors.length) throw new Error(validationErrors.join(" "));
-      const scenario = resolveScenario(delta, baseScenario);
-      if (delta && delta.basePlanId !== (state.workspace.meta?.id ?? "unsaved")) throw new Error("This scenario belongs to a different plan.");
-      if (!Number.isInteger(scenario.retirementAge) || scenario.retirementAge <= 0) throw new Error("Retirement age must be a positive whole number.");
-      if (!["equity", "bond", "cash"].every(key => Number.isFinite(scenario.returnAssumptions[key as keyof typeof scenario.returnAssumptions]))) throw new Error("Return assumptions require finite equity, bond, and cash numbers.");
-      if ((scenario.withdrawalOrder.length !== 3 && scenario.withdrawalOrder.length !== 4) ||
-        new Set(scenario.withdrawalOrder).size !== scenario.withdrawalOrder.length ||
-        !["tfsa", "nonreg", "rrsp"].every(type => scenario.withdrawalOrder.includes(type as AccountType)) ||
-        !scenario.withdrawalOrder.every(type => ["tfsa", "nonreg", "rrsp", "cash"].includes(type))) {
-        throw new Error("Choose each investment withdrawal account exactly once, with optional cash.");
-      }
-      // The valid requested target is now known. Persist it before starting work so
-      // Run buttons elsewhere (including saved-scenario cards) update the same
-      // workspace preference as the Projection selector.
-      dispatch({ type: "projection/setScenarioId", scenarioId: delta?.id ?? "" });
-      const plan = structuredClone(state.workspace.plan);
-      const controller = new AbortController();
-      currentRun.current = { sequence: runSequence, controller };
-      setIsRunning(true);
-      setRunCancelled(false);
-      setRunError(null);
-      const outcome = await simulationRunner(plan, scenario, controller.signal);
-      if (controller.signal.aborted || currentRun.current?.sequence !== runSequence || sequence.current !== runSequence) return null;
-      const record: RunRecord = deepFreeze({
-        id: makeId(), planId: state.workspace.meta?.id ?? "unsaved", scenarioId: delta?.id ?? null,
-        scenario, result: outcome.result, ...(outcome.analysis ? { analysis: outcome.analysis } : {}), createdAt: now(),
-        birthYear: plan.profile.birthYear,
-        inputFingerprint: runFingerprint(plan, scenario),
-      });
-      dispatch({ type: "run/store", record });
-      setActiveRunId(record.id);
-      setRunError(null);
-      setRunCancelled(false);
-      currentRun.current = null;
-      setIsRunning(false);
-      return record;
-    } catch (error) {
-      const isAbort = error instanceof Error && error.name === "AbortError";
-      if (sequence.current === runSequence) {
-        if (currentRun.current?.sequence === runSequence) currentRun.current = null;
+  const runProjection = useCallback(
+    async (delta: ScenarioDelta | null = null): Promise<RunRecord | null> => {
+      if (currentRun.current) return null;
+      const runSequence = ++sequence.current;
+      try {
+        if (validationErrors.length) throw new Error(validationErrors.join(" "));
+        const scenario = resolveScenario(delta, baseScenario);
+        if (delta && delta.basePlanId !== (state.workspace.meta?.id ?? "unsaved"))
+          throw new Error("This scenario belongs to a different plan.");
+        if (!Number.isInteger(scenario.retirementAge) || scenario.retirementAge <= 0)
+          throw new Error("Retirement age must be a positive whole number.");
+        if (
+          !["equity", "bond", "cash"].every((key) =>
+            Number.isFinite(scenario.returnAssumptions[key as keyof typeof scenario.returnAssumptions]),
+          )
+        )
+          throw new Error("Return assumptions require finite equity, bond, and cash numbers.");
+        if (
+          (scenario.withdrawalOrder.length !== 3 && scenario.withdrawalOrder.length !== 4) ||
+          new Set(scenario.withdrawalOrder).size !== scenario.withdrawalOrder.length ||
+          !["tfsa", "nonreg", "rrsp"].every((type) => scenario.withdrawalOrder.includes(type as AccountType)) ||
+          !scenario.withdrawalOrder.every((type) => ["tfsa", "nonreg", "rrsp", "cash"].includes(type))
+        ) {
+          throw new Error("Choose each investment withdrawal account exactly once, with optional cash.");
+        }
+        // The valid requested target is now known. Persist it before starting work so
+        // Run buttons elsewhere (including saved-scenario cards) update the same
+        // workspace preference as the Projection selector.
+        dispatch({ type: "projection/setScenarioId", scenarioId: delta?.id ?? "" });
+        const plan = structuredClone(state.workspace.plan);
+        const controller = new AbortController();
+        currentRun.current = { sequence: runSequence, controller };
+        setIsRunning(true);
+        setRunCancelled(false);
+        setRunError(null);
+        const outcome = await simulationRunner(plan, scenario, controller.signal);
+        if (
+          controller.signal.aborted ||
+          currentRun.current?.sequence !== runSequence ||
+          sequence.current !== runSequence
+        )
+          return null;
+        const record: RunRecord = deepFreeze({
+          id: makeId(),
+          planId: state.workspace.meta?.id ?? "unsaved",
+          scenarioId: delta?.id ?? null,
+          scenario,
+          result: outcome.result,
+          ...(outcome.analysis ? { analysis: outcome.analysis } : {}),
+          createdAt: now(),
+          birthYear: plan.profile.birthYear,
+          inputFingerprint: runFingerprint(plan, scenario),
+        });
+        dispatch({ type: "run/store", record });
+        setActiveRunId(record.id);
+        setRunError(null);
+        setRunCancelled(false);
+        currentRun.current = null;
         setIsRunning(false);
-        if (!isAbort) setRunError(error instanceof Error ? error.message : "The projection could not run.");
+        return record;
+      } catch (error) {
+        const isAbort = error instanceof Error && error.name === "AbortError";
+        if (sequence.current === runSequence) {
+          if (currentRun.current?.sequence === runSequence) currentRun.current = null;
+          setIsRunning(false);
+          if (!isAbort) setRunError(error instanceof Error ? error.message : "The projection could not run.");
+        }
+        return null;
       }
-      return null;
-    }
-  }, [state.workspace, baseScenario, validationErrors, makeId, now, dispatch, simulationRunner]);
-  const value = useMemo(() => ({ ...state, dispatch, baseScenario, setBaseScenario, validationErrors, runProjection, isRunning, runCancelled, cancelRun, resetRuns, runError, calendarYear, activeRunId }), [state, dispatch, baseScenario, setBaseScenario, validationErrors, runProjection, isRunning, runCancelled, cancelRun, resetRuns, runError, calendarYear, activeRunId]);
+    },
+    [state.workspace, baseScenario, validationErrors, makeId, now, dispatch, simulationRunner],
+  );
+  const value = useMemo(
+    () => ({
+      ...state,
+      dispatch,
+      baseScenario,
+      setBaseScenario,
+      validationErrors,
+      runProjection,
+      isRunning,
+      runCancelled,
+      cancelRun,
+      resetRuns,
+      runError,
+      calendarYear,
+      activeRunId,
+    }),
+    [
+      state,
+      dispatch,
+      baseScenario,
+      setBaseScenario,
+      validationErrors,
+      runProjection,
+      isRunning,
+      runCancelled,
+      cancelRun,
+      resetRuns,
+      runError,
+      calendarYear,
+      activeRunId,
+    ],
+  );
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

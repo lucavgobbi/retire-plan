@@ -73,9 +73,13 @@ describe("cash accounts — interest truthfulness", () => {
   it("principal withdrawal is untaxed; opening interest is credited before flows", () => {
     // Deficit 500 at age 45: interest accrues on the OPENING 1000 (=50, credited
     // to 1050) BEFORE the 500 draw — end balance 550, not 500 + 25.
-    const out = simulate(cashPlan((p) => {
-      p.expenses.push({ id: "e", annualAmount: 500, startAge: 45, endAge: 46, inflationRate: 0 });
-    }), detScenario(), detReturns(45, 46));
+    const out = simulate(
+      cashPlan((p) => {
+        p.expenses.push({ id: "e", annualAmount: 500, startAge: 45, endAge: 46, inflationRate: 0 });
+      }),
+      detScenario(),
+      detReturns(45, 46),
+    );
     const y1 = out.years[0]!;
     expect(y1.cashInterest).toBe(50);
     expect(y1.withdrawals.cash).toBe(500);
@@ -107,9 +111,13 @@ describe("cash accounts — interest truthfulness", () => {
 
   it("zero-interest cash accounts and legacy no-cash plans produce exact legacy result shapes", () => {
     // Zero-rate named cash account: no interest key, no cash flow keys, balance flat.
-    const out = simulate(cashPlan((p) => {
-      p.accounts[0]!.interestRate = undefined;
-    }), detScenario(), detReturns(45, 46));
+    const out = simulate(
+      cashPlan((p) => {
+        p.accounts[0]!.interestRate = undefined;
+      }),
+      detScenario(),
+      detReturns(45, 46),
+    );
     const y1 = out.years[0]!;
     expect("cashInterest" in y1).toBe(false);
     expect(y1.cashAccounts).toEqual([{ id: "cash-1", balance: 1000 }]); // named account still reported
@@ -119,9 +127,7 @@ describe("cash accounts — interest truthfulness", () => {
     // Legacy no-cash plan (makePlan-shaped): no optional cash fields anywhere.
     const legacy: Plan = {
       profile: { birthYear: 1981, currentAge: 45, province: "ON", endAge: 46 },
-      accounts: [
-        { id: "tfsa-1", type: "tfsa", balance: 1000, assetMix: { equity: 1, bond: 0, cash: 0 } },
-      ],
+      accounts: [{ id: "tfsa-1", type: "tfsa", balance: 1000, assetMix: { equity: 1, bond: 0, cash: 0 } }],
       assets: [],
       debts: [],
       incomes: [],
@@ -173,9 +179,13 @@ describe("cash accounts — deposits, withdrawals, allocation", () => {
       p.expenses.push({ id: "e", annualAmount: 2000, startAge: 45, endAge: 46, inflationRate: 0 });
     });
     // Explicit: cash LAST — tfsa covers the deficit, cash untouched.
-    const explicit = simulate(plan, detScenario({
-      withdrawalOrder: ["tfsa", "nonreg", "rrsp", "cash"],
-    }), detReturns(45, 46));
+    const explicit = simulate(
+      plan,
+      detScenario({
+        withdrawalOrder: ["tfsa", "nonreg", "rrsp", "cash"],
+      }),
+      detReturns(45, 46),
+    );
     const yExplicit = explicit.years[0]!;
     expect(yExplicit.withdrawals.tfsa).toBe(2000);
     expect(yExplicit.withdrawals.cash).toBeUndefined();
@@ -229,20 +239,39 @@ describe("cash accounts — GIS treatment", () => {
 
 describe("cash accounts — validation", () => {
   it("rejects assetMix and negative interestRate on cash accounts", () => {
-    expect(() => simulate(cashPlan((p) => {
-      (p.accounts[0] as { assetMix?: unknown }).assetMix = { equity: 1, bond: 0, cash: 0 };
-    }), detScenario(), detReturns(45, 46))).toThrow(/cash accounts have no assetMix/);
-    expect(() => simulate(cashPlan((p) => {
-      p.accounts[0]!.interestRate = -0.01;
-    }), detScenario(), detReturns(45, 46))).toThrow(/interestRate/);
+    expect(() =>
+      simulate(
+        cashPlan((p) => {
+          (p.accounts[0] as { assetMix?: unknown }).assetMix = { equity: 1, bond: 0, cash: 0 };
+        }),
+        detScenario(),
+        detReturns(45, 46),
+      ),
+    ).toThrow(/cash accounts have no assetMix/);
+    expect(() =>
+      simulate(
+        cashPlan((p) => {
+          p.accounts[0]!.interestRate = -0.01;
+        }),
+        detScenario(),
+        detReturns(45, 46),
+      ),
+    ).toThrow(/interestRate/);
   });
 
   it("enforces the withdrawal-order contract: core types exactly once, cash at most once", () => {
-    expect(() => simulate(cashPlan(), detScenario({ withdrawalOrder: ["tfsa", "rrsp"] }), detReturns(45, 46)))
-      .toThrow(/"nonreg" exactly once/);
-    expect(() => simulate(cashPlan(), detScenario({
-      withdrawalOrder: ["cash", "tfsa", "nonreg", "rrsp", "cash"],
-    }), detReturns(45, 46))).toThrow(/"cash" at most once/);
+    expect(() => simulate(cashPlan(), detScenario({ withdrawalOrder: ["tfsa", "rrsp"] }), detReturns(45, 46))).toThrow(
+      /"nonreg" exactly once/,
+    );
+    expect(() =>
+      simulate(
+        cashPlan(),
+        detScenario({
+          withdrawalOrder: ["cash", "tfsa", "nonreg", "rrsp", "cash"],
+        }),
+        detReturns(45, 46),
+      ),
+    ).toThrow(/"cash" at most once/);
   });
 });
 

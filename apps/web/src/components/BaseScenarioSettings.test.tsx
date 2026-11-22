@@ -9,7 +9,12 @@ function Probe() {
 }
 
 function renderSettings(base: ScenarioBase) {
-  return render(<StoreProvider initialBaseScenario={base}><BaseScenarioSettings /><Probe /></StoreProvider>);
+  return render(
+    <StoreProvider initialBaseScenario={base}>
+      <BaseScenarioSettings />
+      <Probe />
+    </StoreProvider>,
+  );
 }
 
 function storedBase() {
@@ -18,7 +23,10 @@ function storedBase() {
 
 describe("base projection return inputs", () => {
   it("removes binary display noise while preserving untouched stored precision", () => {
-    const base: ScenarioBase = { ...DEFAULT_SCENARIO_BASE, returnAssumptions: { equity: 0.07, bond: 0.123456789012345, cash: 0 } };
+    const base: ScenarioBase = {
+      ...DEFAULT_SCENARIO_BASE,
+      returnAssumptions: { equity: 0.07, bond: 0.123456789012345, cash: 0 },
+    };
     renderSettings(base);
     fireEvent.click(screen.getByText("Return assumptions"));
     expect((screen.getByLabelText("Base equity return (%)") as HTMLInputElement).value).toBe("7");
@@ -32,7 +40,10 @@ describe("base projection return inputs", () => {
   });
 
   it("reverts retired settings to the stored value and keeps invalid drafts unapplied", () => {
-    const base: ScenarioBase = { ...DEFAULT_SCENARIO_BASE, returnAssumptions: { equity: 0.07, bond: 0.05, cash: 0.02 } };
+    const base: ScenarioBase = {
+      ...DEFAULT_SCENARIO_BASE,
+      returnAssumptions: { equity: 0.07, bond: 0.05, cash: 0.02 },
+    };
     renderSettings(base);
     // Clearing the retirement age is an invalid draft: stored settings survive.
     fireEvent.change(screen.getByLabelText("Base retirement age"), { target: { value: "" } });
@@ -43,7 +54,11 @@ describe("base projection return inputs", () => {
     fireEvent.change(screen.getByLabelText("Base retirement age"), { target: { value: "61" } });
     fireEvent.click(screen.getByText("Account withdrawal order"));
     const first = screen.getAllByLabelText(/Base withdrawal priority/)[0]!;
-    expect(within(first).getAllByRole("option").map(option => option.textContent)).toEqual(["TFSA", "Non-registered", "RRSP/RRIF"]);
+    expect(
+      within(first)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual(["TFSA", "Non-registered", "RRSP/RRIF"]);
     fireEvent.change(first, { target: { value: "rrsp" } });
     expect(storedBase().withdrawalOrder).toEqual(["rrsp", "nonreg", "tfsa"]);
     expect(screen.queryByRole("alert")).toBeNull();
@@ -68,7 +83,9 @@ describe("base projection return inputs", () => {
     fireEvent.change(screen.getByLabelText("Base simulation mode"), { target: { value: "historical" } });
     expect(storedBase().simMode).toBe("historical");
     expect(storedBase().historicalConfig).toEqual({ startYear: 1872 });
-    expect(document.body.textContent).toContain("USA annual nominal USD returns · non-Canadian proxy · no FX conversion");
+    expect(document.body.textContent).toContain(
+      "USA annual nominal USD returns · non-Canadian proxy · no FX conversion",
+    );
     expect(screen.queryByLabelText("Base equity return (%)")).toBeNull();
     fireEvent.change(screen.getByLabelText("Base historical start year"), { target: { value: "1950" } });
     expect(storedBase().historicalConfig).toEqual({ startYear: 1950 });
@@ -119,7 +136,10 @@ describe("base projection return inputs", () => {
   });
 
   it("groups base controls into clear sections and keeps hidden invalid return fields discoverable", async () => {
-    const invalid: ScenarioBase = { ...DEFAULT_SCENARIO_BASE, returnAssumptions: { equity: 0.07, bond: 0.05, cash: 0.02 } };
+    const invalid: ScenarioBase = {
+      ...DEFAULT_SCENARIO_BASE,
+      returnAssumptions: { equity: 0.07, bond: 0.05, cash: 0.02 },
+    };
     renderSettings(invalid);
     for (const name of ["Basics", "Benefits", "Payroll", "Simulation", "Withdrawals"]) {
       expect(screen.getByRole("region", { name })).toBeTruthy();

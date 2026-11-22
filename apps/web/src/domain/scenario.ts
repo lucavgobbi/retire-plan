@@ -10,13 +10,17 @@ export function resolveScenario(delta: ScenarioDelta | null, base: ScenarioBase)
     name: delta?.name ?? "Base scenario",
     simMode: delta?.simMode ?? base.simMode ?? "deterministic",
     retirementAge: overrides?.retirementAge ?? base.retirementAge ?? DEFAULT_SCENARIO_BASE.retirementAge,
-    returnAssumptions: { ...(overrides?.returnAssumptions ?? base.returnAssumptions ?? DEFAULT_SCENARIO_BASE.returnAssumptions) },
+    returnAssumptions: {
+      ...(overrides?.returnAssumptions ?? base.returnAssumptions ?? DEFAULT_SCENARIO_BASE.returnAssumptions),
+    },
     withdrawalOrder: [...(overrides?.withdrawalOrder ?? base.withdrawalOrder ?? DEFAULT_SCENARIO_BASE.withdrawalOrder)],
     benefits: structuredClone(delta?.benefits ?? base.benefits ?? DEFAULT_SCENARIO_BASE.benefits!),
     withdrawalStrategy: delta?.withdrawalStrategy ?? base.withdrawalStrategy ?? "manual",
     // Payroll stays optional: absent base and delta resolve to legacy (no deductions).
     ...((delta?.payroll ?? base.payroll) ? { payroll: structuredClone(delta?.payroll ?? base.payroll) } : {}),
     ...((delta?.mcConfig ?? base.mcConfig) ? { mcConfig: structuredClone(delta?.mcConfig ?? base.mcConfig) } : {}),
-    ...((delta?.historicalConfig ?? base.historicalConfig) ? { historicalConfig: structuredClone(delta?.historicalConfig ?? base.historicalConfig) } : {}),
+    ...((delta?.historicalConfig ?? base.historicalConfig)
+      ? { historicalConfig: structuredClone(delta?.historicalConfig ?? base.historicalConfig) }
+      : {}),
   };
 }

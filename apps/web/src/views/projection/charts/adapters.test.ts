@@ -74,7 +74,11 @@ describe("chart adapters", () => {
 
   it("incomeSpendSeries carries income, expenses and shortfall bands", () => {
     const [p] = incomeSpendSeries([
-      year(45, { income: { employment: 90_000, cpp: 0, oas: 0, gis: 0, other: 0 }, expenses: 50_000, shortfall: 1_000 }),
+      year(45, {
+        income: { employment: 90_000, cpp: 0, oas: 0, gis: 0, other: 0 },
+        expenses: 50_000,
+        shortfall: 1_000,
+      }),
     ]);
     expect(p).toEqual({ x: 45, income: 90_000, expenses: 50_000, shortfall: 1_000 });
   });
@@ -116,7 +120,9 @@ describe("chart adapters", () => {
   });
 
   it("incomeSourcesSeries keeps cash interest its own top-level source, never merged into income.other", () => {
-    const [p] = incomeSourcesSeries([year(66, { income: { employment: 10, cpp: 20, oas: 30, gis: 5, other: 7 }, cashInterest: 3 })]);
+    const [p] = incomeSourcesSeries([
+      year(66, { income: { employment: 10, cpp: 20, oas: 30, gis: 5, other: 7 }, cashInterest: 3 }),
+    ]);
     expect(p).toEqual({ x: 66, employment: 10, other: 7, cashInterest: 3, cpp: 20, oas: 30, gis: 5 });
     // Legacy runs without the optional cashInterest field normalize to 0.
     const [legacy] = incomeSourcesSeries([year(67, { income: { employment: 1, cpp: 0, oas: 0, gis: 0, other: 2 } })]);
@@ -124,10 +130,12 @@ describe("chart adapters", () => {
   });
 
   it("accountFlowsSeries carries contribution/withdrawal magnitudes per account; optional cash fields normalize to 0", () => {
-    const [p] = accountFlowsSeries([year(70, {
-      contributions: { tfsa: 7, rrsp: 5, nonreg: 3 },
-      withdrawals: { tfsa: 11, rrsp: 13, nonreg: 17 },
-    })]);
+    const [p] = accountFlowsSeries([
+      year(70, {
+        contributions: { tfsa: 7, rrsp: 5, nonreg: 3 },
+        withdrawals: { tfsa: 11, rrsp: 13, nonreg: 17 },
+      }),
+    ]);
     expect(p!.contributions).toEqual({ tfsa: 7, rrsp: 5, nonreg: 3, cash: 0 });
     expect(p!.withdrawals).toEqual({ tfsa: 11, rrsp: 13, nonreg: 17, cash: 0 });
   });
@@ -141,11 +149,26 @@ describe("chart adapters", () => {
 describe("expenseBreakdownSeries", () => {
   it("maps per-item amounts exactly, items in first-seen (plan) order with stable names", () => {
     const series = expenseBreakdownSeries([
-      year(60, { expenseBreakdown: [{ id: "e1", name: "Food", amount: 100 }, { id: "e2", amount: 50 }], expenses: 150 }),
-      year(61, { expenseBreakdown: [{ id: "e1", name: "Food", amount: 110 }, { id: "e2", amount: 60 }], expenses: 170 }),
+      year(60, {
+        expenseBreakdown: [
+          { id: "e1", name: "Food", amount: 100 },
+          { id: "e2", amount: 50 },
+        ],
+        expenses: 150,
+      }),
+      year(61, {
+        expenseBreakdown: [
+          { id: "e1", name: "Food", amount: 110 },
+          { id: "e2", amount: 60 },
+        ],
+        expenses: 170,
+      }),
     ]);
     expect(series).not.toBeNull();
-    expect(series!.items).toEqual([{ id: "e1", name: "Food" }, { id: "e2", name: "e2" }]); // unnamed → id as label
+    expect(series!.items).toEqual([
+      { id: "e1", name: "Food" },
+      { id: "e2", name: "e2" },
+    ]); // unnamed → id as label
     expect(series!.points[0]!.amounts).toEqual([100, 50]);
     expect(series!.points[1]!.amounts).toEqual([110, 60]);
     expect(series!.points[0]!.total).toBe(150); // authoritative engine total
@@ -154,7 +177,13 @@ describe("expenseBreakdownSeries", () => {
   it("an item present only in later years contributes 0 before it starts (never fabricated)", () => {
     const series = expenseBreakdownSeries([
       year(60, { expenseBreakdown: [{ id: "e1", name: "Food", amount: 100 }], expenses: 100 }),
-      year(61, { expenseBreakdown: [{ id: "e1", name: "Food", amount: 100 }, { id: "travel", name: "Travel", amount: 300 }], expenses: 400 }),
+      year(61, {
+        expenseBreakdown: [
+          { id: "e1", name: "Food", amount: 100 },
+          { id: "travel", name: "Travel", amount: 300 },
+        ],
+        expenses: 400,
+      }),
     ]);
     expect(series!.points[0]!.amounts).toEqual([100, 0]);
     expect(series!.points[1]!.amounts).toEqual([100, 300]);
@@ -162,10 +191,12 @@ describe("expenseBreakdownSeries", () => {
 
   it("returns null when ANY year lacks the breakdown (legacy runs) — no fake split", () => {
     expect(expenseBreakdownSeries([])).toBeNull();
-    expect(expenseBreakdownSeries([
-      year(60, { expenseBreakdown: [{ id: "a", amount: 1 }], expenses: 1 }),
-      year(61, {}), // legacy year without per-item capture
-    ])).toBeNull();
+    expect(
+      expenseBreakdownSeries([
+        year(60, { expenseBreakdown: [{ id: "a", amount: 1 }], expenses: 1 }),
+        year(61, {}), // legacy year without per-item capture
+      ]),
+    ).toBeNull();
   });
 
   it("a recorded-but-EMPTY breakdown is a real empty series (fresh run, no expenses) — never a legacy null", () => {
@@ -199,8 +230,13 @@ describe("rrifWithdrawalSeries", () => {
 
   it("an EXPLICIT 0 minimum is captured fresh data (pre-71 / no-RRSP run), not a legacy gap", () => {
     // Fresh run, RRIF minimums not yet active: the engine records 0 to identify fresh data.
-    expect(rrifWithdrawalSeries([year(60, { rrifMinimumWithdrawal: 0, withdrawals: { tfsa: 0, rrsp: 0, nonreg: 0 } })])[0]!.minimum).toBe(0);
-    expect(runCapturesRrifMinimum([year(60, { rrifMinimumWithdrawal: 0 }), year(61, { rrifMinimumWithdrawal: 0 })])).toBe(true);
+    expect(
+      rrifWithdrawalSeries([year(60, { rrifMinimumWithdrawal: 0, withdrawals: { tfsa: 0, rrsp: 0, nonreg: 0 } })])[0]!
+        .minimum,
+    ).toBe(0);
+    expect(
+      runCapturesRrifMinimum([year(60, { rrifMinimumWithdrawal: 0 }), year(61, { rrifMinimumWithdrawal: 0 })]),
+    ).toBe(true);
     // Genuine legacy capture: the field is missing entirely.
     expect(runCapturesRrifMinimum([year(60, {}), year(61, {})])).toBe(false);
   });
@@ -208,10 +244,12 @@ describe("rrifWithdrawalSeries", () => {
 
 describe("oasKeptSeries", () => {
   it("kept + clawback = gross exactly (the engine caps the clawback at the OAS received)", () => {
-    const [p] = oasKeptSeries([year(70, {
-      income: { employment: 0, cpp: 0, oas: 750, gis: 0, other: 0 },
-      tax: { federal: 0, provincial: 0, surtax: 0, oasClawback: 212.4, total: 0, marginalRate: 0 },
-    })]);
+    const [p] = oasKeptSeries([
+      year(70, {
+        income: { employment: 0, cpp: 0, oas: 750, gis: 0, other: 0 },
+        tax: { federal: 0, provincial: 0, surtax: 0, oasClawback: 212.4, total: 0, marginalRate: 0 },
+      }),
+    ]);
     expect(p!.gross).toBe(750);
     expect(p!.clawback).toBe(212.4);
     expect(p!.kept).toBeCloseTo(537.6);

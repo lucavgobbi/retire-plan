@@ -5,12 +5,28 @@ import { AssumptionsView } from "./AssumptionsView";
 
 /** The registered engine details remain present even though their prose is folded. */
 const PINNED_IDS = [
-  "mortgage-rate-convention", "negative-amortization", "tax-indexation-top-brackets", "oas-recovery-cap",
-  "plan-assets", "gis-employment-exemption", "projection-year-tax-indexation", "rrif-prescribed-factors",
-  "rrsp-room-in-year", "rrif-minimum-tax", "deficit-gross-up", "final-mortgage-year",
-  "unmatched-policy-steps", "employer-rrsp-match", "gis-sequencing", "projection-cash-reserve",
-  "nonreg-acb", "capital-losses", "nonreg-draw-gains-tax", "mortgage-prepay-step",
-  "investment-return-floor", "realized-gains-gis-income",
+  "mortgage-rate-convention",
+  "negative-amortization",
+  "tax-indexation-top-brackets",
+  "oas-recovery-cap",
+  "plan-assets",
+  "gis-employment-exemption",
+  "projection-year-tax-indexation",
+  "rrif-prescribed-factors",
+  "rrsp-room-in-year",
+  "rrif-minimum-tax",
+  "deficit-gross-up",
+  "final-mortgage-year",
+  "unmatched-policy-steps",
+  "employer-rrsp-match",
+  "gis-sequencing",
+  "projection-cash-reserve",
+  "nonreg-acb",
+  "capital-losses",
+  "nonreg-draw-gains-tax",
+  "mortgage-prepay-step",
+  "investment-return-floor",
+  "realized-gains-gis-income",
 ];
 
 describe("assumptions registry", () => {
@@ -32,7 +48,9 @@ describe("AssumptionsView", () => {
     expect(screen.getByText(/historical mode uses non-canadian u\.s\. returns/i)).toBeTruthy();
     expect(screen.getByText(/a mandatory rrif minimum may exceed spending needs/i)).toBeTruthy();
 
-    const renderedIds = [...container.querySelectorAll<HTMLElement>("[data-assumption-id]")].map((node) => node.dataset.assumptionId);
+    const renderedIds = [...container.querySelectorAll<HTMLElement>("[data-assumption-id]")].map(
+      (node) => node.dataset.assumptionId,
+    );
     expect(renderedIds.sort()).toEqual([...PINNED_IDS].sort());
     expect(new Set(renderedIds).size).toBe(PINNED_IDS.length);
     expect(screen.queryByText(/exact — official formulas/i)).toBeNull();
@@ -67,7 +85,9 @@ describe("AssumptionsView", () => {
     fireEvent.click(screen.getByText(/historical data source and licensing/i));
     const details = screen.getByText(/jst macrohistory database source and documentation/i).closest("details");
     expect(details).toBeTruthy();
-    expect(within(details as HTMLElement).getByText(/no cad\/usd conversion or currency-return effects are modeled/i)).toBeTruthy();
+    expect(
+      within(details as HTMLElement).getByText(/no cad\/usd conversion or currency-return effects are modeled/i),
+    ).toBeTruthy();
     expect(within(details as HTMLElement).getByText(/taxes and benefits are not historical replays/i)).toBeTruthy();
     expect(within(details as HTMLElement).getByText(/noncommercial/i)).toBeTruthy();
     expect(within(details as HTMLElement).getByText(/windows cannot reach the present/i)).toBeTruthy();

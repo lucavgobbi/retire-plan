@@ -9,10 +9,12 @@ const observations: HistoricalReturnObservation[] = [
 
 describe("buildHistoricalReturns", () => {
   it("maps observed years to consecutive ages without changing historical returns", () => {
-    expect(buildHistoricalReturns(observations, 2001, 65, 66)).toEqual({ years: [
-      { age: 65, equity: 0.08, bond: -0.02, cash: 0.03 },
-      { age: 66, equity: 0.12, bond: 0.06, cash: 0.02 },
-    ] });
+    expect(buildHistoricalReturns(observations, 2001, 65, 66)).toEqual({
+      years: [
+        { age: 65, equity: 0.08, bond: -0.02, cash: 0.03 },
+        { age: 66, equity: 0.12, bond: 0.06, cash: 0.02 },
+      ],
+    });
   });
   it("rejects incomplete, duplicate, malformed, and impossible windows", () => {
     expect(() => buildHistoricalReturns(observations, 2002, 65, 66)).toThrow(/no observation for 2003/);

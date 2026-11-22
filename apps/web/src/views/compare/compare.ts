@@ -50,7 +50,11 @@ export function computeComparison(runs: RunRecord[], baselineId: string | null):
       withdrawalStrategy: scenario.withdrawalStrategy ?? "manual",
       benefits: (() => {
         const benefits = scenario.benefits ?? { cpp: true, oas: true, gis: true };
-        return [benefits.cpp && "CPP", benefits.oas && "OAS", benefits.oas && benefits.gis && "GIS"].filter(Boolean).join(", ") || "None";
+        return (
+          [benefits.cpp && "CPP", benefits.oas && "OAS", benefits.oas && benefits.gis && "GIS"]
+            .filter(Boolean)
+            .join(", ") || "None"
+        );
       })(),
       netWorthAtAges: netWorthSeries(run.result.years),
       monteCarlo: run.analysis,

@@ -6,7 +6,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { StoreProvider, useStore } from "../store/api";
 import { useAutosave } from "../storage/useAutosave";
 import { useExportImport } from "./planFileUi";
-import { createMemoryStorageProvider, createMemoryRowDb } from "../storage/memory";
+import { createMemoryRowDb } from "../storage/memory";
 import { createRowBackedStorageProvider } from "../storage/core";
 import { workspaceToText } from "../storage/exportImport";
 import { makeSampleWorkspace } from "../data/samplePlan";
@@ -136,31 +136,53 @@ it("drains an in-flight autosave and cancels timers throughout an import", async
       writes.push(name);
       if (name === "Original" && !heldOld) {
         heldOld = true;
-        await new Promise<void>((resolve) => { releaseOld = resolve; });
+        await new Promise<void>((resolve) => {
+          releaseOld = resolve;
+        });
       }
-      if (name === "Imported") await new Promise<void>((resolve) => { releaseImported = resolve; });
+      if (name === "Imported")
+        await new Promise<void>((resolve) => {
+          releaseImported = resolve;
+        });
       await put(row);
     };
     const provider = createRowBackedStorageProvider(backend);
-    const hook = renderHook(() => {
-      const store = useStore();
-      const autosave = useAutosave(store.workspace, { storage: provider, delayMs: 10 });
-      return { files: useExportImport({ storage: provider }), workspace: store.workspace, autosave };
-    }, { wrapper: ({ children }) => <StoreProvider initialWorkspace={wsA}>{children}</StoreProvider> });
-    await act(async () => { await vi.advanceTimersByTimeAsync(10); });
+    const hook = renderHook(
+      () => {
+        const store = useStore();
+        const autosave = useAutosave(store.workspace, { storage: provider, delayMs: 10 });
+        return { files: useExportImport({ storage: provider }), workspace: store.workspace, autosave };
+      },
+      { wrapper: ({ children }) => <StoreProvider initialWorkspace={wsA}>{children}</StoreProvider> },
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
     expect(writes).toEqual(["Original"]);
     await act(async () => {
       await hook.result.current.files.importFile(new File([""], "import.json"), async () => fileText);
     });
     let replacing: Promise<void> | undefined;
-    act(() => { replacing = hook.result.current.files.confirmReplace(); });
-    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+    act(() => {
+      replacing = hook.result.current.files.confirmReplace();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
     expect(writes).toEqual(["Original"]);
-    await act(async () => { releaseOld!(); await vi.advanceTimersByTimeAsync(100); });
+    await act(async () => {
+      releaseOld!();
+      await vi.advanceTimersByTimeAsync(100);
+    });
     expect(writes).toEqual(["Original", "Original", "Imported"]);
     expect(hook.result.current.workspace.meta?.name).toBe("Original"); // commit first
-    await act(async () => { releaseImported!(); await replacing; });
-    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+    await act(async () => {
+      releaseImported!();
+      await replacing;
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
     expect(hook.result.current.workspace.meta?.name).toBe("Imported");
     expect(hook.result.current.autosave.status).toBe("saved");
     const loaded = await provider.load();
@@ -168,7 +190,9 @@ it("drains an in-flight autosave and cancels timers throughout an import", async
     expect(loaded.workspace.meta?.name).toBe("Imported");
     expect(writes).toEqual(["Original", "Original", "Imported"]);
     hook.unmount();
-  } finally { vi.useRealTimers(); }
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it("failed import persistence preserves the live workspace and exposes an error", async () => {
@@ -183,8 +207,12 @@ it("failed import persistence preserves the live workspace and exposes an error"
   const hook = renderHook(() => ({ files: useExportImport({ storage: provider }), workspace: useStore().workspace }), {
     wrapper: ({ children }) => <StoreProvider initialWorkspace={wsA}>{children}</StoreProvider>,
   });
-  await act(async () => { await hook.result.current.files.importFile(new File([""], "plan.json"), async () => fileText); });
-  await act(async () => { await hook.result.current.files.confirmReplace(); });
+  await act(async () => {
+    await hook.result.current.files.importFile(new File([""], "plan.json"), async () => fileText);
+  });
+  await act(async () => {
+    await hook.result.current.files.confirmReplace();
+  });
   expect(hook.result.current.files.errors).toEqual(["Disk full"]);
   expect(hook.result.current.workspace.meta?.name).toBe("Original");
   expect(hook.result.current.files.candidate).not.toBeNull();

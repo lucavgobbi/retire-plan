@@ -18,7 +18,8 @@ export function IncomeSpendChart({ points }: { points: Point[] }) {
   const firstX = xs[0];
   const lastX = xs[xs.length - 1];
   const it = useChartInteraction(xs, firstX !== undefined && lastX !== undefined ? [firstX, lastX] : [0, 0]);
-  if (xs.length === 0 || firstX === undefined || lastX === undefined) return <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="No data" role="img" />;
+  if (xs.length === 0 || firstX === undefined || lastX === undefined)
+    return <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="No data" role="img" />;
   const xDomain: [number, number] = [firstX, lastX];
   const yDomain = domainOf(points.flatMap((p) => [p.income, p.expenses, p.shortfall]));
   const yTicks = ticks(yDomain[0], yDomain[1]);
@@ -39,53 +40,74 @@ export function IncomeSpendChart({ points }: { points: Point[] }) {
 
   return (
     <>
-    <svg className="financial-chart chart-interactive" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="Total annual income against spending at each age" role="img" {...it.svgProps}>
-      <title>Income vs spending over age</title>
-      <desc>Total annual income line with a spending band; shortfall ages are visible where income falls short.</desc>
-      {yTicks.map((t) => (
-        <g key={t}>
-          <line x1={PAD.left} x2={W - PAD.right} y1={yScale(t, yDomain)} y2={yScale(t, yDomain)} className="chart-gridline" />
-          <text x={PAD.left - 6} y={yScale(t, yDomain) + 3} textAnchor="end" className="chart-tick">
-            {fmtTick(t)}
+      <svg
+        className="financial-chart chart-interactive"
+        width="100%"
+        viewBox={`0 0 ${W} ${H}`}
+        aria-label="Total annual income against spending at each age"
+        role="img"
+        {...it.svgProps}
+      >
+        <title>Income vs spending over age</title>
+        <desc>Total annual income line with a spending band; shortfall ages are visible where income falls short.</desc>
+        {yTicks.map((t) => (
+          <g key={t}>
+            <line
+              x1={PAD.left}
+              x2={W - PAD.right}
+              y1={yScale(t, yDomain)}
+              y2={yScale(t, yDomain)}
+              className="chart-gridline"
+            />
+            <text x={PAD.left - 6} y={yScale(t, yDomain) + 3} textAnchor="end" className="chart-tick">
+              {fmtTick(t)}
+            </text>
+          </g>
+        ))}
+        {ticks(xDomain[0], xDomain[1]).map((t) => (
+          <text key={t} x={xScale(t, xDomain)} y={H - 6} textAnchor="middle" className="chart-tick">
+            {Math.round(t)}
           </text>
-        </g>
-      ))}
-      {ticks(xDomain[0], xDomain[1]).map((t) => (
-        <text key={t} x={xScale(t, xDomain)} y={H - 6} textAnchor="middle" className="chart-tick">
-          {Math.round(t)}
-        </text>
-      ))}
-      <path d={bandPath} fill={PALETTE.color3} fillOpacity="0.25" stroke={PALETTE.color3} strokeDasharray="4 3" />
-      <polyline points={incomeLine} fill="none" stroke={PALETTE.color1} strokeWidth="2" />
-      {it.active !== null && (() => {
-        const p = points[it.active]!;
-        const cx = xScale(p.x, xDomain);
-        return (
-          <>
-            <ChartCrosshair x={cx} />
-            <ChartMarkers coords={[
-              ...(Number.isFinite(p.income) ? [{ cx, cy: yScale(p.income, yDomain), color: PALETTE.color1 }] : []),
-              ...(Number.isFinite(p.expenses) ? [{ cx, cy: yScale(p.expenses, yDomain), color: PALETTE.color3 }] : []),
-            ]} />
-          </>
-        );
-      })()}
-    </svg>
-    {it.active !== null && (() => {
-      const p = points[it.active]!;
-      return (
-        <ChartTooltip
-          age={p.x}
-          fraction={xScale(p.x, xDomain) / W}
-          keyboard={it.keyboard}
-          rows={[
-            { label: "Income", value: p.income },
-            { label: "Spending", value: p.expenses },
-            { label: "Shortfall", value: p.shortfall },
-          ]}
-        />
-      );
-    })()}
+        ))}
+        <path d={bandPath} fill={PALETTE.color3} fillOpacity="0.25" stroke={PALETTE.color3} strokeDasharray="4 3" />
+        <polyline points={incomeLine} fill="none" stroke={PALETTE.color1} strokeWidth="2" />
+        {it.active !== null &&
+          (() => {
+            const p = points[it.active]!;
+            const cx = xScale(p.x, xDomain);
+            return (
+              <>
+                <ChartCrosshair x={cx} />
+                <ChartMarkers
+                  coords={[
+                    ...(Number.isFinite(p.income)
+                      ? [{ cx, cy: yScale(p.income, yDomain), color: PALETTE.color1 }]
+                      : []),
+                    ...(Number.isFinite(p.expenses)
+                      ? [{ cx, cy: yScale(p.expenses, yDomain), color: PALETTE.color3 }]
+                      : []),
+                  ]}
+                />
+              </>
+            );
+          })()}
+      </svg>
+      {it.active !== null &&
+        (() => {
+          const p = points[it.active]!;
+          return (
+            <ChartTooltip
+              age={p.x}
+              fraction={xScale(p.x, xDomain) / W}
+              keyboard={it.keyboard}
+              rows={[
+                { label: "Income", value: p.income },
+                { label: "Spending", value: p.expenses },
+                { label: "Shortfall", value: p.shortfall },
+              ]}
+            />
+          );
+        })()}
     </>
   );
 }

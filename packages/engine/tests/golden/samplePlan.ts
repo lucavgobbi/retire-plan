@@ -18,9 +18,7 @@ export function makeSamplePlan(): Plan {
       { id: "tfsa", type: "tfsa", balance: 60_000, assetMix: mix },
       { id: "nonreg", type: "nonreg", balance: 40_000, assetMix: mix },
     ],
-    assets: [
-      { id: "home", kind: "primary-home", name: "Home", value: 700_000, appreciationRate: 0.02 },
-    ],
+    assets: [{ id: "home", kind: "primary-home", name: "Home", value: 700_000, appreciationRate: 0.02 }],
     debts: [
       {
         id: "mortgage",
@@ -37,9 +35,7 @@ export function makeSamplePlan(): Plan {
       { id: "cpp", kind: "cpp", annualAmount: 8_000, startAge: 65, raiseRate: 0 },
       { id: "oas", kind: "oas", annualAmount: 8_907.72, startAge: 65, raiseRate: 0 },
     ],
-    expenses: [
-      { id: "living", name: "Living", annualAmount: 55_000, startAge: 45, inflationRate: 0.02 },
-    ],
+    expenses: [{ id: "living", name: "Living", annualAmount: 55_000, startAge: 45, inflationRate: 0.02 }],
     savingsPolicy: [
       { id: "tfsa", priority: 1, target: "tfsa", perYearCap: 7_000 },
       { id: "rrsp", priority: 2, target: "rrsp" },

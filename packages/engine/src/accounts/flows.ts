@@ -206,12 +206,9 @@ export function fundDeficit(
     return { withdrawals, rrifMinimumTaken: 0, remainingShortfall: 0 };
   }
 
-  let cash = deficit;
-
   // 1) Mandatory minimum first — it is owed regardless of the deficit.
   const rrifMinimumTaken = Math.min(Math.max(0, rrifMinimumDue), Math.max(0, balances.rrsp ?? 0));
   withdrawals.rrsp += rrifMinimumTaken;
-  cash = Math.max(0, deficit - rrifMinimumTaken);
 
   // 2) Walk the order for the remainder, skipping what the minimum
   //    already took out of the RRSP.
@@ -220,7 +217,7 @@ export function fundDeficit(
     nonreg: withdrawals.nonreg,
     rrsp: withdrawals.rrsp,
   };
-  let remainingShortfall = cash;
+  let remainingShortfall = Math.max(0, deficit - rrifMinimumTaken);
   for (const type of order) {
     if (remainingShortfall <= 0) break;
     const available = Math.max(0, (balances[type] ?? 0) - (taken[type] ?? 0));

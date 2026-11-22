@@ -23,59 +23,70 @@ export function OasClawbackChart({ points }: { points: OasPoint[] }) {
 
   return (
     <>
-    <svg
-      className="financial-chart chart-interactive"
-      width="100%"
-      viewBox={`0 0 ${W} ${H}`}
-      aria-label="OAS kept versus OAS clawback by age"
-      role="img"
-      {...it.svgProps}
-    >
-      <title>OAS kept versus clawback over age</title>
-      <desc>Stacked bands: the OAS kept after the recovery tax, plus the clawback charged back — together the gross OAS received.</desc>
-      {yTicks.map((t) => (
-        <g key={t}>
-          <line x1={PAD.left} x2={W - PAD.right} y1={yScale(t, yDomain)} y2={yScale(t, yDomain)} className="chart-gridline" />
-          <text x={PAD.left - 6} y={yScale(t, yDomain) + 3} textAnchor="end" className="chart-tick">
-            {fmtTick(t)}
+      <svg
+        className="financial-chart chart-interactive"
+        width="100%"
+        viewBox={`0 0 ${W} ${H}`}
+        aria-label="OAS kept versus OAS clawback by age"
+        role="img"
+        {...it.svgProps}
+      >
+        <title>OAS kept versus clawback over age</title>
+        <desc>
+          Stacked bands: the OAS kept after the recovery tax, plus the clawback charged back — together the gross OAS
+          received.
+        </desc>
+        {yTicks.map((t) => (
+          <g key={t}>
+            <line
+              x1={PAD.left}
+              x2={W - PAD.right}
+              y1={yScale(t, yDomain)}
+              y2={yScale(t, yDomain)}
+              className="chart-gridline"
+            />
+            <text x={PAD.left - 6} y={yScale(t, yDomain) + 3} textAnchor="end" className="chart-tick">
+              {fmtTick(t)}
+            </text>
+          </g>
+        ))}
+        {ticks(xDomain[0], xDomain[1]).map((t) => (
+          <text key={t} x={xScale(t, xDomain)} y={H - 6} textAnchor="middle" className="chart-tick">
+            {Math.round(t)}
           </text>
-        </g>
-      ))}
-      {ticks(xDomain[0], xDomain[1]).map((t) => (
-        <text key={t} x={xScale(t, xDomain)} y={H - 6} textAnchor="middle" className="chart-tick">
-          {Math.round(t)}
-        </text>
-      ))}
-      {bands.map((d, index) => (
-        <path key={SERIES[index]} d={d} fill={colors[index]} fillOpacity="0.75" data-series={SERIES[index]} />
-      ))}
-      {it.active !== null && (() => {
-        const p = points[it.active]!;
-        const cx = xScale(p.x, xDomain);
-        const tops = stackTops([p.kept, p.clawback]);
-        return (
-          <>
-            <ChartCrosshair x={cx} />
-            <ChartMarkers coords={tops.map((top, s) => ({ cx, cy: yScale(top, yDomain), color: colors[s]! }))} />
-          </>
-        );
-      })()}
-    </svg>
-    {it.active !== null && (() => {
-      const p = points[it.active]!;
-      return (
-        <ChartTooltip
-          age={p.x}
-          fraction={xScale(p.x, xDomain) / W}
-          keyboard={it.keyboard}
-          rows={[
-            { label: "Gross OAS", value: p.gross },
-            { label: "OAS kept", value: p.kept },
-            { label: "OAS clawback", value: p.clawback },
-          ]}
-        />
-      );
-    })()}
+        ))}
+        {bands.map((d, index) => (
+          <path key={SERIES[index]} d={d} fill={colors[index]} fillOpacity="0.75" data-series={SERIES[index]} />
+        ))}
+        {it.active !== null &&
+          (() => {
+            const p = points[it.active]!;
+            const cx = xScale(p.x, xDomain);
+            const tops = stackTops([p.kept, p.clawback]);
+            return (
+              <>
+                <ChartCrosshair x={cx} />
+                <ChartMarkers coords={tops.map((top, s) => ({ cx, cy: yScale(top, yDomain), color: colors[s]! }))} />
+              </>
+            );
+          })()}
+      </svg>
+      {it.active !== null &&
+        (() => {
+          const p = points[it.active]!;
+          return (
+            <ChartTooltip
+              age={p.x}
+              fraction={xScale(p.x, xDomain) / W}
+              keyboard={it.keyboard}
+              rows={[
+                { label: "Gross OAS", value: p.gross },
+                { label: "OAS kept", value: p.kept },
+                { label: "OAS clawback", value: p.clawback },
+              ]}
+            />
+          );
+        })()}
     </>
   );
 }

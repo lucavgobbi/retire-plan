@@ -1,4 +1,12 @@
-import { buildDeterministicReturns, runHistorical, runMonteCarlo, simulate, type Plan, type Scenario, type SimulationResult } from "@retire-plan/engine";
+import {
+  buildDeterministicReturns,
+  runHistorical,
+  runMonteCarlo,
+  simulate,
+  type Plan,
+  type Scenario,
+  type SimulationResult,
+} from "@retire-plan/engine";
 export { resolveScenario } from "./scenario";
 
 export interface MonteCarloAnalysis {
@@ -46,9 +54,13 @@ export function runFingerprint(plan: Plan, scenario: Scenario): string {
 
 export function runDeterministic(plan: Plan, scenario: Scenario): SimulationResult {
   if (scenario.simMode !== "deterministic") throw new Error("runDeterministic requires deterministic mode.");
-  return structuredClone(simulate(plan, scenario, buildDeterministicReturns(
-    scenario.returnAssumptions, plan.profile.currentAge, plan.profile.endAge,
-  )));
+  return structuredClone(
+    simulate(
+      plan,
+      scenario,
+      buildDeterministicReturns(scenario.returnAssumptions, plan.profile.currentAge, plan.profile.endAge),
+    ),
+  );
 }
 
 export function runScenario(plan: Plan, scenario: Scenario): RunOutcome {

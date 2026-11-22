@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { YearResult } from "@retire-plan/engine";
 import { resolveSankeyRange, runYearRange } from "./sankeyRange";
 
-const years = (...ages: number[]) => ages.map((age) => ({ age } as YearResult));
+const years = (...ages: number[]) => ages.map((age) => ({ age }) as YearResult);
 
 describe("runYearRange", () => {
   it("maps the actual run ages to inclusive household calendar years", () => {

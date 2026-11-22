@@ -50,18 +50,42 @@ export function ScenarioListItem({
     <li className="scenario-item" data-inline-edit-row>
       <div className="scenario-head">
         <strong>{delta.name}</strong>
-        <span className="badge">{delta.simMode === "montecarlo" ? "Monte Carlo" : delta.simMode === "historical" ? "Historical" : "Deterministic"}</span>
+        <span className="badge">
+          {delta.simMode === "montecarlo"
+            ? "Monte Carlo"
+            : delta.simMode === "historical"
+              ? "Historical"
+              : "Deterministic"}
+        </span>
         <div className="scenario-actions">
-          <button type="button" aria-label={`Run ${delta.name}`} disabled={isRunning} onClick={() => { void runProjection(); }}>
+          <button
+            type="button"
+            aria-label={`Run ${delta.name}`}
+            disabled={isRunning}
+            onClick={() => {
+              void runProjection();
+            }}
+          >
             Run
           </button>
-          {isRunning && <button type="button" onClick={cancelRun}>Cancel projection</button>}
-          {!editing && <button type="button" data-inline-edit-trigger onClick={() => onEdit(delta.id)}>Edit</button>}
+          {isRunning && (
+            <button type="button" onClick={cancelRun}>
+              Cancel projection
+            </button>
+          )}
+          {!editing && (
+            <button type="button" data-inline-edit-trigger onClick={() => onEdit(delta.id)}>
+              Edit
+            </button>
+          )}
           <button
             type="button"
             aria-label={`Duplicate ${delta.name}`}
             onClick={() => {
-              const copy = duplicateScenario(delta, workspace.scenarios.map(item => item.name));
+              const copy = duplicateScenario(
+                delta,
+                workspace.scenarios.map((item) => item.name),
+              );
               dispatch({ type: "scenario/add", delta: copy });
               onEdit(copy.id);
             }}
@@ -81,16 +105,28 @@ export function ScenarioListItem({
           </button>
         </div>
       </div>
-      {editing
-        ? <ScenarioEditorForm key={delta.id} delta={delta} onDone={() => onEdit(null)} />
-        : <>
-      <p className="hint scenario-withdrawal-mode">Withdrawal mode <strong>{withdrawalStrategyLabel(withdrawalStrategy)}</strong></p>
-      <p className="hint scenario-overrides">{describeOverrides(delta)}</p>
-      {run && run.analysis ? <p className="summary-strip">
-        {run.analysis.mode === "historical" ? `Historical ${run.analysis.representativeStartYear}–${run.analysis.representativeEndYear} · ` : "Monte Carlo · "}
-        {(run.analysis.successRate * 100).toFixed(1)}% success · final net worth p10 {fmtMoney(run.analysis.percentileNetWorth.p10)}, median {fmtMoney(run.analysis.percentileNetWorth.p50)}, p90 {fmtMoney(run.analysis.percentileNetWorth.p90)}
-      </p> : run && <SummaryStrip summary={run.result.summary} />}
-        </>}
+      {editing ? (
+        <ScenarioEditorForm key={delta.id} delta={delta} onDone={() => onEdit(null)} />
+      ) : (
+        <>
+          <p className="hint scenario-withdrawal-mode">
+            Withdrawal mode <strong>{withdrawalStrategyLabel(withdrawalStrategy)}</strong>
+          </p>
+          <p className="hint scenario-overrides">{describeOverrides(delta)}</p>
+          {run && run.analysis ? (
+            <p className="summary-strip">
+              {run.analysis.mode === "historical"
+                ? `Historical ${run.analysis.representativeStartYear}–${run.analysis.representativeEndYear} · `
+                : "Monte Carlo · "}
+              {(run.analysis.successRate * 100).toFixed(1)}% success · final net worth p10{" "}
+              {fmtMoney(run.analysis.percentileNetWorth.p10)}, median {fmtMoney(run.analysis.percentileNetWorth.p50)},
+              p90 {fmtMoney(run.analysis.percentileNetWorth.p90)}
+            </p>
+          ) : (
+            run && <SummaryStrip summary={run.result.summary} />
+          )}
+        </>
+      )}
       {run && (
         <p className="hint scenario-run-stamp">
           Last run {new Date(run.createdAt).toLocaleString()}.
@@ -108,7 +144,7 @@ export function ScenarioListItem({
 }
 
 export function uniqueCopyName(sourceName: string, existingNames: Iterable<string>): string {
-  const occupied = new Set([...existingNames].map(name => name.trim().toLocaleLowerCase()));
+  const occupied = new Set([...existingNames].map((name) => name.trim().toLocaleLowerCase()));
   const stem = `Copy of ${sourceName.trim() || "Scenario"}`;
   let name = stem;
   let suffix = 2;
@@ -148,7 +184,11 @@ export function describeOverrides(delta: ScenarioDelta): string {
   const parts: string[] = [];
   const o = delta.overrides;
   if (delta.benefits) {
-    const included = [delta.benefits.cpp && "CPP", delta.benefits.oas && "OAS", delta.benefits.oas && delta.benefits.gis && "GIS"].filter(Boolean);
+    const included = [
+      delta.benefits.cpp && "CPP",
+      delta.benefits.oas && "OAS",
+      delta.benefits.oas && delta.benefits.gis && "GIS",
+    ].filter(Boolean);
     parts.push(`benefits ${included.length ? included.join(", ") : "none"}`);
   }
   // Explicit payroll is an override even when it turns both programs off — it

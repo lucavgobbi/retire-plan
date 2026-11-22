@@ -15,21 +15,55 @@
   gap: 16px;
   margin-bottom: 18px;
 }
-.settings-dialog-header > div { min-width: 0; }
-.settings-dialog-header .eyebrow { margin: 0 0 2px; }
-.settings-dialog-header h2 { margin: 0; font-size: 1.4rem; }
-.settings-dialog-intro { margin: 4px 0 0; color: #60706b; font-size: .84rem; }
-.settings-dialog-header > button { flex: 0 0 auto; min-width: 42px; min-height: 42px; }
-.file-controls .toolbar { justify-content: flex-start; }
-.file-controls .toolbar > strong { flex: 1 1 100%; }
-.file-controls .import-preview { min-width: 0; overflow-wrap: anywhere; }
+.settings-dialog-header > div {
+  min-width: 0;
+}
+.settings-dialog-header .eyebrow {
+  margin: 0 0 2px;
+}
+.settings-dialog-header h2 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+.settings-dialog-intro {
+  margin: 4px 0 0;
+  color: #60706b;
+  font-size: 0.84rem;
+}
+.settings-dialog-header > button {
+  flex: 0 0 auto;
+  min-width: 42px;
+  min-height: 42px;
+}
+.file-controls .toolbar {
+  justify-content: flex-start;
+}
+.file-controls .toolbar > strong {
+  flex: 1 1 100%;
+}
+.file-controls .import-preview {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .file-controls [role="alert"],
-.file-controls .banner { margin-top: 12px; }
+.file-controls .banner {
+  margin-top: 12px;
+}
 .settings-dialog-panel > .file-controls,
-.settings-dialog-panel > .base-scenario-settings { margin-bottom: 14px; }
+.settings-dialog-panel > .base-scenario-settings {
+  margin-bottom: 14px;
+}
 
 @media (max-width: 620px) {
-  .dialog-overlay.settings-dialog-overlay { padding: 8px; }
-  .dialog-panel.settings-dialog-panel { max-height: calc(100vh - 16px); padding: 14px; border-radius: 9px; }
-  .settings-dialog-header { margin-bottom: 12px; }
+  .dialog-overlay.settings-dialog-overlay {
+    padding: 8px;
+  }
+  .dialog-panel.settings-dialog-panel {
+    max-height: calc(100vh - 16px);
+    padding: 14px;
+    border-radius: 9px;
+  }
+  .settings-dialog-header {
+    margin-bottom: 12px;
+  }
 }

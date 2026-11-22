@@ -46,12 +46,15 @@ export function createWorkerSimulationRunner(
         event.preventDefault();
         finish(() => reject(new Error(event.message || "The projection worker failed.")));
       };
-      worker.onmessageerror = () => finish(() => reject(new Error("The projection worker returned an unreadable response.")));
+      worker.onmessageerror = () =>
+        finish(() => reject(new Error("The projection worker returned an unreadable response.")));
       signal?.addEventListener("abort", onAbort, { once: true });
       try {
         worker.postMessage({ type: "run", requestId, plan, scenario });
       } catch (error) {
-        finish(() => reject(error instanceof Error ? error : new Error("The projection could not be sent to the worker.")));
+        finish(() =>
+          reject(error instanceof Error ? error : new Error("The projection could not be sent to the worker.")),
+        );
       }
     });
   };

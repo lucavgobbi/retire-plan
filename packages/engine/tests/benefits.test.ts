@@ -28,13 +28,18 @@ function seniorPlan(): Plan {
 
 function scenario(overrides: Partial<Scenario> = {}): Scenario {
   return {
-    id: "s", name: "S", simMode: "deterministic", retirementAge: 60,
-    returnAssumptions: ZERO, withdrawalOrder: ["tfsa", "nonreg", "rrsp"],
+    id: "s",
+    name: "S",
+    simMode: "deterministic",
+    retirementAge: 60,
+    returnAssumptions: ZERO,
+    withdrawalOrder: ["tfsa", "nonreg", "rrsp"],
     ...overrides,
   };
 }
 
-const run = (plan: Plan, s: Scenario) => simulate(plan, s, buildDeterministicReturns(ZERO, plan.profile.currentAge, plan.profile.endAge), tables);
+const run = (plan: Plan, s: Scenario) =>
+  simulate(plan, s, buildDeterministicReturns(ZERO, plan.profile.currentAge, plan.profile.endAge), tables);
 
 describe("benefit settings gating", () => {
   it("absent benefits is exactly legacy (CPP/OAS received, GIS computed)", () => {
@@ -84,9 +89,11 @@ describe("benefit settings gating", () => {
   });
 
   it("the GIS-OAS gate holds before 65 and across flags; validation rejects malformed settings", () => {
-    expect(() => run(seniorPlan(), scenario({ benefits: { cpp: false } as unknown as BenefitSettings })))
-      .toThrow(/exactly the boolean flags/);
-    expect(() => run(seniorPlan(), scenario({ withdrawalStrategy: "greedy" as "manual" })))
-      .toThrow(/"manual" or "tax-minimizing"/);
+    expect(() => run(seniorPlan(), scenario({ benefits: { cpp: false } as unknown as BenefitSettings }))).toThrow(
+      /exactly the boolean flags/,
+    );
+    expect(() => run(seniorPlan(), scenario({ withdrawalStrategy: "greedy" as "manual" }))).toThrow(
+      /"manual" or "tax-minimizing"/,
+    );
   });
 });

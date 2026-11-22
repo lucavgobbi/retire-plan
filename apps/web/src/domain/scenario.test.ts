@@ -7,9 +7,19 @@ describe("scenario resolution", () => {
   it("inherits working settings, applies every explicit override, and isolates mutable inputs", () => {
     const base = structuredClone(DEFAULT_SCENARIO_BASE);
     base.retirementAge = 67;
-    const delta: ScenarioDelta = { id: "early", name: "Early", basePlanId: "plan", simMode: "deterministic", overrides: {} };
+    const delta: ScenarioDelta = {
+      id: "early",
+      name: "Early",
+      basePlanId: "plan",
+      simMode: "deterministic",
+      overrides: {},
+    };
     expect(resolveScenario(delta, base).retirementAge).toBe(67);
-    delta.overrides = { retirementAge: 60, returnAssumptions: { equity: 0, bond: -0.01, cash: 0.02 }, withdrawalOrder: ["rrsp", "tfsa", "nonreg"] };
+    delta.overrides = {
+      retirementAge: 60,
+      returnAssumptions: { equity: 0, bond: -0.01, cash: 0.02 },
+      withdrawalOrder: ["rrsp", "tfsa", "nonreg"],
+    };
     const resolved = resolveScenario(delta, base);
     expect(resolved).toMatchObject({ id: "early", name: "Early", simMode: "deterministic", ...delta.overrides });
     resolved.withdrawalOrder.reverse();
@@ -20,8 +30,17 @@ describe("scenario resolution", () => {
   });
 
   it("resolves Monte Carlo configuration into the engine scenario without sharing mutable values", () => {
-    const base = { ...structuredClone(DEFAULT_SCENARIO_BASE), mcConfig: { runs: 500, seed: 7, stdDev: { equity: 0.18, bond: 0.06, cash: 0.02 } } };
-    const delta: ScenarioDelta = { id: "mc", name: "Monte Carlo", basePlanId: "p", simMode: "montecarlo", overrides: {} };
+    const base = {
+      ...structuredClone(DEFAULT_SCENARIO_BASE),
+      mcConfig: { runs: 500, seed: 7, stdDev: { equity: 0.18, bond: 0.06, cash: 0.02 } },
+    };
+    const delta: ScenarioDelta = {
+      id: "mc",
+      name: "Monte Carlo",
+      basePlanId: "p",
+      simMode: "montecarlo",
+      overrides: {},
+    };
     const inherited = resolveScenario(delta, base);
     expect(inherited.simMode).toBe("montecarlo");
     expect(inherited.mcConfig).toEqual(base.mcConfig);
@@ -35,16 +54,28 @@ describe("scenario resolution", () => {
     const legacyBase = { ...DEFAULT_SCENARIO_BASE };
     delete (legacyBase as Partial<typeof legacyBase>).benefits;
     delete (legacyBase as Partial<typeof legacyBase>).withdrawalStrategy;
-    const legacyDelta: ScenarioDelta = { id: "legacy", name: "Legacy", basePlanId: "p", simMode: "deterministic", overrides: {} };
+    const legacyDelta: ScenarioDelta = {
+      id: "legacy",
+      name: "Legacy",
+      basePlanId: "p",
+      simMode: "deterministic",
+      overrides: {},
+    };
     expect(resolveScenario(legacyDelta, legacyBase)).toMatchObject({
-      benefits: { cpp: true, oas: true, gis: true }, withdrawalStrategy: "manual",
+      benefits: { cpp: true, oas: true, gis: true },
+      withdrawalStrategy: "manual",
     });
   });
 
   it("applies scenario benefit and strategy overrides without mutating the base", () => {
     const delta: ScenarioDelta = {
-      id: "tax", name: "Tax plan", basePlanId: "p", simMode: "deterministic", overrides: {},
-      benefits: { cpp: true, oas: false, gis: false }, withdrawalStrategy: "tax-minimizing",
+      id: "tax",
+      name: "Tax plan",
+      basePlanId: "p",
+      simMode: "deterministic",
+      overrides: {},
+      benefits: { cpp: true, oas: false, gis: false },
+      withdrawalStrategy: "tax-minimizing",
     };
     const resolved = resolveScenario(delta, DEFAULT_SCENARIO_BASE);
     expect(resolved.benefits).toEqual(delta.benefits);
@@ -55,14 +86,30 @@ describe("scenario resolution", () => {
   it("resolves payroll settings with delta override, base fallback, and legacy absence", () => {
     const payroll = { cpp: true, ei: false, cppOptOut65to69: true };
     // Delta payroll wins over base payroll and is isolated from the stored delta.
-    const baseWithPayroll = { ...structuredClone(DEFAULT_SCENARIO_BASE), payroll: { cpp: false, ei: true, cppOptOut65to69: false } };
-    const delta: ScenarioDelta = { id: "p", name: "Payroll", basePlanId: "p", simMode: "deterministic", overrides: {}, payroll };
+    const baseWithPayroll = {
+      ...structuredClone(DEFAULT_SCENARIO_BASE),
+      payroll: { cpp: false, ei: true, cppOptOut65to69: false },
+    };
+    const delta: ScenarioDelta = {
+      id: "p",
+      name: "Payroll",
+      basePlanId: "p",
+      simMode: "deterministic",
+      overrides: {},
+      payroll,
+    };
     const overridden = resolveScenario(delta, baseWithPayroll);
     expect(overridden.payroll).toEqual(payroll);
     overridden.payroll!.cpp = false;
     expect(delta.payroll!.cpp).toBe(true);
     // No delta payroll: the base settings flow through.
-    const plainDelta: ScenarioDelta = { id: "p2", name: "Inherit", basePlanId: "p", simMode: "deterministic", overrides: {} };
+    const plainDelta: ScenarioDelta = {
+      id: "p2",
+      name: "Inherit",
+      basePlanId: "p",
+      simMode: "deterministic",
+      overrides: {},
+    };
     expect(resolveScenario(plainDelta, baseWithPayroll).payroll).toEqual(baseWithPayroll.payroll);
     // Absent everywhere stays absent — the legacy all-off shape.
     expect(resolveScenario(null, DEFAULT_SCENARIO_BASE).payroll).toBeUndefined();

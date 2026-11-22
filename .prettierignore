@@ -1,0 +1,6 @@
+# Reproduced by npm or the historical data extraction script.
+/package-lock.json
+/packages/engine/data/historical/us-returns-1872-2020.json
+
+# Local workspace export.
+/sample-scenario.json

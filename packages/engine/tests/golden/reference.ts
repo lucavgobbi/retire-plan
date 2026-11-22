@@ -13,7 +13,11 @@ import type { TaxYearTables } from "../../src/tax/tables";
 
 const rc = (x: number): number => Math.round(x * 100) / 100;
 
-interface FedOut { fed: number; on: number; onSurtax: number }
+interface FedOut {
+  fed: number;
+  on: number;
+  onSurtax: number;
+}
 
 /** Federal + Ontario tax on a working-age employment-only income shape. */
 function incomeTax(employment: number, tables: TaxYearTables, age: number, yearOffset: number): FedOut {
@@ -74,21 +78,14 @@ export interface GoldenYear {
  * Deficit branch only: draws from TFSA first (the only account above $0 need),
  * grows accounts at the blended 4% (0.7x5% + 0.25x2% + 0.05x0%).
  */
-export function referenceGoldenYears(
-  plan: Plan,
-  tables: TaxYearTables,
-  startAge: number,
-  count: number,
-): GoldenYear[] {
+export function referenceGoldenYears(plan: Plan, tables: TaxYearTables, startAge: number, count: number): GoldenYear[] {
   const mortgage = plan.debts.find((d) => d.kind === "mortgage")!;
   const home = plan.assets.find((a) => a.kind === "primary-home")!;
   const salary = plan.incomes.find((i) => i.kind === "employment")!;
   const living = plan.expenses[0]!;
   const blend = 0.7 * 0.05 + 0.25 * 0.02 + 0.05 * 0; // 0.04
 
-  const account = new Map<string, number>(
-    plan.accounts.map((a) => [a.id, a.balance] as const),
-  );
+  const account = new Map<string, number>(plan.accounts.map((a) => [a.id, a.balance] as const));
   let debt = mortgage.balance;
   let homeValue = home.value;
   const out: GoldenYear[] = [];

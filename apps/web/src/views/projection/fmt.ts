@@ -30,9 +30,7 @@ export function fmtMoneyDetail(value: number | undefined | null): string {
 
 /** Rates are stored as fractions by the engine (marginalRate per $100 ⇒ fraction). */
 export function fmtPercent(fraction: number | undefined | null): string {
-  return typeof fraction === "number" && Number.isFinite(fraction)
-    ? `${(fraction * 100).toFixed(1)}%`
-    : "—";
+  return typeof fraction === "number" && Number.isFinite(fraction) ? `${(fraction * 100).toFixed(1)}%` : "—";
 }
 
 /**

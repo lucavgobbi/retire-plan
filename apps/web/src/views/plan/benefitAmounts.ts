@@ -12,7 +12,11 @@ export function estimateCppMonthlyAtStart(monthlyAt65: number, startAge: number)
 }
 
 /** OAS age-65-to-74 full monthly base, residence fraction, and deferral adjustment to age 70. */
-export function estimateOasMonthlyAtStart(fullMonthlyBase: number, residenceYears: number, startAge: number): number | null {
+export function estimateOasMonthlyAtStart(
+  fullMonthlyBase: number,
+  residenceYears: number,
+  startAge: number,
+): number | null {
   if (!Number.isFinite(fullMonthlyBase) || fullMonthlyBase < 0) return null;
   if (!Number.isInteger(residenceYears) || residenceYears < 0 || residenceYears > 40) return null;
   if (!Number.isInteger(startAge) || startAge < 65 || startAge > 70) return null;

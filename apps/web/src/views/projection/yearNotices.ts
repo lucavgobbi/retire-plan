@@ -21,8 +21,12 @@ export function yearNotices(
     }
   }
   if ((year.plannedRrspDraw ?? 0) > 0.005) {
-    notices.push(`Planned voluntary RRSP draw under the tax-minimizing strategy: ${fmtMoneyDetail(year.plannedRrspDraw!)}. It is separate from any required RRIF minimum and is included in total RRSP withdrawals.`);
-    notices.push("In this planned-draw year, employee RRSP savings-policy steps are skipped to avoid withdrawing and redepositing the same funds. Employer-match RRSP deposits and other savings rules remain available; remaining surplus follows those rules or is retained as cash.");
+    notices.push(
+      `Planned voluntary RRSP draw under the tax-minimizing strategy: ${fmtMoneyDetail(year.plannedRrspDraw!)}. It is separate from any required RRIF minimum and is included in total RRSP withdrawals.`,
+    );
+    notices.push(
+      "In this planned-draw year, employee RRSP savings-policy steps are skipped to avoid withdrawing and redepositing the same funds. Employer-match RRSP deposits and other savings rules remain available; remaining surplus follows those rules or is retained as cash.",
+    );
   }
 
   if (Math.abs(year.cashInterest ?? 0) > 0.005) {
@@ -49,9 +53,11 @@ export function yearNotices(
   }
 
   if (year.balances.cash > 0.005) {
-    notices.push(year.cashAccounts === undefined
-      ? `Cash remaining at year end: ${fmtMoneyDetail(year.balances.cash)}.`
-      : `Total cash at year end across named accounts and the idle cash reserve: ${fmtMoneyDetail(year.balances.cash)}.`);
+    notices.push(
+      year.cashAccounts === undefined
+        ? `Cash remaining at year end: ${fmtMoneyDetail(year.balances.cash)}.`
+        : `Total cash at year end across named accounts and the idle cash reserve: ${fmtMoneyDetail(year.balances.cash)}.`,
+    );
   }
 
   if (year.savings.mortgage > 0.005) {
@@ -69,11 +75,15 @@ export function yearNotices(
   }
 
   if (historicalContext) {
-    notices.push(`Household calendar year ${historicalContext.householdCalendarYear} uses historical return source year ${historicalContext.returnSourceYear}.`);
+    notices.push(
+      `Household calendar year ${historicalContext.householdCalendarYear} uses historical return source year ${historicalContext.returnSourceYear}.`,
+    );
   }
 
   if (year.events.includes("retirement")) {
-    notices.push("The plan's configured retirement age is reached this year. Income streams and savings rules continue according to their own settings.");
+    notices.push(
+      "The plan's configured retirement age is reached this year. Income streams and savings rules continue according to their own settings.",
+    );
   }
   if (year.events.includes("cpp-start")) {
     notices.push(`CPP income starts this year: ${fmtMoneyDetail(year.income.cpp)}.`);
@@ -82,14 +92,20 @@ export function yearNotices(
     notices.push(`OAS income starts this year: ${fmtMoneyDetail(year.income.oas)}.`);
   }
   if (year.events.includes("home-sold")) {
-    notices.push("A home sale is recorded this year. Any net sale proceeds were added to available assets or cash; sale proceeds, costs, and the gain amount are not itemized here, though its tax effect is included.");
+    notices.push(
+      "A home sale is recorded this year. Any net sale proceeds were added to available assets or cash; sale proceeds, costs, and the gain amount are not itemized here, though its tax effect is included.",
+    );
   }
   if (year.events.includes("other-asset-sold")) {
-    notices.push("An asset sale is recorded this year. Any net sale proceeds were added to available assets or cash; sale proceeds, costs, and the gain amount are not itemized here, though its tax effect is included.");
+    notices.push(
+      "An asset sale is recorded this year. Any net sale proceeds were added to available assets or cash; sale proceeds, costs, and the gain amount are not itemized here, though its tax effect is included.",
+    );
   }
 
   if (year.withdrawals.nonreg > 0.005) {
-    notices.push("Non-registered withdrawals show the full cash drawn. Under the model, only the realized-gain portion, if any, affects taxable income; that portion is not shown in this year detail.");
+    notices.push(
+      "Non-registered withdrawals show the full cash drawn. Under the model, only the realized-gain portion, if any, affects taxable income; that portion is not shown in this year detail.",
+    );
   }
 
   const depleted: string[] = [];
@@ -103,7 +119,9 @@ export function yearNotices(
   }
 
   if (year.warnings.some((warning) => warning.toLowerCase().includes("negative amortization"))) {
-    notices.push("Negative amortization means the mortgage balance grew because payments did not cover accruing interest.");
+    notices.push(
+      "Negative amortization means the mortgage balance grew because payments did not cover accruing interest.",
+    );
   }
 
   return notices;

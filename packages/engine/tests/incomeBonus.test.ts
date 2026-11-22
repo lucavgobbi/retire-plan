@@ -99,7 +99,9 @@ describe("employment bonus rate (engine)", () => {
   it("earns RRSP contribution room on the base-plus-bonus employment income", () => {
     // No savings policy, no employer match: room earned = 18% of employment income.
     const withBonus = yearOf(salaryPlan(0.1), 45);
-    expect(withBonus.rrspRoom).toBe(Math.round(Math.min(tables.rrsp.incomeRate * 55_000, tables.rrsp.annualLimit) * 100) / 100);
+    expect(withBonus.rrspRoom).toBe(
+      Math.round(Math.min(tables.rrsp.incomeRate * 55_000, tables.rrsp.annualLimit) * 100) / 100,
+    );
     expect(withBonus.rrspRoom).toBeGreaterThan(yearOf(salaryPlan(), 45).rrspRoom);
   });
 

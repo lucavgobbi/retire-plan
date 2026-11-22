@@ -10,33 +10,69 @@ import { useProjectionRun, useRuns, useWorkspace } from "./hooks";
 function Probe() {
   const { runProjection, runError, isRunning, runCancelled, cancelRun } = useWorkspace();
   const runs = useRuns();
-  return <><button onClick={() => { void runProjection(); }}>Run</button><button onClick={cancelRun}>Cancel</button>
-    <output>{runs.length}</output>{isRunning && <p>Running projection</p>}{runCancelled && <p>Projection cancelled.</p>}{runError && <p role="alert">{runError}</p>}</>;
+  return (
+    <>
+      <button
+        onClick={() => {
+          void runProjection();
+        }}
+      >
+        Run
+      </button>
+      <button onClick={cancelRun}>Cancel</button>
+      <output>{runs.length}</output>
+      {isRunning && <p>Running projection</p>}
+      {runCancelled && <p>Projection cancelled.</p>}
+      {runError && <p role="alert">{runError}</p>}
+    </>
+  );
 }
 function TargetRunProbe({ delta }: { delta?: import("../domain/types").ScenarioDelta }) {
   const { runProjection, workspace, baseScenario } = useWorkspace();
   const runs = useRuns();
-  return <><button onClick={() => { void runProjection(delta ?? null); }}>Run requested target</button>
-    <output data-testid="target-state">{JSON.stringify({
-      selected: workspace.projectionScenarioId,
-      planAge: workspace.plan.profile.currentAge,
-      baseRetirementAge: baseScenario.retirementAge,
-      runIds: runs.map(run => ({ scenarioId: run.scenarioId, resolvedId: run.scenario.id })),
-    })}</output></>;
+  return (
+    <>
+      <button
+        onClick={() => {
+          void runProjection(delta ?? null);
+        }}
+      >
+        Run requested target
+      </button>
+      <output data-testid="target-state">
+        {JSON.stringify({
+          selected: workspace.projectionScenarioId,
+          planAge: workspace.plan.profile.currentAge,
+          baseRetirementAge: baseScenario.retirementAge,
+          runIds: runs.map((run) => ({ scenarioId: run.scenarioId, resolvedId: run.scenario.id })),
+        })}
+      </output>
+    </>
+  );
 }
 const emptyOutcome = { result: { years: [], summary: { success: true, finalNetWorth: 0 } } } as RunOutcome;
 describe("store run flow", () => {
   it("persists the requested saved scenario before running and leaves plan/base values intact", async () => {
     const workspace = createEmptyWorkspace();
     workspace.projectionScenarioId = "base";
-    const delta = { id: "base", name: "Saved choice", basePlanId: "unsaved", simMode: "deterministic" as const, overrides: { retirementAge: 63 } };
+    const delta = {
+      id: "base",
+      name: "Saved choice",
+      basePlanId: "unsaved",
+      simMode: "deterministic" as const,
+      overrides: { retirementAge: 63 },
+    };
     workspace.scenarios = [delta];
     const originalPlan = structuredClone(workspace.plan);
     const simulationRunner: SimulationRunner = async (_plan, scenario) => {
       expect(scenario.id).toBe("base");
       return emptyOutcome;
     };
-    render(<StoreProvider initialWorkspace={workspace} simulationRunner={simulationRunner} makeId={() => "scenario-run"}><TargetRunProbe delta={delta} /></StoreProvider>);
+    render(
+      <StoreProvider initialWorkspace={workspace} simulationRunner={simulationRunner} makeId={() => "scenario-run"}>
+        <TargetRunProbe delta={delta} />
+      </StoreProvider>,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Run requested target" }));
     await waitFor(() => {
@@ -58,9 +94,15 @@ describe("store run flow", () => {
       expect(scenario.retirementAge).toBe(67);
       return emptyOutcome;
     };
-    render(<StoreProvider initialWorkspace={workspace} initialBaseScenario={initialBaseScenario} simulationRunner={simulationRunner}>
-      <TargetRunProbe />
-    </StoreProvider>);
+    render(
+      <StoreProvider
+        initialWorkspace={workspace}
+        initialBaseScenario={initialBaseScenario}
+        simulationRunner={simulationRunner}
+      >
+        <TargetRunProbe />
+      </StoreProvider>,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Run requested target" }));
     await waitFor(() => {
@@ -73,21 +115,38 @@ describe("store run flow", () => {
   });
 
   it("stores successful runs through the shared UI contract", async () => {
-    render(<StoreProvider makeId={() => "run"} now={() => "2026-11-10T00:00:00Z"}><Probe /></StoreProvider>);
+    render(
+      <StoreProvider makeId={() => "run"} now={() => "2026-11-10T00:00:00Z"}>
+        <Probe />
+      </StoreProvider>,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Run" }));
     await waitFor(() => expect(screen.getByRole("status").textContent).toBe("1"));
   });
   it("shows worker errors and does not store a failed run", async () => {
-    const simulationRunner: SimulationRunner = async () => { throw new Error("worker crashed"); };
-    render(<StoreProvider simulationRunner={simulationRunner}><Probe /></StoreProvider>);
+    const simulationRunner: SimulationRunner = async () => {
+      throw new Error("worker crashed");
+    };
+    render(
+      <StoreProvider simulationRunner={simulationRunner}>
+        <Probe />
+      </StoreProvider>,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Run" }));
     expect((await screen.findByRole("alert")).textContent).toContain("worker crashed");
     expect(screen.getByRole("status").textContent).toBe("0");
   });
   it("does not store a late worker response after cancellation", async () => {
     let finish: (() => void) | undefined;
-    const simulationRunner: SimulationRunner = () => new Promise((resolve) => { finish = () => resolve(emptyOutcome); });
-    render(<StoreProvider simulationRunner={simulationRunner}><Probe /></StoreProvider>);
+    const simulationRunner: SimulationRunner = () =>
+      new Promise((resolve) => {
+        finish = () => resolve(emptyOutcome);
+      });
+    render(
+      <StoreProvider simulationRunner={simulationRunner}>
+        <Probe />
+      </StoreProvider>,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Run" }));
     expect(screen.getByText("Running projection")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -96,13 +155,32 @@ describe("store run flow", () => {
     await waitFor(() => expect(screen.getByRole("status").textContent).toBe("0"));
   });
   it("stores an ensemble summary with its representative coherent year path", async () => {
-    const base: ScenarioBase = { ...DEFAULT_SCENARIO_BASE, simMode: "montecarlo", mcConfig: { runs: 2, seed: 1, stdDev: { equity: 0.18, bond: 0.06, cash: 0.02 } } };
+    const base: ScenarioBase = {
+      ...DEFAULT_SCENARIO_BASE,
+      simMode: "montecarlo",
+      mcConfig: { runs: 2, seed: 1, stdDev: { equity: 0.18, bond: 0.06, cash: 0.02 } },
+    };
     function MonteCarloProbe() {
       const { runProjection } = useWorkspace();
       const runs = useRuns();
-      return <><button onClick={() => runProjection()}>Run MC</button><output>{JSON.stringify({ count: runs.length, analysis: runs[0]?.analysis, years: runs[0]?.result.years.map(y => y.age) })}</output></>;
+      return (
+        <>
+          <button onClick={() => runProjection()}>Run MC</button>
+          <output>
+            {JSON.stringify({
+              count: runs.length,
+              analysis: runs[0]?.analysis,
+              years: runs[0]?.result.years.map((y) => y.age),
+            })}
+          </output>
+        </>
+      );
     }
-    render(<StoreProvider initialBaseScenario={base}><MonteCarloProbe /></StoreProvider>);
+    render(
+      <StoreProvider initialBaseScenario={base}>
+        <MonteCarloProbe />
+      </StoreProvider>,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Run MC" }));
     await waitFor(() => expect(JSON.parse(screen.getByRole("status").textContent ?? "{}").count).toBe(1));
     const stored = JSON.parse(screen.getByRole("status").textContent ?? "{}");
@@ -115,7 +193,11 @@ describe("store run flow", () => {
   it("reports validation errors without storing a run or throwing into the UI", () => {
     const workspace = createEmptyWorkspace();
     workspace.plan.profile.endAge = 20;
-    render(<StoreProvider initialWorkspace={workspace}><Probe /></StoreProvider>);
+    render(
+      <StoreProvider initialWorkspace={workspace}>
+        <Probe />
+      </StoreProvider>,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Run" }));
     expect(screen.getByRole("status").textContent).toBe("0");
     expect(screen.getByRole("alert").textContent).toContain("endAge");
@@ -124,8 +206,12 @@ describe("store run flow", () => {
     { ...DEFAULT_SCENARIO_BASE, retirementAge: 65.5 },
     { ...DEFAULT_SCENARIO_BASE, returnAssumptions: { equity: 0.05 } } as ScenarioBase,
     { ...DEFAULT_SCENARIO_BASE, withdrawalOrder: ["tfsa", "bogus", "rrsp"] } as unknown as ScenarioBase,
-  ])("rejects malformed working scenario settings before simulating", base => {
-    render(<StoreProvider initialBaseScenario={base}><Probe /></StoreProvider>);
+  ])("rejects malformed working scenario settings before simulating", (base) => {
+    render(
+      <StoreProvider initialBaseScenario={base}>
+        <Probe />
+      </StoreProvider>,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Run" }));
     expect(screen.getByRole("status").textContent).toBe("0");
     expect(screen.getByRole("alert")).toBeTruthy();
@@ -134,11 +220,19 @@ describe("store run flow", () => {
     function SnapshotProbe() {
       const { dispatch } = useWorkspace();
       const { run, stale, runProjection } = useProjectionRun();
-      return <><button onClick={() => runProjection()}>Project</button>
-        <button onClick={() => dispatch({ type: "plan/setProfile", patch: { birthYear: 1982 } })}>Edit</button>
-        <output>{JSON.stringify({ birthYear: run?.birthYear, stale })}</output></>;
+      return (
+        <>
+          <button onClick={() => runProjection()}>Project</button>
+          <button onClick={() => dispatch({ type: "plan/setProfile", patch: { birthYear: 1982 } })}>Edit</button>
+          <output>{JSON.stringify({ birthYear: run?.birthYear, stale })}</output>
+        </>
+      );
     }
-    render(<StoreProvider><SnapshotProbe /></StoreProvider>);
+    render(
+      <StoreProvider>
+        <SnapshotProbe />
+      </StoreProvider>,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Project" }));
     await waitFor(() => expect(screen.getByRole("status").textContent).toContain('"birthYear":1981,"stale":false'));
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
@@ -146,7 +240,13 @@ describe("store run flow", () => {
   });
   it("reset clears generated runs, active selection, progress and errors without mutating the workspace", async () => {
     const workspace = createEmptyWorkspace();
-    const delta = { id: "saved-choice", name: "Saved choice", basePlanId: "unsaved", simMode: "deterministic" as const, overrides: { retirementAge: 63 } };
+    const delta = {
+      id: "saved-choice",
+      name: "Saved choice",
+      basePlanId: "unsaved",
+      simMode: "deterministic" as const,
+      overrides: { retirementAge: 63 },
+    };
     workspace.scenarios = [delta];
     workspace.baseScenario = { ...DEFAULT_SCENARIO_BASE, retirementAge: 67 };
     workspace.projectionScenarioId = "saved-choice";
@@ -154,20 +254,34 @@ describe("store run flow", () => {
     function ResetProbe() {
       const { runProjection, resetRuns, runError, isRunning, activeRunId, workspace } = useWorkspace();
       const runs = useRuns();
-      return <>
-        <button onClick={() => { void runProjection(delta); }}>Run saved</button>
-        <button onClick={resetRuns}>Reset</button>
-        <output data-testid="reset-state">{JSON.stringify({
-          count: runs.length,
-          activeRunId,
-          isRunning,
-          runError,
-          workspace,
-        })}</output>
-        {runError && <p role="alert">{runError}</p>}
-      </>;
+      return (
+        <>
+          <button
+            onClick={() => {
+              void runProjection(delta);
+            }}
+          >
+            Run saved
+          </button>
+          <button onClick={resetRuns}>Reset</button>
+          <output data-testid="reset-state">
+            {JSON.stringify({
+              count: runs.length,
+              activeRunId,
+              isRunning,
+              runError,
+              workspace,
+            })}
+          </output>
+          {runError && <p role="alert">{runError}</p>}
+        </>
+      );
     }
-    render(<StoreProvider initialWorkspace={workspace} simulationRunner={async () => emptyOutcome} makeId={() => "run-1"}><ResetProbe /></StoreProvider>);
+    render(
+      <StoreProvider initialWorkspace={workspace} simulationRunner={async () => emptyOutcome} makeId={() => "run-1"}>
+        <ResetProbe />
+      </StoreProvider>,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Run saved" }));
     await waitFor(() => expect(JSON.parse(screen.getByTestId("reset-state").textContent ?? "{}").count).toBe(1));
     const beforeReset = JSON.parse(screen.getByTestId("reset-state").textContent ?? "{}");
@@ -194,16 +308,30 @@ describe("store run flow", () => {
   });
 
   it("reset clears a visible run error", async () => {
-    const simulationRunner: SimulationRunner = async () => { throw new Error("worker crashed"); };
+    const simulationRunner: SimulationRunner = async () => {
+      throw new Error("worker crashed");
+    };
     function ErrorProbe() {
       const { runProjection, resetRuns, runError } = useWorkspace();
-      return <>
-        <button onClick={() => { void runProjection(); }}>Run</button>
-        <button onClick={resetRuns}>Reset</button>
-        {runError && <p role="alert">{runError}</p>}
-      </>;
+      return (
+        <>
+          <button
+            onClick={() => {
+              void runProjection();
+            }}
+          >
+            Run
+          </button>
+          <button onClick={resetRuns}>Reset</button>
+          {runError && <p role="alert">{runError}</p>}
+        </>
+      );
     }
-    render(<StoreProvider simulationRunner={simulationRunner}><ErrorProbe /></StoreProvider>);
+    render(
+      <StoreProvider simulationRunner={simulationRunner}>
+        <ErrorProbe />
+      </StoreProvider>,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Run" }));
     expect((await screen.findByRole("alert")).textContent).toContain("worker crashed");
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));
@@ -215,90 +343,171 @@ describe("store run flow", () => {
     let signal: AbortSignal | undefined;
     const simulationRunner: SimulationRunner = (_plan, _scenario, incomingSignal) => {
       signal = incomingSignal;
-      return new Promise((resolve) => { finish = () => resolve(emptyOutcome); });
+      return new Promise((resolve) => {
+        finish = () => resolve(emptyOutcome);
+      });
     };
     function ResetProbe() {
       const { runProjection, resetRuns, isRunning, runCancelled } = useWorkspace();
       const runs = useRuns();
-      return <>
-        <button onClick={() => { void runProjection(); }}>Run</button>
-        <button onClick={resetRuns}>Reset</button>
-        <output data-testid="run-progress">{JSON.stringify({ count: runs.length, isRunning, runCancelled })}</output>
-      </>;
+      return (
+        <>
+          <button
+            onClick={() => {
+              void runProjection();
+            }}
+          >
+            Run
+          </button>
+          <button onClick={resetRuns}>Reset</button>
+          <output data-testid="run-progress">{JSON.stringify({ count: runs.length, isRunning, runCancelled })}</output>
+        </>
+      );
     }
-    render(<StoreProvider simulationRunner={simulationRunner}><ResetProbe /></StoreProvider>);
+    render(
+      <StoreProvider simulationRunner={simulationRunner}>
+        <ResetProbe />
+      </StoreProvider>,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Run" }));
     expect(JSON.parse(screen.getByTestId("run-progress").textContent ?? "{}").isRunning).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));
     expect(signal?.aborted).toBe(true);
     // Resetting is not "cancelled by the user" in the UI sense: it clears history
     // and shows neither a cancelled notice nor a stale progress state.
-    expect(JSON.parse(screen.getByTestId("run-progress").textContent ?? "{}")).toMatchObject({ count: 0, isRunning: false, runCancelled: false });
+    expect(JSON.parse(screen.getByTestId("run-progress").textContent ?? "{}")).toMatchObject({
+      count: 0,
+      isRunning: false,
+      runCancelled: false,
+    });
     finish?.();
-    await waitFor(() => expect(JSON.parse(screen.getByTestId("run-progress").textContent ?? "{}")).toMatchObject({ count: 0, isRunning: false, runCancelled: false }));
+    await waitFor(() =>
+      expect(JSON.parse(screen.getByTestId("run-progress").textContent ?? "{}")).toMatchObject({
+        count: 0,
+        isRunning: false,
+        runCancelled: false,
+      }),
+    );
   });
 
-  it.each(["resolve", "reject"] as const)("a late %s from the run cancelled by reset cannot disturb the replacement run", async (settlement) => {
-    const pending: { resolve: (outcome: RunOutcome) => void; reject: (error: Error) => void; scenario: Scenario; signal?: AbortSignal }[] = [];
-    const simulationRunner: SimulationRunner = (_plan, scenario, signal) => new Promise((resolve, reject) => {
-      pending.push({ resolve, reject, scenario, signal });
-    });
-    const deltaA = { id: "a", name: "Run A", basePlanId: "unsaved", simMode: "deterministic" as const, overrides: {} };
-    const deltaB = { id: "b", name: "Run B", basePlanId: "unsaved", simMode: "deterministic" as const, overrides: {} };
-    function RaceProbe() {
-      const { runProjection, resetRuns, isRunning, runError, activeRunId } = useWorkspace();
-      const runs = useRuns();
-      return <>
-        <button onClick={() => { void runProjection(deltaA); }}>Run A</button>
-        <button onClick={() => { void runProjection(deltaB); }}>Run B</button>
-        <button onClick={resetRuns}>Reset</button>
-        <output data-testid="race-state">{JSON.stringify({ names: runs.map(run => run.scenario.name), isRunning, runError, activeRunId })}</output>
-      </>;
-    }
-    render(<StoreProvider initialWorkspace={createEmptyWorkspace()} simulationRunner={simulationRunner}><RaceProbe /></StoreProvider>);
+  it.each(["resolve", "reject"] as const)(
+    "a late %s from the run cancelled by reset cannot disturb the replacement run",
+    async (settlement) => {
+      const pending: {
+        resolve: (outcome: RunOutcome) => void;
+        reject: (error: Error) => void;
+        scenario: Scenario;
+        signal?: AbortSignal;
+      }[] = [];
+      const simulationRunner: SimulationRunner = (_plan, scenario, signal) =>
+        new Promise((resolve, reject) => {
+          pending.push({ resolve, reject, scenario, signal });
+        });
+      const deltaA = {
+        id: "a",
+        name: "Run A",
+        basePlanId: "unsaved",
+        simMode: "deterministic" as const,
+        overrides: {},
+      };
+      const deltaB = {
+        id: "b",
+        name: "Run B",
+        basePlanId: "unsaved",
+        simMode: "deterministic" as const,
+        overrides: {},
+      };
+      function RaceProbe() {
+        const { runProjection, resetRuns, isRunning, runError, activeRunId } = useWorkspace();
+        const runs = useRuns();
+        return (
+          <>
+            <button
+              onClick={() => {
+                void runProjection(deltaA);
+              }}
+            >
+              Run A
+            </button>
+            <button
+              onClick={() => {
+                void runProjection(deltaB);
+              }}
+            >
+              Run B
+            </button>
+            <button onClick={resetRuns}>Reset</button>
+            <output data-testid="race-state">
+              {JSON.stringify({ names: runs.map((run) => run.scenario.name), isRunning, runError, activeRunId })}
+            </output>
+          </>
+        );
+      }
+      render(
+        <StoreProvider initialWorkspace={createEmptyWorkspace()} simulationRunner={simulationRunner}>
+          <RaceProbe />
+        </StoreProvider>,
+      );
 
-    fireEvent.click(screen.getByRole("button", { name: "Run A" }));
-    expect(pending).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
-    expect(pending[0]!.signal?.aborted).toBe(true);
+      fireEvent.click(screen.getByRole("button", { name: "Run A" }));
+      expect(pending).toHaveLength(1);
+      fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+      expect(pending[0]!.signal?.aborted).toBe(true);
 
-    // Start B after the reset, then settle A while B is still in flight.
-    fireEvent.click(screen.getByRole("button", { name: "Run B" }));
-    expect(pending).toHaveLength(2);
-    expect(pending[1]!.scenario.name).toBe("Run B");
-    expect(pending[1]!.signal?.aborted).toBe(false);
-    await act(async () => {
-      if (settlement === "resolve") pending[0]!.resolve(emptyOutcome);
-      else pending[0]!.reject(new Error("late A failure"));
-      await Promise.resolve();
-    });
+      // Start B after the reset, then settle A while B is still in flight.
+      fireEvent.click(screen.getByRole("button", { name: "Run B" }));
+      expect(pending).toHaveLength(2);
+      expect(pending[1]!.scenario.name).toBe("Run B");
+      expect(pending[1]!.signal?.aborted).toBe(false);
+      await act(async () => {
+        if (settlement === "resolve") pending[0]!.resolve(emptyOutcome);
+        else pending[0]!.reject(new Error("late A failure"));
+        await Promise.resolve();
+      });
 
-    // B keeps its run slot: no restored A, no error, no progress reset.
-    expect(JSON.parse(screen.getByTestId("race-state").textContent ?? "{}")).toMatchObject({
-      names: [], isRunning: true, runError: null, activeRunId: null,
-    });
-    expect(pending[1]!.signal?.aborted).toBe(false);
+      // B keeps its run slot: no restored A, no error, no progress reset.
+      expect(JSON.parse(screen.getByTestId("race-state").textContent ?? "{}")).toMatchObject({
+        names: [],
+        isRunning: true,
+        runError: null,
+        activeRunId: null,
+      });
+      expect(pending[1]!.signal?.aborted).toBe(false);
 
-    await act(async () => {
-      pending[1]!.resolve(emptyOutcome);
-      await Promise.resolve();
-    });
-    await waitFor(() => expect(JSON.parse(screen.getByTestId("race-state").textContent ?? "{}").names).toEqual(["Run B"]));
-    expect(JSON.parse(screen.getByTestId("race-state").textContent ?? "{}")).toMatchObject({
-      isRunning: false, runError: null,
-    });
-  });
+      await act(async () => {
+        pending[1]!.resolve(emptyOutcome);
+        await Promise.resolve();
+      });
+      await waitFor(() =>
+        expect(JSON.parse(screen.getByTestId("race-state").textContent ?? "{}").names).toEqual(["Run B"]),
+      );
+      expect(JSON.parse(screen.getByTestId("race-state").textContent ?? "{}")).toMatchObject({
+        isRunning: false,
+        runError: null,
+      });
+    },
+  );
 
   it("normalizes age on load and profile edits using its injected calendar year", () => {
     const imported = createEmptyWorkspace();
     imported.plan.profile.currentAge = 12;
     function AgeProbe() {
       const { workspace, dispatch } = useWorkspace();
-      return <><output data-testid="age">{workspace.plan.profile.currentAge}</output>
-        <button onClick={() => dispatch({ type: "plan/setProfile", patch: { birthYear: 1980, currentAge: 1 } })}>Edit birth year</button>
-        <button onClick={() => dispatch({ type: "workspace/loaded", workspace: imported })}>Import</button></>;
+      return (
+        <>
+          <output data-testid="age">{workspace.plan.profile.currentAge}</output>
+          <button onClick={() => dispatch({ type: "plan/setProfile", patch: { birthYear: 1980, currentAge: 1 } })}>
+            Edit birth year
+          </button>
+          <button onClick={() => dispatch({ type: "workspace/loaded", workspace: imported })}>Import</button>
+        </>
+      );
     }
-    render(<StoreProvider now={() => "2030-11-10T12:00:00Z"} initialWorkspace={imported}><AgeProbe /></StoreProvider>);
+    render(
+      <StoreProvider now={() => "2030-11-10T12:00:00Z"} initialWorkspace={imported}>
+        <AgeProbe />
+      </StoreProvider>,
+    );
     expect(screen.getByTestId("age").textContent).toBe("49");
     fireEvent.click(screen.getByRole("button", { name: "Edit birth year" }));
     expect(screen.getByTestId("age").textContent).toBe("50");

@@ -4,10 +4,26 @@ import type { RunRecord } from "../../domain/types";
 import { RunAnalysisSummary } from "./RunAnalysisSummary";
 
 const run: RunRecord = {
-  id: "mc-run", planId: "p", scenarioId: "mc", createdAt: "2026-01-01T00:00:00Z",
-  scenario: { id: "mc", name: "MC", simMode: "montecarlo", retirementAge: 65, returnAssumptions: { equity: 0.05, bond: 0.02, cash: 0 }, withdrawalOrder: ["tfsa", "nonreg", "rrsp"], mcConfig: { runs: 1_000, seed: 12, stdDev: { equity: 0.18, bond: 0.06, cash: 0.02 } } },
+  id: "mc-run",
+  planId: "p",
+  scenarioId: "mc",
+  createdAt: "2026-01-01T00:00:00Z",
+  scenario: {
+    id: "mc",
+    name: "MC",
+    simMode: "montecarlo",
+    retirementAge: 65,
+    returnAssumptions: { equity: 0.05, bond: 0.02, cash: 0 },
+    withdrawalOrder: ["tfsa", "nonreg", "rrsp"],
+    mcConfig: { runs: 1_000, seed: 12, stdDev: { equity: 0.18, bond: 0.06, cash: 0.02 } },
+  },
   result: { years: [], summary: { success: true, finalNetWorth: 20 } },
-  analysis: { mode: "montecarlo", successRate: 0.73, percentileNetWorth: { p10: 10_000, p50: 20_000, p90: 30_000 }, representativeRun: 411 },
+  analysis: {
+    mode: "montecarlo",
+    successRate: 0.73,
+    percentileNetWorth: { p10: 10_000, p50: 20_000, p90: 30_000 },
+    representativeRun: 411,
+  },
 };
 
 describe("RunAnalysisSummary", () => {
@@ -27,11 +43,22 @@ describe("RunAnalysisSummary", () => {
     const historical: RunRecord = {
       ...run,
       id: "historical-run",
-      scenario: { ...run.scenario, id: "hist", name: "JST history", simMode: "historical", historicalConfig: { startYear: 1872 } },
+      scenario: {
+        ...run.scenario,
+        id: "hist",
+        name: "JST history",
+        simMode: "historical",
+        historicalConfig: { startYear: 1872 },
+      },
       analysis: {
-        mode: "historical", windowCount: 99, firstWindowStartYear: 1872, latestWindowStartYear: 1970,
-        successRate: 0.72, percentileNetWorth: { p10: 12_000, p50: 25_000, p90: 40_000 },
-        representativeStartYear: 1900, representativeEndYear: 1950,
+        mode: "historical",
+        windowCount: 99,
+        firstWindowStartYear: 1872,
+        latestWindowStartYear: 1970,
+        successRate: 0.72,
+        percentileNetWorth: { p10: 12_000, p50: 25_000, p90: 40_000 },
+        representativeStartYear: 1900,
+        representativeEndYear: 1950,
       },
     };
     render(<RunAnalysisSummary run={historical} />);
@@ -62,9 +89,14 @@ describe("RunAnalysisSummary", () => {
           planningBasis: "One deterministic evaluation using the selected return assumptions.",
           plannedWithdrawals: [{ age: 66, netRrspDraw: 12_500 }],
           comparison: {
-            manualTotalTax: 40_000, optimizedTotalTax: 35_000,
-            manualFinalNetWorth: 800_000, optimizedFinalNetWorth: 790_000,
-            manualSuccess: false, optimizedSuccess: true, manualGisTotal: 20_000, optimizedGisTotal: 24_000,
+            manualTotalTax: 40_000,
+            optimizedTotalTax: 35_000,
+            manualFinalNetWorth: 800_000,
+            optimizedFinalNetWorth: 790_000,
+            manualSuccess: false,
+            optimizedSuccess: true,
+            manualGisTotal: 20_000,
+            optimizedGisTotal: 24_000,
             selectionRule: "Feasibility first, then lower total tax; bounded heuristic.",
           },
         },
@@ -89,15 +121,41 @@ describe("RunAnalysisSummary", () => {
       planningBasis: "One deterministic evaluation.",
       plannedWithdrawals: [],
       comparison: {
-        manualTotalTax: 0, optimizedTotalTax: 0, manualFinalNetWorth: 0, optimizedFinalNetWorth: 0,
-        manualSuccess: false, optimizedSuccess: false, manualGisTotal: 0, optimizedGisTotal: 0,
+        manualTotalTax: 0,
+        optimizedTotalTax: 0,
+        manualFinalNetWorth: 0,
+        optimizedFinalNetWorth: 0,
+        manualSuccess: false,
+        optimizedSuccess: false,
+        manualGisTotal: 0,
+        optimizedGisTotal: 0,
         selectionRule: "Feasibility first.",
       },
     };
-    const { rerender } = render(<RunAnalysisSummary run={{ ...run, result: { ...run.result, withdrawalPlan: plan } }} />);
-    expect(screen.getByRole("complementary", { name: "Tax strategy planning comparison" }).textContent).toContain("no-shortfall requirement in every modeled year");
+    const { rerender } = render(
+      <RunAnalysisSummary run={{ ...run, result: { ...run.result, withdrawalPlan: plan } }} />,
+    );
+    expect(screen.getByRole("complementary", { name: "Tax strategy planning comparison" }).textContent).toContain(
+      "no-shortfall requirement in every modeled year",
+    );
 
-    rerender(<RunAnalysisSummary run={{ ...run, result: { ...run.result, withdrawalPlan: { ...plan, status: "manual-retained", comparison: { ...plan.comparison, manualSuccess: true, optimizedSuccess: true } } } }} />);
-    expect(screen.getByRole("complementary", { name: "Tax strategy planning comparison" }).textContent).toContain("no tested policy that fully funded every modeled year strictly reduced total projected tax");
+    rerender(
+      <RunAnalysisSummary
+        run={{
+          ...run,
+          result: {
+            ...run.result,
+            withdrawalPlan: {
+              ...plan,
+              status: "manual-retained",
+              comparison: { ...plan.comparison, manualSuccess: true, optimizedSuccess: true },
+            },
+          },
+        }}
+      />,
+    );
+    expect(screen.getByRole("complementary", { name: "Tax strategy planning comparison" }).textContent).toContain(
+      "no tested policy that fully funded every modeled year strictly reduced total projected tax",
+    );
   });
 });

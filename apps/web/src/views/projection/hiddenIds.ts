@@ -9,5 +9,5 @@
 export function sanitizeHiddenIds(value: unknown, knownIds: readonly string[]): string[] | null {
   if (!Array.isArray(value)) return null;
   const wanted = new Set(value.filter((id): id is string => typeof id === "string" && knownIds.includes(id)));
-  return knownIds.filter(id => wanted.has(id));
+  return knownIds.filter((id) => wanted.has(id));
 }

@@ -15,14 +15,11 @@ export function investmentOrder(order: readonly AccountType[]): AccountType[] {
 
 export function cashOrderPosition(order: readonly AccountType[]): CashOrderPosition {
   const index = order.indexOf("cash");
-  return index < 0 ? "automatic" : String(index) as CashOrderPosition;
+  return index < 0 ? "automatic" : (String(index) as CashOrderPosition);
 }
 
 /** Keep the legacy three-account order unless the user explicitly places cash. */
-export function orderWithCashPosition(
-  order: readonly AccountType[],
-  position: CashOrderPosition,
-): AccountType[] {
+export function orderWithCashPosition(order: readonly AccountType[], position: CashOrderPosition): AccountType[] {
   const investments = investmentOrder(order);
   if (position === "automatic") return investments;
   const result = [...investments];
@@ -40,5 +37,5 @@ export function swapOrderPosition<T extends string>(order: readonly T[], index: 
 }
 
 export function formatAccountOrder(order: readonly AccountType[]): string {
-  return order.map(type => ACCOUNT_TYPE_LABELS[type]).join(" → ");
+  return order.map((type) => ACCOUNT_TYPE_LABELS[type]).join(" → ");
 }

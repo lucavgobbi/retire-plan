@@ -36,6 +36,9 @@ export const HISTORICAL_DATASET = {
 } as const;
 
 /** The bundled USA 1872–2020 annual nominal total-return observations (fractions). */
-export const HISTORICAL_OBSERVATIONS: HistoricalReturnObservation[] = artifact.observations.map(
-  (observation) => ({ year: observation.year, equity: observation.equity, bond: observation.bond, cash: observation.cash }),
-);
+export const HISTORICAL_OBSERVATIONS: HistoricalReturnObservation[] = artifact.observations.map((observation) => ({
+  year: observation.year,
+  equity: observation.equity,
+  bond: observation.bond,
+  cash: observation.cash,
+}));

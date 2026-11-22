@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
 import tablesJson from "../data/tax/ca-2026.json";
 import { applyIndexation, loadTables, type TaxYearTables } from "../src/tax/tables";
-import {
-  federalTax,
-  taxableIncome,
-  type IncomeForTax,
-} from "../src/tax/federal";
+import { federalTax, taxableIncome, type IncomeForTax } from "../src/tax/federal";
 import { ontarioTax } from "../src/tax/ontario";
 import { oasClawback } from "../src/tax/oasClawback";
 import { mortgageYear } from "../src/mortgage";
@@ -44,7 +40,10 @@ function plan(edit: (p: Plan) => void): Plan {
 }
 
 /** Combined 2026 tax on an income shape (the already-tested unit engines). */
-function combinedTax(income: IncomeForTax, taxTables: TaxYearTables = tables): {
+function combinedTax(
+  income: IncomeForTax,
+  taxTables: TaxYearTables = tables,
+): {
   federal: number;
   provincial: number;
   surtax: number;
@@ -90,7 +89,10 @@ function healthyPlan(): Plan {
   return p;
 }
 
-function blended(mix: { equity: number; bond: number; cash: number }, r: { equity: number; bond: number; cash: number }): number {
+function blended(
+  mix: { equity: number; bond: number; cash: number },
+  r: { equity: number; bond: number; cash: number },
+): number {
   return mix.equity * r.equity + mix.bond * r.bond + mix.cash * r.cash;
 }
 
@@ -102,7 +104,14 @@ describe("simulate — mortgage payment frequencies", () => {
   it("applies biweekly/weekly frequencies so equal annual cash amortizes faster", () => {
     // Same annual cash ($39,000/yr): 12 x $3,250 monthly vs 26 x $1,500 biweekly vs 52 x $750 weekly.
     // Zero returns isolate the amortization difference.
-    const debt = { id: "m", kind: "mortgage" as const, rate: 0.06, termYears: 25, amortizationYears: 25, balance: 300_000 };
+    const debt = {
+      id: "m",
+      kind: "mortgage" as const,
+      rate: 0.06,
+      termYears: 25,
+      amortizationYears: 25,
+      balance: 300_000,
+    };
     const base = plan((x) => {
       x.profile.currentAge = 40;
       x.profile.endAge = 41;
@@ -113,8 +122,10 @@ describe("simulate — mortgage payment frequencies", () => {
       x.savingsPolicy = [];
     });
     const monthly = run({ ...base, debts: [{ ...debt, monthlyPayment: 3_250 }] }).years[0]!.balances.debt;
-    const biweekly = run({ ...base, debts: [{ ...debt, monthlyPayment: 1_500, paymentFrequency: "biweekly" }] }).years[0]!.balances.debt;
-    const weekly = run({ ...base, debts: [{ ...debt, monthlyPayment: 750, paymentFrequency: "weekly" }] }).years[0]!.balances.debt;
+    const biweekly = run({ ...base, debts: [{ ...debt, monthlyPayment: 1_500, paymentFrequency: "biweekly" }] })
+      .years[0]!.balances.debt;
+    const weekly = run({ ...base, debts: [{ ...debt, monthlyPayment: 750, paymentFrequency: "weekly" }] }).years[0]!
+      .balances.debt;
     expect(biweekly).toBeLessThan(monthly);
     expect(weekly).toBeLessThan(biweekly);
   });
@@ -147,7 +158,15 @@ describe("simulate — focused, hand-checked cases", () => {
       { id: "travel", name: "Travel", amount: 50_000, sourceIndex: 1 },
     ]);
     expect(y.expenseBreakdown!.reduce((sum, item) => sum + item.amount, 0)).toBeCloseTo(y.expenses, 2);
-    const t = combinedTax({ employmentIncome: 120_000, otherTaxableIncome: 0, rrspWithdrawals: 0, pensionEligibleIncome: 0, capitalGains: 0, dividendsEligible: 0, age: 40 });
+    const t = combinedTax({
+      employmentIncome: 120_000,
+      otherTaxableIncome: 0,
+      rrspWithdrawals: 0,
+      pensionEligibleIncome: 0,
+      capitalGains: 0,
+      dividendsEligible: 0,
+      age: 40,
+    });
     expect(y.tax.total).toBeCloseTo(t.total, 2);
     // Surplus flows to non-registered by default (empty policy), after tax + expenses.
     expect(y.contributions.nonreg).toBeCloseTo(120_000 - t.total - 80_000, 2);
@@ -196,7 +215,18 @@ describe("simulate — focused, hand-checked cases", () => {
     expect(y.income.gis).toBeCloseTo(tables.gis.annualMaxSingle - 0.5 * 10_000, 2);
     // CPP and OAS are taxable in reality; the combined engine treats them as other taxable income.
     const taxTables = applyIndexation(tables, 1981 + 65 - tables.year);
-    const t = combinedTax({ employmentIncome: 0, otherTaxableIncome: 18_000, rrspWithdrawals: 0, pensionEligibleIncome: 0, capitalGains: 0, dividendsEligible: 0, age: 65 }, taxTables);
+    const t = combinedTax(
+      {
+        employmentIncome: 0,
+        otherTaxableIncome: 18_000,
+        rrspWithdrawals: 0,
+        pensionEligibleIncome: 0,
+        capitalGains: 0,
+        dividendsEligible: 0,
+        age: 65,
+      },
+      taxTables,
+    );
     expect(y.tax.total).toBeCloseTo(t.total, 2);
     expect(y.tax.oasClawback).toBe(0); // far below the recovery threshold
     // Surplus = cpp + oas + other income + GIS - tax - expenses -> default non-registered
@@ -220,15 +250,22 @@ describe("simulate — focused, hand-checked cases", () => {
     });
     const out = run(p);
     const y = out.years[0]!;
-    const tax = combinedTax({ employmentIncome: 120_000, otherTaxableIncome: 0, rrspWithdrawals: 0, pensionEligibleIncome: 0, capitalGains: 0, dividendsEligible: 0, age: 40 }).total;
+    const tax = combinedTax({
+      employmentIncome: 120_000,
+      otherTaxableIncome: 0,
+      rrspWithdrawals: 0,
+      pensionEligibleIncome: 0,
+      capitalGains: 0,
+      dividendsEligible: 0,
+      age: 40,
+    }).total;
     const surplus = 120_000 - tax - 80_000;
     expect(y.contributions.rrsp).toBeCloseTo(surplus * 1.05, 1); // employee + 5% employer match
     expect(y.income.other).toBeCloseTo(surplus * 0.05, 1); // match recognized as employer compensation inflow
     // Pension adjustment: the match reduces the earned room AND the used room is netted
     // against the carryforward when the next room is computed. (±0.02: the engine
     // records contributions/match in whole cents and the roll reuses those amounts.)
-    const expectedRoom =
-      -surplus * 1.05 + tables.rrsp.incomeRate * Math.max(0, 120_000 - surplus * 0.05);
+    const expectedRoom = -surplus * 1.05 + tables.rrsp.incomeRate * Math.max(0, 120_000 - surplus * 0.05);
     expect(Math.abs(y.rrspRoom - expectedRoom)).toBeLessThanOrEqual(0.02);
   });
 
@@ -238,7 +275,17 @@ describe("simulate — focused, hand-checked cases", () => {
       x.profile.endAge = 41;
       x.accounts = [{ id: "nr", type: "nonreg", balance: 0, assetMix: { equity: 0, bond: 0, cash: 1 } }];
       x.assets = [];
-      x.debts = [{ id: "m", kind: "mortgage", rate: 0, termYears: 1, amortizationYears: 1, balance: 2_500, monthlyPayment: 0.01 }];
+      x.debts = [
+        {
+          id: "m",
+          kind: "mortgage",
+          rate: 0,
+          termYears: 1,
+          amortizationYears: 1,
+          balance: 2_500,
+          monthlyPayment: 0.01,
+        },
+      ];
       x.incomes = [{ id: "job", kind: "employment", annualAmount: 120_000, startAge: 40, raiseRate: 0 }];
       x.expenses = [{ id: "life", name: "Life", annualAmount: 10_000, startAge: 40, inflationRate: 0 }];
       x.savingsPolicy = [{ id: "prepay", priority: 1, target: "mortgage-prepay" }];
@@ -285,7 +332,15 @@ describe("simulate — focused, hand-checked cases", () => {
     const years = run(p).years;
     const first = years[0]!;
     const last = years[years.length - 1]!;
-    const shape: IncomeForTax = { employmentIncome: 140_000, otherTaxableIncome: 0, rrspWithdrawals: 0, pensionEligibleIncome: 0, capitalGains: 0, dividendsEligible: 0, age: 65 };
+    const shape: IncomeForTax = {
+      employmentIncome: 140_000,
+      otherTaxableIncome: 0,
+      rrspWithdrawals: 0,
+      pensionEligibleIncome: 0,
+      capitalGains: 0,
+      dividendsEligible: 0,
+      age: 65,
+    };
     const current = combinedTax({ ...shape, age: 45 }, tables);
     const indexedTables = applyIndexation(tables, 20);
     const indexed = combinedTax(shape, indexedTables);
@@ -317,7 +372,9 @@ describe("simulate — focused, hand-checked cases", () => {
     const p = plan((x) => {
       x.profile.currentAge = 64;
       x.profile.endAge = 65;
-      x.accounts = [{ id: "nr", type: "nonreg", balance: 1_000, bookValue: 2_000, assetMix: { equity: 0, bond: 0, cash: 1 } }];
+      x.accounts = [
+        { id: "nr", type: "nonreg", balance: 1_000, bookValue: 2_000, assetMix: { equity: 0, bond: 0, cash: 1 } },
+      ];
       x.assets = [];
       x.debts = [];
       x.incomes = [{ id: "other", kind: "other", annualAmount: 5_000, startAge: 64, raiseRate: 0 }];
@@ -377,19 +434,47 @@ describe("simulate — focused, hand-checked cases", () => {
     const p = plan((x) => {
       x.profile.currentAge = 50;
       x.profile.endAge = 51;
-      x.accounts = [{ id: "nr", type: "nonreg", balance: 100_000, bookValue: 0, assetMix: { equity: 0, bond: 0, cash: 1 } }];
+      x.accounts = [
+        { id: "nr", type: "nonreg", balance: 100_000, bookValue: 0, assetMix: { equity: 0, bond: 0, cash: 1 } },
+      ];
       x.assets = [];
       x.debts = [];
       x.incomes = [{ id: "job", kind: "employment", annualAmount: 100_000, startAge: 50, raiseRate: 0 }];
       const taxTables = applyIndexation(tables, 1981 + 50 - tables.year);
-      const baseTax = combinedTax({ employmentIncome: 100_000, otherTaxableIncome: 0, rrspWithdrawals: 0, pensionEligibleIncome: 0, capitalGains: 0, dividendsEligible: 0, age: 50 }, taxTables).total;
-      x.expenses = [{ id: "life", name: "Life", annualAmount: 100_000 - baseTax + 1_000, startAge: 50, inflationRate: 0 }];
+      const baseTax = combinedTax(
+        {
+          employmentIncome: 100_000,
+          otherTaxableIncome: 0,
+          rrspWithdrawals: 0,
+          pensionEligibleIncome: 0,
+          capitalGains: 0,
+          dividendsEligible: 0,
+          age: 50,
+        },
+        taxTables,
+      ).total;
+      x.expenses = [
+        { id: "life", name: "Life", annualAmount: 100_000 - baseTax + 1_000, startAge: 50, inflationRate: 0 },
+      ];
       x.savingsPolicy = [];
     });
     const y = run(p).years[0]!;
     expect(y.withdrawals.nonreg).toBeGreaterThan(1_000);
     expect(y.shortfall).toBe(0);
-    expect(y.tax.total).toBeGreaterThan(combinedTax({ employmentIncome: 100_000, otherTaxableIncome: 0, rrspWithdrawals: 0, pensionEligibleIncome: 0, capitalGains: 0, dividendsEligible: 0, age: 50 }, applyIndexation(tables, 1981 + 50 - tables.year)).total);
+    expect(y.tax.total).toBeGreaterThan(
+      combinedTax(
+        {
+          employmentIncome: 100_000,
+          otherTaxableIncome: 0,
+          rrspWithdrawals: 0,
+          pensionEligibleIncome: 0,
+          capitalGains: 0,
+          dividendsEligible: 0,
+          age: 50,
+        },
+        applyIndexation(tables, 1981 + 50 - tables.year),
+      ).total,
+    );
   });
 
   it("clips a return below -100% at zero instead of producing negative holdings", () => {
@@ -444,7 +529,18 @@ describe("simulate — focused, hand-checked cases", () => {
     const gain = Math.max(0, proceeds - acb);
     expect(sold.events).toContain("home-sold");
     expect(sold.balances.home).toBe(0);
-    const t = combinedTax({ employmentIncome: 0, otherTaxableIncome: 0, rrspWithdrawals: 0, pensionEligibleIncome: 0, capitalGains: gain, dividendsEligible: 0, age: sellAge }, applyIndexation(tables, 1981 + sellAge - tables.year));
+    const t = combinedTax(
+      {
+        employmentIncome: 0,
+        otherTaxableIncome: 0,
+        rrspWithdrawals: 0,
+        pensionEligibleIncome: 0,
+        capitalGains: gain,
+        dividendsEligible: 0,
+        age: sellAge,
+      },
+      applyIndexation(tables, 1981 + sellAge - tables.year),
+    );
     // The gain's own tax is funded from the proceeds that same year.
     expect(sold.taxableIncome).toBeCloseTo(0.5 * gain, 2);
     expect(sold.tax.total).toBeCloseTo(t.total, 2);
@@ -461,7 +557,16 @@ describe("simulate — focused, hand-checked cases", () => {
       x.accounts = [{ id: "nr", type: "nonreg", balance: 0, assetMix: { equity: 0, bond: 0, cash: 1 } }];
       x.incomes = [];
       x.expenses = [{ id: "life", name: "Life", annualAmount: 0, startAge: 45, inflationRate: 0 }];
-      x.assets = [{ id: "rental", kind: "other", name: "Rental", value: 100_000, appreciationRate: 0.1, sellEvent: { age: sellAge, costsPct: 0.1 } }];
+      x.assets = [
+        {
+          id: "rental",
+          kind: "other",
+          name: "Rental",
+          value: 100_000,
+          appreciationRate: 0.1,
+          sellEvent: { age: sellAge, costsPct: 0.1 },
+        },
+      ];
       x.debts = [];
     });
     const out = run(p, detScenario(65));
@@ -470,7 +575,18 @@ describe("simulate — focused, hand-checked cases", () => {
     const value = 100_000 * Math.pow(1.1, sellAge - p.profile.currentAge);
     const proceeds = value * 0.9;
     const gain = Math.max(0, proceeds - 100_000);
-    const t = combinedTax({ employmentIncome: 0, otherTaxableIncome: 0, rrspWithdrawals: 0, pensionEligibleIncome: 0, capitalGains: gain, dividendsEligible: 0, age: sellAge }, applyIndexation(tables, 1981 + sellAge - tables.year));
+    const t = combinedTax(
+      {
+        employmentIncome: 0,
+        otherTaxableIncome: 0,
+        rrspWithdrawals: 0,
+        pensionEligibleIncome: 0,
+        capitalGains: gain,
+        dividendsEligible: 0,
+        age: sellAge,
+      },
+      applyIndexation(tables, 1981 + sellAge - tables.year),
+    );
 
     expect(beforeSale.balances.otherAssets).toBeCloseTo(value, 2);
     expect(beforeSale.balances.home).toBe(0);
@@ -589,9 +705,20 @@ describe("simulate — run-out (Review Focus #3)", () => {
     for (const y of out.years) {
       // No NaN anywhere: every numeric field must be finite.
       const numbers = [
-        y.income.employment, y.income.cpp, y.income.oas, y.income.gis, y.income.other,
-        y.taxableIncome, y.tax.total, y.expenses, y.shortfall, y.netWorth,
-        y.balances.tfsa, y.balances.rrsp, y.balances.nonreg, y.balances.debt,
+        y.income.employment,
+        y.income.cpp,
+        y.income.oas,
+        y.income.gis,
+        y.income.other,
+        y.taxableIncome,
+        y.tax.total,
+        y.expenses,
+        y.shortfall,
+        y.netWorth,
+        y.balances.tfsa,
+        y.balances.rrsp,
+        y.balances.nonreg,
+        y.balances.debt,
       ];
       for (const n of numbers) expect(Number.isFinite(n)).toBe(true);
       expect(y.balances.rrsp).toBeGreaterThanOrEqual(0);
@@ -631,8 +758,12 @@ describe("simulate — per-year reconciliation property (money cannot leak)", ()
 
     let prevBalances = initialBalances(p);
     let prevNW =
-      prevBalances.tfsa + prevBalances.rrsp + prevBalances.nonreg + prevBalances.home +
-      (prevBalances.otherAssets ?? 0) - prevBalances.debt;
+      prevBalances.tfsa +
+      prevBalances.rrsp +
+      prevBalances.nonreg +
+      prevBalances.home +
+      (prevBalances.otherAssets ?? 0) -
+      prevBalances.debt;
 
     for (let i = 0; i < out.years.length; i++) {
       const y = out.years[i]!;
@@ -644,13 +775,24 @@ describe("simulate — per-year reconciliation property (money cannot leak)", ()
       const sold = y.events.includes("home-sold");
       const growthNonreg = (prevBalances.nonreg - y.withdrawals.nonreg + y.contributions.nonreg) * b(nrMix);
       const homeGrowth = sold ? 0 : prevBalances.home * home.appreciationRate;
-      const mres = mortgageYear({ balance: prevBalances.debt, annualRate: debt.rate, monthlyPayment: debt.monthlyPayment });
+      const mres = mortgageYear({
+        balance: prevBalances.debt,
+        annualRate: debt.rate,
+        monthlyPayment: debt.monthlyPayment,
+      });
       const interest = mres.interest; // prepay (savings.mortgage) applies after the month loop
 
       const inflows =
-        y.income.employment + y.income.cpp + y.income.oas + y.income.other + y.income.gis +
-        growthTfSa + growthRrsp + growthNonreg + homeGrowth;
-      const outflows = (y.expenses - y.shortfall) + y.tax.total + interest;
+        y.income.employment +
+        y.income.cpp +
+        y.income.oas +
+        y.income.other +
+        y.income.gis +
+        growthTfSa +
+        growthRrsp +
+        growthNonreg +
+        homeGrowth;
+      const outflows = y.expenses - y.shortfall + y.tax.total + interest;
 
       const expectedDebt = Math.max(0, mres.endBalance - y.savings.mortgage);
       const expectedHome = sold ? 0 : prevBalances.home * (1 + home.appreciationRate);

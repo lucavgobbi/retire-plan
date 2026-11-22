@@ -12,10 +12,17 @@ import { YearDetailRow } from "./YearDetailRow";
 import { fmtMoney, fmtMoneyDetail } from "./fmt";
 import { ProjectionView } from "./ProjectionView";
 
-const selectableColumnIds = () => columns().slice(1).map((col) => col.id);
+const selectableColumnIds = () =>
+  columns()
+    .slice(1)
+    .map((col) => col.id);
 const selectableColumnCount = () => selectableColumnIds().length;
 
-function renderView(workspace = makeWorkspace(), simulationRunner?: SimulationRunner, baseScenario = DEFAULT_SCENARIO_BASE) {
+function renderView(
+  workspace = makeWorkspace(),
+  simulationRunner?: SimulationRunner,
+  baseScenario = DEFAULT_SCENARIO_BASE,
+) {
   return render(
     <StoreProvider initialWorkspace={workspace} initialBaseScenario={baseScenario} simulationRunner={simulationRunner}>
       <ProjectionView />
@@ -35,8 +42,20 @@ const emptyOutcome = { result: { years: [], summary: { success: true, finalNetWo
 
 function makeWorkspaceWithScenario(): ReturnType<typeof makeWorkspace> {
   const workspace = makeWorkspace();
-  workspace.scenarios.push({ id: "scen-a", name: "Scenario A", basePlanId: "plan-test", simMode: "deterministic", overrides: {} });
-  workspace.scenarios.push({ id: "scen-b", name: "Scenario B", basePlanId: "plan-test", simMode: "deterministic", overrides: {} });
+  workspace.scenarios.push({
+    id: "scen-a",
+    name: "Scenario A",
+    basePlanId: "plan-test",
+    simMode: "deterministic",
+    overrides: {},
+  });
+  workspace.scenarios.push({
+    id: "scen-b",
+    name: "Scenario B",
+    basePlanId: "plan-test",
+    simMode: "deterministic",
+    overrides: {},
+  });
   return workspace;
 }
 
@@ -69,7 +88,9 @@ describe("ProjectionView scenario dropdown (user item 7)", () => {
     const started: string[] = [];
     const simulationRunner: SimulationRunner = () => {
       started.push("run");
-      return new Promise((resolve) => { finish = () => resolve(emptyOutcome); });
+      return new Promise((resolve) => {
+        finish = () => resolve(emptyOutcome);
+      });
     };
     renderView(makeWorkspaceWithScenario(), simulationRunner);
     selectScenario("scen-a");
@@ -84,7 +105,9 @@ describe("ProjectionView scenario dropdown (user item 7)", () => {
     fireEvent.click(screen.getByRole("button", { name: /cancel projection/i }));
     expect(screen.getByText("Projection cancelled.")).toBeTruthy();
     finish?.();
-    await waitFor(() => expect((screen.getByRole("combobox", { name: /scenario to run/i }) as HTMLSelectElement).disabled).toBe(false));
+    await waitFor(() =>
+      expect((screen.getByRole("combobox", { name: /scenario to run/i }) as HTMLSelectElement).disabled).toBe(false),
+    );
     expect(document.querySelector(".run-stamp")).toBeNull();
     expect(started).toHaveLength(1);
   });
@@ -123,7 +146,11 @@ describe("ProjectionView scenario dropdown (user item 7)", () => {
       return null;
     }
     const view = render(
-      <StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={simulationRunner}>
+      <StoreProvider
+        initialWorkspace={workspace}
+        initialBaseScenario={DEFAULT_SCENARIO_BASE}
+        simulationRunner={simulationRunner}
+      >
         <DispatchProbe />
         <ProjectionView />
       </StoreProvider>,
@@ -137,7 +164,9 @@ describe("ProjectionView scenario dropdown (user item 7)", () => {
     expect(received[0]!.retirementAge).toBe(70);
 
     // Delete the selected scenario while the view is mounted (same path as ScenarioList).
-    act(() => { dispatchRef?.({ type: "scenario/remove", delta: workspace.scenarios[0]! }); });
+    act(() => {
+      dispatchRef?.({ type: "scenario/remove", delta: workspace.scenarios[0]! });
+    });
     // Selection falls back to BASE: the dropdown shows baseline and the Scenario A
     // run is filtered out (no wrong-scenario display).
     expect((screen.getByRole("combobox", { name: /scenario to run/i }) as HTMLSelectElement).value).toBe("");
@@ -150,7 +179,9 @@ describe("ProjectionView scenario dropdown (user item 7)", () => {
     expect(received[1]!.retirementAge).toBe(DEFAULT_SCENARIO_BASE.retirementAge);
     // Restoring the SAME scenario id later must NOT auto-reselect (the stale
     // selection state was actually reset): the dropdown stays on baseline.
-    act(() => { dispatchRef?.({ type: "scenario/add", delta: workspace.scenarios[0]! }); });
+    act(() => {
+      dispatchRef?.({ type: "scenario/add", delta: workspace.scenarios[0]! });
+    });
     expect((screen.getByRole("combobox", { name: /scenario to run/i }) as HTMLSelectElement).value).toBe("");
     // Manual reselection after restore works and dispatches the scenario's assumptions.
     selectScenario("scen-a");
@@ -183,7 +214,11 @@ describe("ProjectionView scenario dropdown (user item 7)", () => {
       return null;
     }
     const view = render(
-      <StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={simulationRunner}>
+      <StoreProvider
+        initialWorkspace={workspace}
+        initialBaseScenario={DEFAULT_SCENARIO_BASE}
+        simulationRunner={simulationRunner}
+      >
         <DispatchProbe />
         <ProjectionView />
       </StoreProvider>,
@@ -196,7 +231,9 @@ describe("ProjectionView scenario dropdown (user item 7)", () => {
     // Import a workspace without Scenario A (different plan id, no scenarios).
     const imported = makeWorkspace();
     imported.meta = { id: "plan-imported", name: "Imported plan", updatedAt: "2026-02-01T00:00:00.000Z" };
-    act(() => { dispatchRef?.({ type: "workspace/loaded", workspace: imported }); });
+    act(() => {
+      dispatchRef?.({ type: "workspace/loaded", workspace: imported });
+    });
     // Selection falls back to baseline and binds the imported plan's id: no stale
     // display, and Run dispatches the base scenario's assumptions.
     expect((screen.getByRole("combobox", { name: /scenario to run/i }) as HTMLSelectElement).value).toBe("");
@@ -229,12 +266,17 @@ describe("ProjectionView", () => {
     fireEvent.click(screen.getByRole("button", { name: /expand ages 45–46/i }));
     fireEvent.click(screen.getByRole("button", { name: "Show details for age 45" }));
     const warnings = document.querySelector('[data-detail-for="45"] [aria-label="Warnings"]')!;
-    expect(warnings.textContent).toContain(`Household calendar year 2026 uses historical return source year ${representativeStart}`);
+    expect(warnings.textContent).toContain(
+      `Household calendar year 2026 uses historical return source year ${representativeStart}`,
+    );
   });
 
   it("shows busy and cancel state, and ignores a late result after cancellation", async () => {
     let finish: (() => void) | undefined;
-    const simulationRunner: SimulationRunner = () => new Promise((resolve) => { finish = () => resolve(emptyOutcome); });
+    const simulationRunner: SimulationRunner = () =>
+      new Promise((resolve) => {
+        finish = () => resolve(emptyOutcome);
+      });
     renderView(makeWorkspace(), simulationRunner);
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
     expect(screen.getByText("Projection running in the background…")).toBeTruthy();
@@ -260,7 +302,9 @@ describe("ProjectionView", () => {
     expect(results.id).toBe("projection-year-table");
     expect(results.querySelectorAll("thead > tr")).toHaveLength(2);
     expect(results.querySelectorAll('thead th[scope="col"]')).toHaveLength(46);
-    expect(Array.from(results.querySelectorAll("thead tr:last-child th")).filter((cell) => cell.textContent === "Expenses")).toHaveLength(1);
+    expect(
+      Array.from(results.querySelectorAll("thead tr:last-child th")).filter((cell) => cell.textContent === "Expenses"),
+    ).toHaveLength(1);
     expect(results.querySelector('thead tr:first-child th[rowspan="2"]')?.textContent).toBe("Audit");
     results.focus();
     expect(document.activeElement).toBe(results);
@@ -293,7 +337,6 @@ describe("ProjectionView", () => {
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
     // First year: age 45, calendar year derived from birthYear 1981 + 45 = 2026.
     await waitFor(() => expect(document.querySelector('[data-age="45"]')).toBeTruthy());
-    const firstRow = document.querySelector('[data-age="45"]')!;
     expect(document.querySelector(".decade-row")?.textContent).toContain("2026–2035");
     expect(document.querySelector(".decade-row")?.textContent).toContain("$"); // summary money columns render
     // Run-out plan sanity never leaks NaN:
@@ -380,7 +423,9 @@ describe("ProjectionView", () => {
     const warnings = detail.querySelector('[aria-label="Warnings"]')!;
     expect(warnings.textContent).toContain("Required RRIF minimum:");
     expect(warnings.textContent).toContain("This draw is required even when spending needs are lower.");
-    expect(warnings.textContent).toContain("After spending, tax, and scheduled mortgage payments, surplus cash was reinvested:");
+    expect(warnings.textContent).toContain(
+      "After spending, tax, and scheduled mortgage payments, surplus cash was reinvested:",
+    );
     expect(warnings.textContent).toContain("TFSA $7,000.00");
     expect(warnings.textContent).toContain("non-registered");
     expect(warnings.textContent).toContain("not new employment savings");
@@ -472,7 +517,9 @@ describe("Projection subtabs", () => {
     workspace.projectionActiveTab = "cashflow";
     workspace.projectionSankeyRange = { startYear: 2020, endYear: 2050 };
     function SavedRange() {
-      return <output data-testid="saved-range">{JSON.stringify(useWorkspace().workspace.projectionSankeyRange)}</output>;
+      return (
+        <output data-testid="saved-range">{JSON.stringify(useWorkspace().workspace.projectionSankeyRange)}</output>
+      );
     }
     render(
       <StoreProvider initialWorkspace={workspace}>
@@ -495,7 +542,9 @@ function HiddenColumnsProbe() {
       <output data-testid="hidden-columns-state">{JSON.stringify(workspace.hiddenProjectionColumns ?? null)}</output>
       <output data-testid="hidden-charts-state">{JSON.stringify(workspace.hiddenProjectionCharts ?? null)}</output>
       <output data-testid="projection-scenario-state">{JSON.stringify(workspace.projectionScenarioId ?? null)}</output>
-      <output data-testid="run-summary-collapsed-state">{JSON.stringify(workspace.projectionRunSummaryCollapsed ?? null)}</output>
+      <output data-testid="run-summary-collapsed-state">
+        {JSON.stringify(workspace.projectionRunSummaryCollapsed ?? null)}
+      </output>
     </>
   );
 }
@@ -503,7 +552,15 @@ function HiddenColumnsProbe() {
 describe("projection table column selector", () => {
   it("restores persisted hidden columns on load: an entire hidden group drops its header, member headers and body cells; pinned columns stay", async () => {
     const ws = makeWorkspace();
-    ws.hiddenProjectionColumns = ["income.employment", "income.cpp", "income.oas", "income.gis", "income.other", "income.total", "stale.column"];
+    ws.hiddenProjectionColumns = [
+      "income.employment",
+      "income.cpp",
+      "income.oas",
+      "income.gis",
+      "income.other",
+      "income.total",
+      "stale.column",
+    ];
     render(
       <StoreProvider initialWorkspace={ws} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
         <ProjectionView />
@@ -632,30 +689,91 @@ describe("projection table group totals", () => {
   // two years for flow totals, take the period END for stock totals, and keep
   // totals correct even when member columns are hidden (full-group computation,
   // not a re-sum of whatever members happen to be visible).
-  const tax = (total: number, fed: number) => ({ federal: fed, provincial: total - fed - 6, surtax: 2, oasClawback: 4, total, marginalRate: 0.2 });
-  const balances = (tfsa: number, debt: number) => ({ tfsa, rrsp: 200, nonreg: 50, cash: 75, home: 400, otherAssets: 45, debt });
-  const makeYear = (age: number, opts: {
-    income?: Partial<{ employment: number; cpp: number; oas: number; gis: number; other: number }>;
-    cashInterest?: number; taxTotal?: number; fed?: number;
-    payroll?: Partial<{ cppBase: number; cppAdditional: number; cpp2: number; ei: number; total: number; enhancedCppDeduction: number; eiRefund: number }>;
-    withdrawals?: Partial<{ tfsa: number; rrsp: number; nonreg: number; cash: number }>;
-    contributions?: Partial<{ tfsa: number; rrsp: number; nonreg: number; cash: number }>;
-    balances?: { tfsa: number; debt: number }; netWorth?: number;
-  }): YearResult => ({
+  const tax = (total: number, fed: number) => ({
+    federal: fed,
+    provincial: total - fed - 6,
+    surtax: 2,
+    oasClawback: 4,
+    total,
+    marginalRate: 0.2,
+  });
+  const balances = (tfsa: number, debt: number) => ({
+    tfsa,
+    rrsp: 200,
+    nonreg: 50,
+    cash: 75,
+    home: 400,
+    otherAssets: 45,
+    debt,
+  });
+  const makeYear = (
+    age: number,
+    opts: {
+      income?: Partial<{ employment: number; cpp: number; oas: number; gis: number; other: number }>;
+      cashInterest?: number;
+      taxTotal?: number;
+      fed?: number;
+      payroll?: Partial<{
+        cppBase: number;
+        cppAdditional: number;
+        cpp2: number;
+        ei: number;
+        total: number;
+        enhancedCppDeduction: number;
+        eiRefund: number;
+      }>;
+      withdrawals?: Partial<{ tfsa: number; rrsp: number; nonreg: number; cash: number }>;
+      contributions?: Partial<{ tfsa: number; rrsp: number; nonreg: number; cash: number }>;
+      balances?: { tfsa: number; debt: number };
+      netWorth?: number;
+    },
+  ): YearResult => ({
     age,
-    income: { employment: opts.income?.employment ?? 0, cpp: opts.income?.cpp ?? 20, oas: opts.income?.oas ?? 10, gis: opts.income?.gis ?? 5, other: opts.income?.other ?? 15 },
+    income: {
+      employment: opts.income?.employment ?? 0,
+      cpp: opts.income?.cpp ?? 20,
+      oas: opts.income?.oas ?? 10,
+      gis: opts.income?.gis ?? 5,
+      other: opts.income?.other ?? 15,
+    },
     cashInterest: opts.cashInterest,
     taxableIncome: 0,
-    ...(opts.payroll ? { payroll: { cppBase: 0, cppAdditional: 0, cpp2: 0, ei: 0, total: 0, enhancedCppDeduction: 0, eiRefund: 0, ...opts.payroll } } : {}),
+    ...(opts.payroll
+      ? {
+          payroll: {
+            cppBase: 0,
+            cppAdditional: 0,
+            cpp2: 0,
+            ei: 0,
+            total: 0,
+            enhancedCppDeduction: 0,
+            eiRefund: 0,
+            ...opts.payroll,
+          },
+        }
+      : {}),
     tax: tax(opts.taxTotal ?? 15, opts.fed ?? 7),
-    withdrawals: { tfsa: opts.withdrawals?.tfsa ?? 10, rrsp: opts.withdrawals?.rrsp ?? 20, nonreg: opts.withdrawals?.nonreg ?? 30, cash: opts.withdrawals?.cash ?? 40 },
-    contributions: { tfsa: opts.contributions?.tfsa ?? 1, rrsp: opts.contributions?.rrsp ?? 2, nonreg: opts.contributions?.nonreg ?? 3, cash: opts.contributions?.cash ?? 4 },
+    withdrawals: {
+      tfsa: opts.withdrawals?.tfsa ?? 10,
+      rrsp: opts.withdrawals?.rrsp ?? 20,
+      nonreg: opts.withdrawals?.nonreg ?? 30,
+      cash: opts.withdrawals?.cash ?? 40,
+    },
+    contributions: {
+      tfsa: opts.contributions?.tfsa ?? 1,
+      rrsp: opts.contributions?.rrsp ?? 2,
+      nonreg: opts.contributions?.nonreg ?? 3,
+      cash: opts.contributions?.cash ?? 4,
+    },
     savings: { tfsa: 0, rrsp: 0, nonreg: 0, mortgage: 0 },
-    expenses: 0, shortfall: 0,
+    expenses: 0,
+    shortfall: 0,
     balances: opts.balances ? balances(opts.balances.tfsa, opts.balances.debt) : balances(100, 120),
     netWorth: opts.netWorth ?? 750,
-    tfsaRoom: 0, rrspRoom: 0,
-    events: [], warnings: [],
+    tfsaRoom: 0,
+    rrspRoom: 0,
+    events: [],
+    warnings: [],
   });
 
   // Year 60: income parts 100/20/10/5/15 (total 150), payroll withheld 53,
@@ -667,14 +785,22 @@ describe("projection table group totals", () => {
   // (debt 110), netWorth 770.
   const years = [
     makeYear(60, {
-      income: { employment: 100 }, cashInterest: 4, balances: { tfsa: 100, debt: 120 }, netWorth: 750,
+      income: { employment: 100 },
+      cashInterest: 4,
+      balances: { tfsa: 100, debt: 120 },
+      netWorth: 750,
       payroll: { cppBase: 30, cppAdditional: 5, cpp2: 8, ei: 10, total: 53, enhancedCppDeduction: 13, eiRefund: 0 },
     }),
     makeYear(61, {
-      income: { employment: 200 }, cashInterest: 6, taxTotal: 25, fed: 10,
+      income: { employment: 200 },
+      cashInterest: 6,
+      taxTotal: 25,
+      fed: 10,
       payroll: { cppBase: 40, cppAdditional: 6, cpp2: 0, ei: 11, total: 57, enhancedCppDeduction: 6, eiRefund: 11 },
-      withdrawals: { tfsa: 20, rrsp: 25, nonreg: 35, cash: 45 }, contributions: { tfsa: 2, rrsp: 3, nonreg: 4, cash: 5 },
-      balances: { tfsa: 110, debt: 110 }, netWorth: 770,
+      withdrawals: { tfsa: 20, rrsp: 25, nonreg: 35, cash: 45 },
+      contributions: { tfsa: 2, rrsp: 3, nonreg: 4, cash: 5 },
+      balances: { tfsa: 110, debt: 110 },
+      netWorth: 770,
     }),
   ];
   const result = { years, summary: { success: true, finalNetWorth: 770 } } as unknown as SimulationResult;
@@ -688,31 +814,48 @@ describe("projection table group totals", () => {
     const decade = container.querySelector(".decade-row")!;
     const totals = Array.from(decade.querySelectorAll("td[data-total]"));
     expect(totals.map((td) => td.textContent)).toEqual([
-      fmtMoney(150 + 250),   // Total income (income parts only — cash interest NOT included)
-      fmtMoney(53 + 57),     // Total withheld (gross payroll withholding, components summed)
-      fmtMoney(4 + 6),       // Total interest (cash-account interest, not a balance)
-      fmtMoney(15 + 25),     // Tax total: engine total, NOT the component sum (33)
-      fmtMoney(100 + 125),   // Total withdrawn
-      fmtMoney(10 + 14),     // Total contributed
-      fmtMoney(880),         // Total assets: ENDPOINT of year 61, not the sum 1750, debt excluded
+      fmtMoney(150 + 250), // Total income (income parts only — cash interest NOT included)
+      fmtMoney(53 + 57), // Total withheld (gross payroll withholding, components summed)
+      fmtMoney(4 + 6), // Total interest (cash-account interest, not a balance)
+      fmtMoney(15 + 25), // Tax total: engine total, NOT the component sum (33)
+      fmtMoney(100 + 125), // Total withdrawn
+      fmtMoney(10 + 14), // Total contributed
+      fmtMoney(880), // Total assets: ENDPOINT of year 61, not the sum 1750, debt excluded
     ]);
     // Standalone engine Net worth keeps its meaning (endpoint 770 = 880 − 110).
-    const netWorthIndex = Array.from(container.querySelectorAll("thead tr:last-child th"))
-      .findIndex((th) => th.getAttribute("aria-describedby") === "col-note-netWorth");
+    const netWorthIndex = Array.from(container.querySelectorAll("thead tr:last-child th")).findIndex(
+      (th) => th.getAttribute("aria-describedby") === "col-note-netWorth",
+    );
     expect(decade.children[netWorthIndex]!.textContent).toBe(fmtMoney(770));
   });
 
   it("totals cover the FULL group even when every member column is hidden", () => {
     const hidden = new Set([
-      "income.employment", "income.cpp", "income.oas", "income.gis", "income.other",
-      "withdrawals.tfsa", "withdrawals.rrsp", "withdrawals.nonreg", "withdrawals.cash",
-      "contributions.tfsa", "contributions.rrsp", "contributions.nonreg", "contributions.cash",
+      "income.employment",
+      "income.cpp",
+      "income.oas",
+      "income.gis",
+      "income.other",
+      "withdrawals.tfsa",
+      "withdrawals.rrsp",
+      "withdrawals.nonreg",
+      "withdrawals.cash",
+      "contributions.tfsa",
+      "contributions.rrsp",
+      "contributions.nonreg",
+      "contributions.cash",
     ]);
     const { container } = renderTable(hidden);
     const decade = container.querySelector(".decade-row")!;
     const totals = Array.from(decade.querySelectorAll("td[data-total]"));
     expect(totals.map((td) => td.textContent)).toEqual([
-      fmtMoney(400), fmtMoney(110), fmtMoney(10), fmtMoney(40), fmtMoney(225), fmtMoney(24), fmtMoney(880),
+      fmtMoney(400),
+      fmtMoney(110),
+      fmtMoney(10),
+      fmtMoney(40),
+      fmtMoney(225),
+      fmtMoney(24),
+      fmtMoney(880),
     ]);
     // Member headers are really gone; the total headers remain.
     expect(container.querySelector('thead th[aria-describedby="col-note-income.total"]')).toBeTruthy();
@@ -730,17 +873,23 @@ describe("projection table group totals", () => {
     const { container } = renderTable();
     // Total headers carry a visually hidden note span, so header text is matched
     // by prefix (the note follows the label inside the same th).
-    const ths = Array.from(container.querySelectorAll("thead tr:last-child th")).map(th => th.childNodes[0]?.textContent ?? "");
+    const ths = Array.from(container.querySelectorAll("thead tr:last-child th")).map(
+      (th) => th.childNodes[0]?.textContent ?? "",
+    );
     const payrollLabels = ["CPP base", "CPP additional", "CPP2", "EI", "Total withheld"];
-    expect(ths.filter(text => payrollLabels.includes(text)))
-      .toEqual(["CPP base", "CPP additional", "CPP2", "EI", "Total withheld"]);
+    expect(ths.filter((text) => payrollLabels.includes(text))).toEqual([
+      "CPP base",
+      "CPP additional",
+      "CPP2",
+      "EI",
+      "Total withheld",
+    ]);
     // The group sits between Income and the Cash accounts' Interest column.
     expect(ths.indexOf("CPP base")).toBeGreaterThan(ths.indexOf("Employment"));
     expect(ths.indexOf("Total withheld")).toBeLessThan(ths.indexOf("Interest"));
     // Withholding note separates gross withholding from the annual cash cost.
     expect(document.getElementById("col-note-payroll.total")!.textContent).toContain("minus the EI refund");
-    const cellOf = (row: Element, label: string) =>
-      row.querySelectorAll("td")[ths.indexOf(label)]!.textContent;
+    const cellOf = (row: Element, label: string) => row.querySelectorAll("td")[ths.indexOf(label)]!.textContent;
     const year60 = container.querySelector('tr[data-age="60"]')!;
     expect(cellOf(year60, "CPP base")).toBe(fmtMoney(30));
     expect(cellOf(year60, "CPP additional")).toBe(fmtMoney(5));
@@ -788,7 +937,9 @@ describe("bulk table-column toggle (native Select all columns checkbox)", () => 
     const bulk = screen.getByRole("checkbox", { name: "Select all columns" }) as HTMLInputElement;
     expect(bulk.checked).toBe(true);
     expect(bulk.indeterminate).toBe(false);
-    expect(document.querySelector(".bulk-columns-count")!.textContent).toBe(`(${selectableColumnCount()} of ${selectableColumnCount()} shown)`);
+    expect(document.querySelector(".bulk-columns-count")!.textContent).toBe(
+      `(${selectableColumnCount()} of ${selectableColumnCount()} shown)`,
+    );
 
     clickBulk();
     // Every selectable id is hidden; pinned calendar-year, Age and Audit remain.
@@ -823,10 +974,14 @@ describe("bulk table-column toggle (native Select all columns checkbox)", () => 
     const mixed = screen.getByRole("checkbox", { name: "Select all columns" }) as HTMLInputElement;
     expect(mixed.checked).toBe(false);
     expect(mixed.indeterminate).toBe(true);
-    expect(document.querySelector(".bulk-columns-count")!.textContent).toBe(`(${selectableColumnCount() - 1} of ${selectableColumnCount()} shown)`);
+    expect(document.querySelector(".bulk-columns-count")!.textContent).toBe(
+      `(${selectableColumnCount() - 1} of ${selectableColumnCount()} shown)`,
+    );
     clickBulk();
     expect(JSON.parse(screen.getByTestId("hidden-columns-state").textContent ?? "null")).toBeNull();
-    expect((screen.getByRole("checkbox", { name: "Select all columns" }) as HTMLInputElement).indeterminate).toBe(false);
+    expect((screen.getByRole("checkbox", { name: "Select all columns" }) as HTMLInputElement).indeterminate).toBe(
+      false,
+    );
   });
 
   it("charts are unaffected by the bulk column checkbox; chart preferences untouched", async () => {
@@ -857,7 +1012,9 @@ describe("persisted Run scenario selection (projectionScenarioId)", () => {
     const [key, setKey] = useState(0);
     return (
       <>
-        <button type="button" onClick={() => setKey((k) => k + 1)}>Remount projection</button>
+        <button type="button" onClick={() => setKey((k) => k + 1)}>
+          Remount projection
+        </button>
         <ProjectionView key={key} />
       </>
     );
@@ -910,7 +1067,11 @@ describe("persisted Run scenario selection (projectionScenarioId)", () => {
 
   it("choosing base is retained on remount even when the plan's most recent run is a saved-scenario run", async () => {
     render(
-      <StoreProvider initialWorkspace={makeWorkspaceWithScenario()} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={resolvedRunner}>
+      <StoreProvider
+        initialWorkspace={makeWorkspaceWithScenario()}
+        initialBaseScenario={DEFAULT_SCENARIO_BASE}
+        simulationRunner={resolvedRunner}
+      >
         <RemountableProjection />
         <HiddenColumnsProbe />
       </StoreProvider>,
@@ -950,12 +1111,16 @@ describe("persisted Run scenario selection (projectionScenarioId)", () => {
     // NEW preference, not the old local state.
     const imported = makeWorkspaceWithScenario();
     imported.projectionScenarioId = "scen-b";
-    act(() => { dispatchRef?.({ type: "workspace/loaded", workspace: imported }); });
+    act(() => {
+      dispatchRef?.({ type: "workspace/loaded", workspace: imported });
+    });
     expect(dropdownValue()).toBe("scen-b");
     expect(probeScenario()).toBe("scen-b");
     // An import WITHOUT a preference falls back to baseline.
     const importedPlain = makeWorkspaceWithScenario();
-    act(() => { dispatchRef?.({ type: "workspace/loaded", workspace: importedPlain }); });
+    act(() => {
+      dispatchRef?.({ type: "workspace/loaded", workspace: importedPlain });
+    });
     expect(dropdownValue()).toBe("");
     expect(probeScenario()).toBeNull();
   });
@@ -977,7 +1142,9 @@ describe("persisted Run scenario selection (projectionScenarioId)", () => {
     );
     selectScenario("scen-a");
     expect(probeScenario()).toBe("scen-a");
-    act(() => { dispatchRef?.({ type: "scenario/remove", delta: workspace.scenarios[0]! }); });
+    act(() => {
+      dispatchRef?.({ type: "scenario/remove", delta: workspace.scenarios[0]! });
+    });
     // Deleting the selected scenario falls back to the base — and the backend
     // records that fallback as an EXPLICIT base choice ("", not a clear), so it
     // survives remounts like any other deliberate selection.
@@ -1043,13 +1210,13 @@ describe("run analysis summary collapse persistence (projectionRunSummaryCollaps
 
 describe("canonical column order: each named group's Total is last", () => {
   const groupTotals: Record<string, string> = {
-    "Income": "Total income",
-    "Payroll": "Total withheld",
+    Income: "Total income",
+    Payroll: "Total withheld",
     "Cash accounts": "Total interest",
-    "Tax": "Total",
-    "Withdrawals": "Total withdrawn",
-    "Contributions": "Total contributed",
-    "Balances": "Total assets",
+    Tax: "Total",
+    Withdrawals: "Total withdrawn",
+    Contributions: "Total contributed",
+    Balances: "Total assets",
   };
 
   it("canonical registry: every named group ends with its group-total column; groups stay contiguous; ids unchanged", () => {
@@ -1073,7 +1240,12 @@ describe("canonical column order: each named group's Total is last", () => {
     // Tax: the Marginal-rate diagnostic precedes the Total so the total is the
     // band's last column — stable ids, only the canonical order moved.
     expect(cols.filter((col) => col.group === "Tax").map((col) => col.id)).toEqual([
-      "tax.federal", "tax.provincial", "tax.surtax", "tax.oasClawback", "tax.marginalRate", "tax.total",
+      "tax.federal",
+      "tax.provincial",
+      "tax.surtax",
+      "tax.oasClawback",
+      "tax.marginalRate",
+      "tax.total",
     ]);
   });
 
@@ -1088,8 +1260,16 @@ describe("canonical column order: each named group's Total is last", () => {
     const groups = Array.from(document.querySelectorAll(".projection-settings-menu .settings-group"));
     // "Other" holds the standalone Taxable column, which sits canonically between
     // the Cash accounts and Tax groups; Payroll sits right after Income.
-    expect(groups.map((group) => group.querySelector(".settings-group-name")!.textContent))
-      .toEqual(["Income", "Payroll", "Cash accounts", "Other", "Tax", "Withdrawals", "Contributions", "Balances"]);
+    expect(groups.map((group) => group.querySelector(".settings-group-name")!.textContent)).toEqual([
+      "Income",
+      "Payroll",
+      "Cash accounts",
+      "Other",
+      "Tax",
+      "Withdrawals",
+      "Contributions",
+      "Balances",
+    ]);
     for (const group of groups) {
       const name = group.querySelector(".settings-group-name")!.textContent!;
       const labels = Array.from(group.querySelectorAll("label")).map((label) => label.textContent!.trim());
@@ -1160,7 +1340,12 @@ describe("run analysis collapsible", () => {
   it("monte carlo mode: the ensemble box is inside the collapsible; charts stay outside", async () => {
     const mcOutcome = {
       result: { years: [], summary: { success: true, finalNetWorth: 20_000 } },
-      analysis: { mode: "montecarlo", successRate: 0.73, percentileNetWorth: { p10: 10_000, p50: 20_000, p90: 30_000 }, representativeRun: 411 },
+      analysis: {
+        mode: "montecarlo",
+        successRate: 0.73,
+        percentileNetWorth: { p10: 10_000, p50: 20_000, p90: 30_000 },
+        representativeRun: 411,
+      },
     } as unknown as RunOutcome;
     renderView(makeWorkspace(), () => Promise.resolve(mcOutcome));
     fireEvent.click(screen.getByRole("button", { name: /run projection/i }));
@@ -1184,9 +1369,14 @@ describe("run analysis collapsible", () => {
           planningBasis: "One deterministic evaluation using the selected return assumptions.",
           plannedWithdrawals: [{ age: 66, netRrspDraw: 12_500 }],
           comparison: {
-            manualTotalTax: 40_000, optimizedTotalTax: 35_000,
-            manualFinalNetWorth: 800_000, optimizedFinalNetWorth: 790_000,
-            manualSuccess: false, optimizedSuccess: true, manualGisTotal: 20_000, optimizedGisTotal: 24_000,
+            manualTotalTax: 40_000,
+            optimizedTotalTax: 35_000,
+            manualFinalNetWorth: 800_000,
+            optimizedFinalNetWorth: 790_000,
+            manualSuccess: false,
+            optimizedSuccess: true,
+            manualGisTotal: 20_000,
+            optimizedGisTotal: 24_000,
             selectionRule: "Feasibility first, then lower total tax; bounded heuristic.",
           },
         },
@@ -1211,27 +1401,57 @@ describe("YearDetailRow payroll card", () => {
       income: { employment: 95_000, cpp: 0, oas: 0, gis: 0, other: 0 },
       taxableIncome: 0,
       tax: { federal: 0, provincial: 0, surtax: 0, oasClawback: 0, total: 0, marginalRate: 0.2 },
-      withdrawals: { tfsa: 0, rrsp: 0, nonreg: 0 }, contributions: { tfsa: 0, rrsp: 0, nonreg: 0 },
+      withdrawals: { tfsa: 0, rrsp: 0, nonreg: 0 },
+      contributions: { tfsa: 0, rrsp: 0, nonreg: 0 },
       savings: { tfsa: 0, rrsp: 0, nonreg: 0, mortgage: 0 },
-      expenses: 0, shortfall: 0,
+      expenses: 0,
+      shortfall: 0,
       balances: { tfsa: 0, rrsp: 0, nonreg: 0, cash: 0, home: 0, debt: 0 },
-      netWorth: 0, tfsaRoom: 0, rrspRoom: 0, events: [], warnings: [],
+      netWorth: 0,
+      tfsaRoom: 0,
+      rrspRoom: 0,
+      events: [],
+      warnings: [],
       ...(payroll ? { payroll } : {}),
     } as YearResult;
   }
-  const withheld = { cppBase: 4230.45, cppAdditional: 500, cpp2: 416, ei: 1123.07, total: 6269.52, enhancedCppDeduction: 916, eiRefund: 1123.07 };
+  const withheld = {
+    cppBase: 4230.45,
+    cppAdditional: 500,
+    cpp2: 416,
+    ei: 1123.07,
+    total: 6269.52,
+    enhancedCppDeduction: 916,
+    eiRefund: 1123.07,
+  };
 
   function renderCard(payroll?: YearResult["payroll"]) {
-    return render(<table><tbody><YearDetailRow age={45} year={detailYear(payroll)} expanded colSpan={3} /></tbody></table>);
+    return render(
+      <table>
+        <tbody>
+          <YearDetailRow age={45} year={detailYear(payroll)} expanded colSpan={3} />
+        </tbody>
+      </table>,
+    );
   }
 
   it("shows an honest older-run hint when payroll is missing, and a fresh no-wages/zero copy when nothing was withheld", () => {
     const missing = renderCard();
     expect(screen.getByText(/no payroll breakdown was recorded for this saved result/i)).toBeTruthy();
-    expect(within(screen.getByRole("region", { name: "Payroll deductions" })).getByText(/re-run the projection/i)).toBeTruthy();
+    expect(
+      within(screen.getByRole("region", { name: "Payroll deductions" })).getByText(/re-run the projection/i),
+    ).toBeTruthy();
     missing.unmount();
     // Zero withholding does NOT mean payroll is off — no wages or age-ineligibility can cause it.
-    const zero = renderCard({ cppBase: 0, cppAdditional: 0, cpp2: 0, ei: 0, total: 0, enhancedCppDeduction: 0, eiRefund: 0 });
+    const zero = renderCard({
+      cppBase: 0,
+      cppAdditional: 0,
+      cpp2: 0,
+      ei: 0,
+      total: 0,
+      enhancedCppDeduction: 0,
+      eiRefund: 0,
+    });
     expect(screen.getByText(/no employee payroll deductions were withheld this year/i)).toBeTruthy();
     expect(screen.queryByText(/payroll collection is off/i)).toBeNull();
     zero.unmount();
@@ -1262,24 +1482,38 @@ describe("Reset runs", () => {
   function RunsProbe() {
     const runs = useRuns();
     const { activeRunId, workspace } = useWorkspace();
-    return <output data-testid="runs-state">{JSON.stringify({
-      count: runs.length,
-      activeRunId,
-      plan: workspace.plan,
-      scenarios: workspace.scenarios,
-      baseScenario: workspace.baseScenario,
-      projectionScenarioId: workspace.projectionScenarioId,
-      hiddenProjectionColumns: workspace.hiddenProjectionColumns,
-    })}</output>;
+    return (
+      <output data-testid="runs-state">
+        {JSON.stringify({
+          count: runs.length,
+          activeRunId,
+          plan: workspace.plan,
+          scenarios: workspace.scenarios,
+          baseScenario: workspace.baseScenario,
+          projectionScenarioId: workspace.projectionScenarioId,
+          hiddenProjectionColumns: workspace.hiddenProjectionColumns,
+        })}
+      </output>
+    );
   }
 
   it("is hidden with no run history, clears results after a run, and keeps the workspace intact", async () => {
     const workspace = makeWorkspace();
-    workspace.scenarios.push({ id: "scen-a", name: "Scenario A", basePlanId: "plan-test", simMode: "deterministic", overrides: {} });
+    workspace.scenarios.push({
+      id: "scen-a",
+      name: "Scenario A",
+      basePlanId: "plan-test",
+      simMode: "deterministic",
+      overrides: {},
+    });
     workspace.projectionScenarioId = "scen-a";
     workspace.hiddenProjectionColumns = ["tax.total"];
     render(
-      <StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={async () => emptyOutcome}>
+      <StoreProvider
+        initialWorkspace={workspace}
+        initialBaseScenario={DEFAULT_SCENARIO_BASE}
+        simulationRunner={async () => emptyOutcome}
+      >
         <ProjectionView />
         <RunsProbe />
       </StoreProvider>,
@@ -1293,7 +1527,9 @@ describe("Reset runs", () => {
 
     const reset = screen.getByRole("button", { name: "Reset runs" });
     expect(reset.getAttribute("aria-describedby")).toBe("reset-runs-hint");
-    expect(document.getElementById("reset-runs-hint")!.textContent).toMatch(/plan, scenarios, base settings and preferences are kept/i);
+    expect(document.getElementById("reset-runs-hint")!.textContent).toMatch(
+      /plan, scenarios, base settings and preferences are kept/i,
+    );
     fireEvent.click(reset);
 
     expect(document.querySelector(".run-stamp")).toBeNull();
@@ -1310,9 +1546,16 @@ describe("Reset runs", () => {
 
   it("works while a projection is running and discards its late completion", async () => {
     let finish: (() => void) | undefined;
-    const simulationRunner: SimulationRunner = () => new Promise((resolve) => { finish = () => resolve(emptyOutcome); });
+    const simulationRunner: SimulationRunner = () =>
+      new Promise((resolve) => {
+        finish = () => resolve(emptyOutcome);
+      });
     render(
-      <StoreProvider initialWorkspace={makeWorkspace()} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={simulationRunner}>
+      <StoreProvider
+        initialWorkspace={makeWorkspace()}
+        initialBaseScenario={DEFAULT_SCENARIO_BASE}
+        simulationRunner={simulationRunner}
+      >
         <ProjectionView />
         <RunsProbe />
       </StoreProvider>,

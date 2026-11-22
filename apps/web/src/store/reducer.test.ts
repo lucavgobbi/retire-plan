@@ -9,32 +9,56 @@ import { reducer, type StoreState } from "./reducer";
 const items: { [K in SectionKey]: Plan[K][number] } = {
   accounts: { id: "item", type: "nonreg", balance: 100, bookValue: 80, assetMix: { equity: 1, bond: 0, cash: 0 } },
   assets: { id: "item", kind: "other", name: "Asset", value: 100, appreciationRate: 0 },
-  debts: { id: "item", kind: "mortgage", balance: 100, rate: 0, termYears: 1, amortizationYears: 1, monthlyPayment: 10 },
+  debts: {
+    id: "item",
+    kind: "mortgage",
+    balance: 100,
+    rate: 0,
+    termYears: 1,
+    amortizationYears: 1,
+    monthlyPayment: 10,
+  },
   incomes: { id: "item", kind: "other", annualAmount: 100, startAge: 45, raiseRate: 0 },
   expenses: { id: "item", name: "Living", annualAmount: 100, startAge: 45, inflationRate: 0 },
   savingsPolicy: { id: "item", priority: 1, target: "tfsa" },
 };
 describe("workspace reducer", () => {
-  it.each(Object.keys(items) as SectionKey[])("adds, edits, and removes %s while preserving stable ids and prior state", section => {
-    const initial: StoreState = { workspace: createEmptyWorkspace(), runs: [] };
-    const added = reducer(initial, { type: "plan/addItem", section, item: items[section] } as Action);
-    expect(initial.workspace.plan[section]).toEqual([]);
-    const updated = reducer(added, { type: "plan/updateItem", section, id: "item", patch: { ...items[section], id: "changed" } } as Action);
-    expect(updated.workspace.plan[section][0]?.id).toBe("item");
-    const removed = reducer(updated, { type: "plan/removeItem", section, id: "item" });
-    expect(removed.workspace.plan[section]).toEqual([]);
-    expect(added.workspace.plan[section]).toEqual([items[section]]);
-  });
+  it.each(Object.keys(items) as SectionKey[])(
+    "adds, edits, and removes %s while preserving stable ids and prior state",
+    (section) => {
+      const initial: StoreState = { workspace: createEmptyWorkspace(), runs: [] };
+      const added = reducer(initial, { type: "plan/addItem", section, item: items[section] } as Action);
+      expect(initial.workspace.plan[section]).toEqual([]);
+      const updated = reducer(added, {
+        type: "plan/updateItem",
+        section,
+        id: "item",
+        patch: { ...items[section], id: "changed" },
+      } as Action);
+      expect(updated.workspace.plan[section][0]?.id).toBe("item");
+      const removed = reducer(updated, { type: "plan/removeItem", section, id: "item" });
+      expect(removed.workspace.plan[section]).toEqual([]);
+      expect(added.workspace.plan[section]).toEqual([items[section]]);
+    },
+  );
   it("retains optional ACB verbatim and supports clearing it", () => {
     let state: StoreState = { workspace: createEmptyWorkspace(), runs: [] };
     state = reducer(state, { type: "plan/addItem", section: "accounts", item: items.accounts });
     expect(state.workspace.plan.accounts[0]?.bookValue).toBe(80);
-    state = reducer(state, { type: "plan/updateItem", section: "accounts", id: "item", patch: { bookValue: undefined } });
+    state = reducer(state, {
+      type: "plan/updateItem",
+      section: "accounts",
+      id: "item",
+      patch: { bookValue: undefined },
+    });
     expect(state.workspace.plan.accounts[0]?.bookValue).toBeUndefined();
   });
   it("stores and clears hidden projection columns on the workspace", () => {
     let state: StoreState = { workspace: createEmptyWorkspace(), runs: [] };
-    state = reducer(state, { type: "projection/setHiddenColumns", hiddenColumnIds: ["income.employment", "tax.total"] });
+    state = reducer(state, {
+      type: "projection/setHiddenColumns",
+      hiddenColumnIds: ["income.employment", "tax.total"],
+    });
     expect(state.workspace.hiddenProjectionColumns).toEqual(["income.employment", "tax.total"]);
     // Clearing restores the DEFAULT: the field's absence (all columns visible).
     state = reducer(state, { type: "projection/setHiddenColumns", hiddenColumnIds: null });
@@ -76,7 +100,13 @@ describe("workspace reducer", () => {
   });
   it("returns the selected projection to baseline when that scenario is removed", () => {
     const workspace = createEmptyWorkspace();
-    const delta = { id: "chosen", name: "Chosen", basePlanId: "plan", simMode: "deterministic" as const, overrides: {} };
+    const delta = {
+      id: "chosen",
+      name: "Chosen",
+      basePlanId: "plan",
+      simMode: "deterministic" as const,
+      overrides: {},
+    };
     workspace.scenarios = [delta];
     workspace.projectionScenarioId = delta.id;
     const state = reducer({ workspace, runs: [] }, { type: "scenario/remove", delta });
@@ -88,17 +118,36 @@ describe("workspace reducer", () => {
     workspace.scenarios = [{ id: "s", name: "S", basePlanId: "p", simMode: "deterministic", overrides: {} }];
     workspace.projectionScenarioId = "s";
     workspace.hiddenProjectionCharts = ["tax"];
-    const record: RunRecord = { id: "run", planId: "p", scenarioId: "s", scenario: resolveScenario(workspace.scenarios[0]!, workspace.baseScenario!), result: { years: [], summary: { success: true, finalNetWorth: 1 } }, createdAt: "now" };
+    const record: RunRecord = {
+      id: "run",
+      planId: "p",
+      scenarioId: "s",
+      scenario: resolveScenario(workspace.scenarios[0]!, workspace.baseScenario!),
+      result: { years: [], summary: { success: true, finalNetWorth: 1 } },
+      createdAt: "now",
+    };
     const before = reducer({ workspace, runs: [record] }, { type: "projection/setScenarioId", scenarioId: "s" });
     const after = reducer(before, { type: "run/reset" });
     expect(after.runs).toEqual([]);
     expect(after.workspace).toEqual(before.workspace);
-    expect(after.workspace).toMatchObject({ projectionScenarioId: "s", hiddenProjectionCharts: ["tax"], scenarios: [{ id: "s" }] });
+    expect(after.workspace).toMatchObject({
+      projectionScenarioId: "s",
+      hiddenProjectionCharts: ["tax"],
+      scenarios: [{ id: "s" }],
+    });
   });
-  it("keeps the newest twenty immutable run snapshots and clears runs on workspace replacement", () => {    let state: StoreState = { workspace: createEmptyWorkspace(), runs: [] };
+  it("keeps the newest twenty immutable run snapshots and clears runs on workspace replacement", () => {
+    let state: StoreState = { workspace: createEmptyWorkspace(), runs: [] };
     let last!: RunRecord;
     for (let i = 0; i < 22; i++) {
-      last = { id: String(i), planId: "p", scenarioId: null, scenario: resolveScenario(null, DEFAULT_SCENARIO_BASE), result: { years: [], summary: { success: true, finalNetWorth: i } }, createdAt: String(i) };
+      last = {
+        id: String(i),
+        planId: "p",
+        scenarioId: null,
+        scenario: resolveScenario(null, DEFAULT_SCENARIO_BASE),
+        result: { years: [], summary: { success: true, finalNetWorth: i } },
+        createdAt: String(i),
+      };
       state = reducer(state, { type: "run/store", record: last });
     }
     expect(state.runs).toHaveLength(20);

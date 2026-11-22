@@ -87,12 +87,21 @@ function roundBal(accounts: AccountState[], type: AccountPlan["type"]): number {
   return roundCent(sumType(accounts, type));
 }
 
-function reportBalances(accounts: AccountState[], details: Map<AccountState, AccountDetail>, key: "openingBalance" | "closingBalance"): void {
+function reportBalances(
+  accounts: AccountState[],
+  details: Map<AccountState, AccountDetail>,
+  key: "openingBalance" | "closingBalance",
+): void {
   for (const type of accountTypes) {
     const group = accounts.filter((account) => account.type === type);
     const balances = group.map((account) => account.balance);
-    const rounded = reportCents(balances, balances.reduce((sum, balance) => sum + balance, 0));
-    group.forEach((account, index) => { details.get(account)![key] = rounded[index]!; });
+    const rounded = reportCents(
+      balances,
+      balances.reduce((sum, balance) => sum + balance, 0),
+    );
+    group.forEach((account, index) => {
+      details.get(account)![key] = rounded[index]!;
+    });
   }
 }
 
@@ -166,7 +175,9 @@ export function simulate(
     throw new Error(`validatePlan: ${[...errors, ...scenarioErrors].join(" ")}`);
   }
   if ((scenario.payroll?.cpp || scenario.payroll?.ei) && tables.payroll === undefined) {
-    throw new Error("Tax tables: employee payroll parameters are required when CPP or EI payroll deductions are enabled.");
+    throw new Error(
+      "Tax tables: employee payroll parameters are required when CPP or EI payroll deductions are enabled.",
+    );
   }
 
   // Tax-minimizing policy: injected `planned` (candidate evaluation, runners) is used
@@ -190,9 +201,7 @@ export function simulate(
   for (const t of scenario.withdrawalOrder) orderCounts.set(t, (orderCounts.get(t) ?? 0) + 1);
   for (const t of ["tfsa", "nonreg", "rrsp"] as const) {
     if (orderCounts.get(t) !== 1) {
-      throw new Error(
-        `withdrawalOrder must include "${t}" exactly once (got ${orderCounts.get(t) ?? 0}).`,
-      );
+      throw new Error(`withdrawalOrder must include "${t}" exactly once (got ${orderCounts.get(t) ?? 0}).`);
     }
   }
   if ((orderCounts.get("cash") ?? 0) > 1) {
@@ -208,9 +217,10 @@ export function simulate(
   // Engine cash-first fallback: when named cash accounts exist but the stored
   // (legacy) order predates cash, cash is drawn first as the most liquid bucket.
   // An explicit order that already positions cash is respected verbatim.
-  const withdrawalOrder = hasNamedCash && !orderCounts.has("cash")
-    ? ["cash" as const, ...scenario.withdrawalOrder]
-    : scenario.withdrawalOrder;
+  const withdrawalOrder =
+    hasNamedCash && !orderCounts.has("cash")
+      ? ["cash" as const, ...scenario.withdrawalOrder]
+      : scenario.withdrawalOrder;
 
   const startAge = plan.profile.currentAge;
   const endAge = plan.profile.endAge;
@@ -224,14 +234,14 @@ export function simulate(
     ...(a.interestRate === undefined ? {} : { interestRate: a.interestRate }),
   }));
   const assetStates: AssetState[] = plan.assets.map((h) => ({
-      id: h.id,
-      ...(h.name === undefined ? {} : { name: h.name }),
-      kind: h.kind,
-      value: h.value,
-      originalValue: h.value,
-      appreciationRate: h.appreciationRate,
-      sellEvent: h.sellEvent ? { ...h.sellEvent } : undefined,
-    }));
+    id: h.id,
+    ...(h.name === undefined ? {} : { name: h.name }),
+    kind: h.kind,
+    value: h.value,
+    originalValue: h.value,
+    appreciationRate: h.appreciationRate,
+    sellEvent: h.sellEvent ? { ...h.sellEvent } : undefined,
+  }));
   const debt = plan.debts.find((d) => d.kind === "mortgage");
   let debtBalance = debt?.balance ?? 0; // local: simulate must NEVER mutate the plan
   let cashBalance = 0;
@@ -250,10 +260,7 @@ export function simulate(
   // Aggregate non-reg basis (ACB), plan Task 14 — tracked in aggregate because
   // applyFlows distributes proportional to balance, which makes the aggregate
   // ratio math exact (Sum(basis_i)/Sum(market) arithmetic collapses cleanly).
-  let nonregBook = plan.accounts.reduce(
-    (sum, a) => sum + (a.type === "nonreg" ? a.bookValue ?? a.balance : 0),
-    0,
-  );
+  let nonregBook = plan.accounts.reduce((sum, a) => sum + (a.type === "nonreg" ? (a.bookValue ?? a.balance) : 0), 0);
   let prevNonregGains = 0; // prior year's realized gains count as GIS income (with the taper)
 
   let failureAge: number | undefined;
@@ -262,11 +269,11 @@ export function simulate(
   let postRetirementShortfall = false;
   // A match step without eligible wages becomes an ordinary employee contribution,
   // including the guard against redepositing a proactive RRSP draw.
-  const hasLinkedEmployment = plan.incomes.some(income => income.kind === "employment" && income.endAtRetirement);
+  const hasLinkedEmployment = plan.incomes.some((income) => income.kind === "employment" && income.endAtRetirement);
   const savingsWithoutEmployerMatch = hasLinkedEmployment
-    ? plan.savingsPolicy.map(step => step.target === "rrsp-match"
-      ? { ...step, target: "rrsp" as const, matchRate: undefined }
-      : step)
+    ? plan.savingsPolicy.map((step) =>
+        step.target === "rrsp-match" ? { ...step, target: "rrsp" as const, matchRate: undefined } : step,
+      )
     : plan.savingsPolicy;
 
   const years: YearResult[] = [];
@@ -280,15 +287,20 @@ export function simulate(
     const r = returnByAge.get(age) ?? { age, equity: 0, bond: 0, cash: 0 };
     const events: string[] = [];
     const warnings: string[] = [];
-    const accountDetails = new Map<AccountState, AccountDetail>(accounts.map((account) => [account, {
-      id: account.id,
-      ...(account.name === undefined ? {} : { name: account.name }),
-      type: account.type,
-      openingBalance: 0,
-      closingBalance: 0,
-      withdrawals: 0,
-      contributions: 0,
-    }]));
+    const accountDetails = new Map<AccountState, AccountDetail>(
+      accounts.map((account) => [
+        account,
+        {
+          id: account.id,
+          ...(account.name === undefined ? {} : { name: account.name }),
+          type: account.type,
+          openingBalance: 0,
+          closingBalance: 0,
+          withdrawals: 0,
+          contributions: 0,
+        },
+      ]),
+    );
     reportBalances(accounts, accountDetails, "openingBalance");
 
     // ---- 0. Cash interest (documented timing): interest accrues on the OPENING
@@ -346,12 +358,17 @@ export function simulate(
         const bonus = bonusRate > 0 ? roundCent(amount * bonusRate) : 0;
         received = amount + bonus;
         employment += received;
-      }
-      else if (s.kind === "cpp" && benefits.cpp) cpp += amount;
+      } else if (s.kind === "cpp" && benefits.cpp) cpp += amount;
       else if (s.kind === "oas" && benefits.oas) oas += amount;
       else if (s.kind === "other") otherPlan += amount;
       else continue;
-      incomeBreakdown.push({ id: s.id, ...(s.name === undefined ? {} : { name: s.name }), kind: s.kind, amount: roundCent(received), sourceIndex });
+      incomeBreakdown.push({
+        id: s.id,
+        ...(s.name === undefined ? {} : { name: s.name }),
+        kind: s.kind,
+        amount: roundCent(received),
+        sourceIndex,
+      });
       // Gated-off CPP/OAS streams contribute nothing this year — they are not
       // reclassified as other income and no entitlement amount is invented.
       if (s.startAge === age && ((s.kind === "cpp" && benefits.cpp) || (s.kind === "oas" && benefits.oas))) {
@@ -413,7 +430,10 @@ export function simulate(
     if (assetSales.size > 0 && saleProceeds > 0) {
       if (saleDestination === "nonreg") {
         const deposits = distributeAccountFlow(accounts, "nonreg", saleProceeds, false);
-        const amounts = reportCents(deposits.map(({ amount }) => amount), saleProceeds);
+        const amounts = reportCents(
+          deposits.map(({ amount }) => amount),
+          saleProceeds,
+        );
         deposits.forEach(({ account }, index) => {
           if (amounts[index] !== 0) accountDetails.get(account)!.assetSaleDeposit = amounts[index]!;
         });
@@ -430,7 +450,12 @@ export function simulate(
     const paymentsPerYear = debt?.paymentFrequency === "biweekly" ? 26 : debt?.paymentFrequency === "weekly" ? 52 : 12;
     const mres =
       debt && debtBalance > 0
-        ? mortgageYear({ balance: debtBalance, annualRate: debt.rate, monthlyPayment: debt.monthlyPayment, paymentsPerYear })
+        ? mortgageYear({
+            balance: debtBalance,
+            annualRate: debt.rate,
+            monthlyPayment: debt.monthlyPayment,
+            paymentsPerYear,
+          })
         : { endBalance: debtBalance, interest: 0, principalPaid: 0, paymentsMade: 0 };
     if (debt && debt.monthlyPayment > 0 && mres.endBalance > mortgageStart + 0.005) {
       warnings.push(
@@ -490,9 +515,7 @@ export function simulate(
       const rrspRoomLeft = Math.max(0, rrspAtStart - rrifDue);
       if (rrspRoomLeft > 0) {
         const baseTaxable = taxableIncome(incomeAfterWithdrawals(rrifDue, 0));
-        plannedRrspDraw = roundCent(
-          Math.min(rrspRoomLeft, Math.max(0, policy.fillTargetTaxable - baseTaxable)),
-        );
+        plannedRrspDraw = roundCent(Math.min(rrspRoomLeft, Math.max(0, policy.fillTargetTaxable - baseTaxable)));
       }
     }
     const fundedRrspDraw = rrifDue + plannedRrspDraw;
@@ -511,15 +534,12 @@ export function simulate(
     // Each taxable draw updates the year's running tax and the cash still needed.
     let nonregGains = 0;
 
-    let roomTf = tfsaRoom; // this year's room available to the allocator
+    const roomTf = tfsaRoom; // this year's room available to the allocator
     // RRSP room available IN-YEAR: carry-forward plus the room earned this year
     // (capped at the annual limit). Documented v1 simplification — CRA formally
     // makes a year's earned room contributable the following year. The employer
     // pension adjustment is applied once, at the year-end roll below.
-    let roomRr = rrspRoom + Math.min(
-      tables.rrsp.incomeRate * Math.max(0, employment),
-      tables.rrsp.annualLimit,
-    );
+    const roomRr = rrspRoom + Math.min(tables.rrsp.incomeRate * Math.max(0, employment), tables.rrsp.annualLimit);
 
     if (cash >= obligation) {
       // ---- Surplus branch: the year funds everything including the RRIF minimum's tax.
@@ -551,8 +571,6 @@ export function simulate(
       contributions.rrsp = roundCent(allocation.contributions.rrsp);
       contributions.nonreg = roundCent(allocation.contributions.nonreg);
       contributionsCash = roundCent(allocation.contributions.cash ?? 0);
-      roomTf = allocation.newRooms.tfsa;
-      roomRr = allocation.newRooms.rrsp;
       mortgagePrepay = roundCent(allocation.amounts.mortgage);
       employerMatch = roundCent(allocation.employerMatch);
       cashBalance = roundCent(allocation.cash);
@@ -648,10 +666,7 @@ export function simulate(
       );
     }
     const nonregMarketPost = sumType(accounts, "nonreg");
-    nonregBook =
-      nonregMarketPost === 0
-        ? 0
-        : roundCent(Math.max(0, nonregBook + nonregMarketPost - nonregMarketPre));
+    nonregBook = nonregMarketPost === 0 ? 0 : roundCent(Math.max(0, nonregBook + nonregMarketPost - nonregMarketPre));
 
     // Assets: sold this year -> zero; otherwise they appreciate at year end.
     let homeValue = 0;
@@ -684,10 +699,7 @@ export function simulate(
       ),
     );
     rrspRoom = roundCent(
-      Math.max(
-        0,
-        rrspRoomEarn(age, employment, rrspRoom - contributions.rrsp, tables, employerMatch),
-      ),
+      Math.max(0, rrspRoomEarn(age, employment, rrspRoom - contributions.rrsp, tables, employerMatch)),
     );
 
     // ---- 7. Final tax figures + marginal rate (numeric derivative per $100)
@@ -767,13 +779,17 @@ export function simulate(
       accountBreakdown: [...accountDetails.values()],
       incomeBreakdown,
       assetBreakdown,
-      ...(debt ? { mortgageBreakdown: {
-        id: debt.id,
-        openingBalance: roundCent(mortgageStart),
-        closingBalance: roundCent(debtEnd),
-        scheduledPayment: roundCent(mortgageCash),
-        prepayment: roundCent(mortgagePrepay),
-      } } : {}),
+      ...(debt
+        ? {
+            mortgageBreakdown: {
+              id: debt.id,
+              openingBalance: roundCent(mortgageStart),
+              closingBalance: roundCent(debtEnd),
+              scheduledPayment: roundCent(mortgageCash),
+              prepayment: roundCent(mortgagePrepay),
+            },
+          }
+        : {}),
       cashflow: {
         scheduledMortgagePayment: roundCent(mortgageCash),
         openingIdleCash: roundCent(openingIdleCash),
@@ -873,15 +889,30 @@ function applyFlows(
     const draws = distributeAccountFlow(accounts, type, withdrawal, true);
     // A capped draw can debit less than the requested aggregate after rounding.
     const appliedDraw = draws.reduce((sum, { amount }) => sum + amount, 0);
-    const drawAmounts = reportCents(draws.map(({ amount }) => amount), appliedDraw);
-    draws.forEach(({ account }, index) => { details.get(account)!.withdrawals = drawAmounts[index]!; });
+    const drawAmounts = reportCents(
+      draws.map(({ amount }) => amount),
+      appliedDraw,
+    );
+    draws.forEach(({ account }, index) => {
+      details.get(account)!.withdrawals = drawAmounts[index]!;
+    });
 
     const contribution = contributions[type] ?? 0;
     const deposits = distributeAccountFlow(accounts, type, contribution, false);
     const match = type === "rrsp" ? employerMatch : 0;
-    const gross = reportCents(deposits.map(({ amount }) => amount), contribution);
+    const gross = reportCents(
+      deposits.map(({ amount }) => amount),
+      contribution,
+    );
     // A rounded employer share cannot exceed this account's rounded total deposit.
-    const matches = match === 0 ? [] : reportCents(deposits.map(({ weight }) => weight * match), match, gross);
+    const matches =
+      match === 0
+        ? []
+        : reportCents(
+            deposits.map(({ weight }) => weight * match),
+            match,
+            gross,
+          );
     deposits.forEach(({ account }, index) => {
       const detail = details.get(account)!;
       const accountMatch = matches[index] ?? 0;

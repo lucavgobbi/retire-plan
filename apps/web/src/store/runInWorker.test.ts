@@ -2,7 +2,11 @@ import type { Plan, Scenario } from "@retire-plan/engine";
 import { describe, expect, it } from "vitest";
 import type { RunOutcome } from "../domain/run";
 import { createWorkerSimulationRunner } from "./runInWorker";
-import type { SimulationWorkerPort, SimulationWorkerRequest, SimulationWorkerResponse } from "./simulationWorkerProtocol";
+import type {
+  SimulationWorkerPort,
+  SimulationWorkerRequest,
+  SimulationWorkerResponse,
+} from "./simulationWorkerProtocol";
 
 class FakeWorker implements SimulationWorkerPort {
   onmessage: ((event: MessageEvent<SimulationWorkerResponse>) => void) | null = null;
@@ -10,9 +14,15 @@ class FakeWorker implements SimulationWorkerPort {
   onmessageerror: ((event: MessageEvent) => void) | null = null;
   request: SimulationWorkerRequest | null = null;
   terminated = 0;
-  postMessage(message: SimulationWorkerRequest) { this.request = message; }
-  terminate() { this.terminated += 1; }
-  respond(data: SimulationWorkerResponse) { this.onmessage?.({ data } as MessageEvent<SimulationWorkerResponse>); }
+  postMessage(message: SimulationWorkerRequest) {
+    this.request = message;
+  }
+  terminate() {
+    this.terminated += 1;
+  }
+  respond(data: SimulationWorkerResponse) {
+    this.onmessage?.({ data } as MessageEvent<SimulationWorkerResponse>);
+  }
 }
 
 const plan = {} as Plan;

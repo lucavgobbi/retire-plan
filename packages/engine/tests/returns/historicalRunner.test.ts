@@ -35,10 +35,17 @@ function shortPlan(): Plan {
 }
 
 /** Deterministic stub: one window per call (call order = start-year order), final worth keyed to the start year. */
-function stubSimulate(finalFor: (startYear: number) => { success: boolean; finalNetWorth: number; failureAge?: number }) {
+function stubSimulate(
+  finalFor: (startYear: number) => { success: boolean; finalNetWorth: number; failureAge?: number },
+) {
   let call = 0;
   const windows: number[] = [];
-  const fn = (plan: Plan, _scenario: Scenario, series: { years: { age: number }[] }, _tables: unknown): SimulationResult => {
+  const fn = (
+    plan: Plan,
+    _scenario: Scenario,
+    series: { years: { age: number }[] },
+    _tables: unknown,
+  ): SimulationResult => {
     void series;
     void _tables;
     const startYear = 1900 + call++;
@@ -65,7 +72,11 @@ describe("runHistorical — rolling-window ensemble", () => {
 
   it("percentiles are nearest-rank over per-window finals and successRate is exact", () => {
     const finals = new Map<number, number>([
-      [1900, 100], [1901, 300], [1902, 200], [1903, 500], [1904, 400],
+      [1900, 100],
+      [1901, 300],
+      [1902, 200],
+      [1903, 500],
+      [1904, 400],
     ]);
     const successes = new Set([1900, 1901, 1902, 1903]);
     const { fn } = stubSimulate((startYear) => ({
@@ -84,7 +95,11 @@ describe("runHistorical — rolling-window ensemble", () => {
 
   it("representative run is an actual median window with its calendar-year provenance", () => {
     const finals = new Map<number, number>([
-      [1900, 100], [1901, 500], [1902, 200], [1903, 400], [1904, 300],
+      [1900, 100],
+      [1901, 500],
+      [1902, 200],
+      [1903, 400],
+      [1904, 300],
     ]);
     const { fn } = stubSimulate((startYear) => ({ success: true, finalNetWorth: finals.get(startYear) ?? 0 }));
     const plan = makePlan();
@@ -106,20 +121,35 @@ describe("runHistorical — rolling-window ensemble", () => {
   });
 
   it("rejects start years outside coverage, over-long horizons, and non-fitting requests without wrapping", () => {
-    expect(() => runHistorical(shortPlan(), historicalScenario(1899), observations, tables, simulate))
-      .toThrow(/precedes dataset coverage/);
+    expect(() => runHistorical(shortPlan(), historicalScenario(1899), observations, tables, simulate)).toThrow(
+      /precedes dataset coverage/,
+    );
     const longPlan = makePlan();
     longPlan.profile.currentAge = 45;
     longPlan.profile.endAge = 100; // 56-year horizon > 30 covered years
-    expect(() => runHistorical(longPlan, historicalScenario(1900), observations, tables, simulate))
-      .toThrow(/longer than dataset coverage/);
-    expect(() => runHistorical(shortPlan(), historicalScenario(1925), observations, tables, simulate))
-      .toThrow(/latest feasible start year is 1924/);
+    expect(() => runHistorical(longPlan, historicalScenario(1900), observations, tables, simulate)).toThrow(
+      /longer than dataset coverage/,
+    );
+    expect(() => runHistorical(shortPlan(), historicalScenario(1925), observations, tables, simulate)).toThrow(
+      /latest feasible start year is 1924/,
+    );
   });
 
   it("is deterministic: identical inputs reproduce an identical ensemble", () => {
-    const first = runHistorical(shortPlan(), historicalScenario(1872), undefined, tables, simulate) as HistoricalSummary;
-    const second = runHistorical(shortPlan(), historicalScenario(1872), undefined, tables, simulate) as HistoricalSummary;
+    const first = runHistorical(
+      shortPlan(),
+      historicalScenario(1872),
+      undefined,
+      tables,
+      simulate,
+    ) as HistoricalSummary;
+    const second = runHistorical(
+      shortPlan(),
+      historicalScenario(1872),
+      undefined,
+      tables,
+      simulate,
+    ) as HistoricalSummary;
     expect(JSON.stringify(first.percentileNetWorth)).toBe(JSON.stringify(second.percentileNetWorth));
     expect(first.successRate).toBe(second.successRate);
     expect(first.representativeStartYear).toBe(second.representativeStartYear);

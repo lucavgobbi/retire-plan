@@ -9,11 +9,7 @@
 //     migrations (migrations.ts) need no DB bump.
 //
 // The IDBFactory is INJECTABLE so tests substitute fake-indexeddb directly.
-import {
-  createRowBackedStorageProvider,
-  type RowDb,
-  type StorageProvider,
-} from "./core";
+import { createRowBackedStorageProvider, type RowDb, type StorageProvider } from "./core";
 
 export const DB_NAME = "retire-plan";
 /** Layout version of the object stores below; bump ONLY for store-shape changes. */
@@ -35,7 +31,9 @@ export function createStorageProvider(
   const rowDb: RowDb = {
     async getWorkspaceRow(): Promise<unknown> {
       const db = await open();
-      return requestToPromise(db.transaction(WORKSPACE_STORE, "readonly").objectStore(WORKSPACE_STORE).get("singleton"));
+      return requestToPromise(
+        db.transaction(WORKSPACE_STORE, "readonly").objectStore(WORKSPACE_STORE).get("singleton"),
+      );
     },
     async putWorkspaceRow(row: unknown): Promise<void> {
       const db = await open();
@@ -48,8 +46,16 @@ export function createStorageProvider(
       const db = await open();
       const tx = db.transaction(BACKUP_STORE, "readonly");
       const store = tx.objectStore(BACKUP_STORE);
-      const entries = await requestToPromise(store.getAll()) as { key: number; createdAt: string; workspace: unknown }[];
-      const rows = entries.map((entry) => ({ key: String(entry.key), createdAt: entry.createdAt, workspace: entry.workspace }));
+      const entries = (await requestToPromise(store.getAll())) as {
+        key: number;
+        createdAt: string;
+        workspace: unknown;
+      }[];
+      const rows = entries.map((entry) => ({
+        key: String(entry.key),
+        createdAt: entry.createdAt,
+        workspace: entry.workspace,
+      }));
       return rows;
     },
     async addBackupRow(createdAt, workspace): Promise<string> {
@@ -118,10 +124,8 @@ function openDatabase(idbFactory: IDBFactory | undefined): Promise<IDBDatabase> 
       }
     };
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () =>
-      reject(new Error(`IndexedDB open failed: ${request.error?.message ?? "unknown error"}`));
-    request.onblocked = () =>
-      reject(new Error("IndexedDB upgrade is blocked by another open RetirePlan tab."));
+    request.onerror = () => reject(new Error(`IndexedDB open failed: ${request.error?.message ?? "unknown error"}`));
+    request.onblocked = () => reject(new Error("IndexedDB upgrade is blocked by another open RetirePlan tab."));
   });
 }
 

@@ -20,11 +20,7 @@ export type AssetMix = NonNullable<AccountPlan["assetMix"]>;
 
 /** The year's asset-class return weighted by the account's mix. */
 export function blendedReturn(yearReturn: YearReturn, assetMix: AssetMix): number {
-  return (
-    assetMix.equity * yearReturn.equity +
-    assetMix.bond * yearReturn.bond +
-    assetMix.cash * yearReturn.cash
-  );
+  return assetMix.equity * yearReturn.equity + assetMix.bond * yearReturn.bond + assetMix.cash * yearReturn.cash;
 }
 
 /**

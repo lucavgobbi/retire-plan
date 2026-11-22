@@ -9,8 +9,7 @@ export type SimulationWorkerRequest = {
 };
 
 export type SimulationWorkerResponse =
-  | { type: "result"; requestId: number; outcome: RunOutcome }
-  | { type: "error"; requestId: number; message: string };
+  { type: "result"; requestId: number; outcome: RunOutcome } | { type: "error"; requestId: number; message: string };
 
 export interface SimulationWorkerPort {
   onmessage: ((event: MessageEvent<SimulationWorkerResponse>) => void) | null;
@@ -20,8 +19,4 @@ export interface SimulationWorkerPort {
   terminate(): void;
 }
 
-export type SimulationRunner = (
-  plan: Plan,
-  scenario: Scenario,
-  signal?: AbortSignal,
-) => Promise<RunOutcome>;
+export type SimulationRunner = (plan: Plan, scenario: Scenario, signal?: AbortSignal) => Promise<RunOutcome>;

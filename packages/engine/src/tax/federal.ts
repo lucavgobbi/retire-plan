@@ -114,14 +114,14 @@ export function federalTax(income: IncomeForTax, tables: TaxYearTables): Federal
     ageAmount = Math.max(0, tables.federal.ageCredit.amount - tables.federal.ageCredit.reductionRate * excess);
   }
 
-  const pensionAmount = Math.min(
-    tables.federal.pensionIncomeCredit.amount,
-    Math.max(0, income.pensionEligibleIncome),
-  );
+  const pensionAmount = Math.min(tables.federal.pensionIncomeCredit.amount, Math.max(0, income.pensionEligibleIncome));
 
   const creditable = Math.max(
     0,
-    tables.federal.basicPersonalAmount + employmentAmount + ageAmount + pensionAmount +
+    tables.federal.basicPersonalAmount +
+      employmentAmount +
+      ageAmount +
+      pensionAmount +
       (income.payrollCreditAmount ?? 0),
   );
   const credits = lowestRate * creditable;

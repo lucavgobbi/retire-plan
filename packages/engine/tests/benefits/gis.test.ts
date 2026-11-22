@@ -33,18 +33,12 @@ describe("gisAnnual — hand-computed cases", () => {
 
   it("an RRSP withdrawal eats 50 cents per dollar", () => {
     // 10,000 RRIF withdrawal -> GIS income 10,000 -> reduction 5,000
-    expect(gisAnnual(70, sources({ rrspRrifWithdrawals: 10_000 }), tables)).toBeCloseTo(
-      13_304.88 - 5_000,
-      4,
-    );
+    expect(gisAnnual(70, sources({ rrspRrifWithdrawals: 10_000 }), tables)).toBeCloseTo(13_304.88 - 5_000, 4);
   });
 
   it("a TFSA withdrawal leaves GIS untouched (Review Focus #1)", () => {
     // TFSA money is invisible to the GIS income test.
-    expect(gisAnnual(70, sources({ tfsaWithdrawals: 10_000 }), tables)).toBeCloseTo(
-      13_304.88,
-      4,
-    );
+    expect(gisAnnual(70, sources({ tfsaWithdrawals: 10_000 }), tables)).toBeCloseTo(13_304.88, 4);
   });
 
   it("employment income uses the first $5,000 exemption", () => {
@@ -68,11 +62,7 @@ describe("gisAnnual — hand-computed cases", () => {
   it("combines taxable sources before tapering", () => {
     // cpp 8,000 + RRIF 6,000 + other 2,000 = 16,000 -> reduction 8,000 -> 5,304.88
     expect(
-      gisAnnual(
-        68,
-        sources({ cpp: 8_000, rrspRrifWithdrawals: 6_000, otherTaxableIncome: 2_000 }),
-        tables,
-      ),
+      gisAnnual(68, sources({ cpp: 8_000, rrspRrifWithdrawals: 6_000, otherTaxableIncome: 2_000 }), tables),
     ).toBeCloseTo(5_304.88, 4);
   });
 

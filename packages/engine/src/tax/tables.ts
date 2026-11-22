@@ -87,7 +87,7 @@ function loadPayrollTables(value: unknown): PayrollTables {
   if (tables.eiRefundEarningsLimit >= tables.eiInsurableCeiling) {
     throw new Error("Tax tables: payroll EI refund limit must be below the insurable earnings ceiling.");
   }
-  if ([tables.cppBaseRate + tables.cppAdditionalRate, tables.cpp2Rate, tables.eiRate].some(rate => rate >= 1)) {
+  if ([tables.cppBaseRate + tables.cppAdditionalRate, tables.cpp2Rate, tables.eiRate].some((rate) => rate >= 1)) {
     throw new Error("Tax tables: payroll contribution rates must be fractions below 1.");
   }
   return tables;
@@ -184,17 +184,11 @@ export function loadTables(json: unknown): TaxYearTables {
   const federal = assertObject(root.federal, "federal");
   const ontario = assertObject(root.ontario, "ontario");
 
-  const federalBrackets = assertLadderSorted(
-    assertBrackets(federal.brackets, "federal.brackets"),
-    "federal.brackets",
-  );
+  const federalBrackets = assertLadderSorted(assertBrackets(federal.brackets, "federal.brackets"), "federal.brackets");
   if (federalBrackets[0]!.threshold !== 0) {
     throw new Error("Tax tables: federal.brackets must start at threshold 0.");
   }
-  const ontarioBrackets = assertLadderSorted(
-    assertBrackets(ontario.brackets, "ontario.brackets"),
-    "ontario.brackets",
-  );
+  const ontarioBrackets = assertLadderSorted(assertBrackets(ontario.brackets, "ontario.brackets"), "ontario.brackets");
   if (ontarioBrackets[0]!.threshold !== 0) {
     throw new Error("Tax tables: ontario.brackets must start at threshold 0.");
   }
@@ -203,18 +197,12 @@ export function loadTables(json: unknown): TaxYearTables {
     const s = assertObject(entry, `ontario.surtax[${i}]`);
     return {
       rate: assertNumber(s.rate, `ontario.surtax[${i}].rate`),
-      onTaxOverPctOfTaxable: assertNumber(
-        s.onTaxOverPctOfTaxable,
-        `ontario.surtax[${i}].onTaxOverPctOfTaxable`,
-      ),
+      onTaxOverPctOfTaxable: assertNumber(s.onTaxOverPctOfTaxable, `ontario.surtax[${i}].onTaxOverPctOfTaxable`),
     };
   });
 
   const ageCredit = assertObject(federal.ageCredit, "federal.ageCredit");
-  const pensionIncomeCredit = assertObject(
-    federal.pensionIncomeCredit,
-    "federal.pensionIncomeCredit",
-  );
+  const pensionIncomeCredit = assertObject(federal.pensionIncomeCredit, "federal.pensionIncomeCredit");
 
   const oas = assertObject(root.oas, "oas");
   const gis = assertObject(root.gis, "gis");
@@ -232,26 +220,17 @@ export function loadTables(json: unknown): TaxYearTables {
       indexationFactor: assertPositiveNumber(federal.indexationFactor, "federal.indexationFactor"),
       ageCredit: {
         amount: assertNumber(ageCredit.amount, "federal.ageCredit.amount"),
-        reductionThreshold: assertNumber(
-          ageCredit.reductionThreshold,
-          "federal.ageCredit.reductionThreshold",
-        ),
+        reductionThreshold: assertNumber(ageCredit.reductionThreshold, "federal.ageCredit.reductionThreshold"),
         reductionRate: assertNumber(ageCredit.reductionRate, "federal.ageCredit.reductionRate"),
       },
-      employmentCreditAmount: assertNumber(
-        federal.employmentCreditAmount,
-        "federal.employmentCreditAmount",
-      ),
+      employmentCreditAmount: assertNumber(federal.employmentCreditAmount, "federal.employmentCreditAmount"),
       pensionIncomeCredit: {
         amount: assertNumber(pensionIncomeCredit.amount, "federal.pensionIncomeCredit.amount"),
         incomeThreshold: assertNumber(
           pensionIncomeCredit.incomeThreshold,
           "federal.pensionIncomeCredit.incomeThreshold",
         ),
-        reductionRate: assertNumber(
-          pensionIncomeCredit.reductionRate,
-          "federal.pensionIncomeCredit.reductionRate",
-        ),
+        reductionRate: assertNumber(pensionIncomeCredit.reductionRate, "federal.pensionIncomeCredit.reductionRate"),
       },
     },
     ontario: {
@@ -271,14 +250,14 @@ export function loadTables(json: unknown): TaxYearTables {
       exclusionEmployment: assertNumber(gis.exclusionEmployment, "gis.exclusionEmployment"),
     },
     rrif: {
-      minimumFactors: assertRrifMonotonic(assertRrifFactors(rrif.minimumFactors, "rrif.minimumFactors"), "rrif.minimumFactors"),
+      minimumFactors: assertRrifMonotonic(
+        assertRrifFactors(rrif.minimumFactors, "rrif.minimumFactors"),
+        "rrif.minimumFactors",
+      ),
     },
     tfsa: {
       annualLimit: assertNumber(tfsa.annualLimit, "tfsa.annualLimit"),
-      cumulativeRoomAsOf2026: assertNumber(
-        tfsa.cumulativeRoomAsOf2026,
-        "tfsa.cumulativeRoomAsOf2026",
-      ),
+      cumulativeRoomAsOf2026: assertNumber(tfsa.cumulativeRoomAsOf2026, "tfsa.cumulativeRoomAsOf2026"),
       roomStartAge: assertPositiveNumber(tfsa.roomStartAge, "tfsa.roomStartAge"),
     },
     rrsp: {

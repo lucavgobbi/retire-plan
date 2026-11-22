@@ -102,7 +102,8 @@ export function useChartInteraction(xs: number[], xDomain: readonly [number, num
   const move = (delta: number) => {
     if (xs.length === 0) return;
     setActive((current) => {
-      const from = current === null ? (delta > 0 ? 0 : xs.length - 1) : Math.min(xs.length - 1, Math.max(0, current + delta));
+      const from =
+        current === null ? (delta > 0 ? 0 : xs.length - 1) : Math.min(xs.length - 1, Math.max(0, current + delta));
       return from;
     });
   };
@@ -128,15 +129,29 @@ export function useChartInteraction(xs: number[], xDomain: readonly [number, num
       if (event.pointerType !== "touch") setActive(null);
     },
     onKeyDown: (event) => {
-      if (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "Home" || event.key === "End") event.preventDefault();
-      if (event.key === "ArrowLeft") { setKeyboard(true); move(-1); }
-      else if (event.key === "ArrowRight") { setKeyboard(true); move(1); }
-      else if (event.key === "Home") { setKeyboard(true); setActive(xs.length > 0 ? 0 : null); }
-      else if (event.key === "End") { setKeyboard(true); setActive(xs.length > 0 ? xs.length - 1 : null); }
-      else if (event.key === "Escape") { setActive(null); } // dismiss, keep focus
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "Home" || event.key === "End")
+        event.preventDefault();
+      if (event.key === "ArrowLeft") {
+        setKeyboard(true);
+        move(-1);
+      } else if (event.key === "ArrowRight") {
+        setKeyboard(true);
+        move(1);
+      } else if (event.key === "Home") {
+        setKeyboard(true);
+        setActive(xs.length > 0 ? 0 : null);
+      } else if (event.key === "End") {
+        setKeyboard(true);
+        setActive(xs.length > 0 ? xs.length - 1 : null);
+      } else if (event.key === "Escape") {
+        setActive(null);
+      } // dismiss, keep focus
     },
     onFocus: () => {
-      if (active === null) { setKeyboard(true); setActive(xs.length > 0 ? 0 : null); }
+      if (active === null) {
+        setKeyboard(true);
+        setActive(xs.length > 0 ? 0 : null);
+      }
     },
     onBlur: () => {
       setKeyboard(false);
@@ -149,7 +164,9 @@ export function useChartInteraction(xs: number[], xDomain: readonly [number, num
 
 /** Vertical crosshair at the active age (aria-hidden — decorative reinforcement of the tooltip). */
 export function ChartCrosshair({ x }: { x: number }) {
-  return <line x1={x} x2={x} y1={PAD.top} y2={H - PAD.bottom} className="chart-interaction-crosshair" aria-hidden="true" />;
+  return (
+    <line x1={x} x2={x} y1={PAD.top} y2={H - PAD.bottom} className="chart-interaction-crosshair" aria-hidden="true" />
+  );
 }
 
 /** Marker dots at series positions for the active age (coords supplied by each chart from its own scales).
@@ -159,7 +176,17 @@ export function ChartMarkers({ coords }: { coords: { cx: number; cy: number; col
   return (
     <>
       {finite.map((c, i) => (
-        <circle key={i} cx={c.cx} cy={c.cy} r={3.5} fill={c.color} stroke="#fff" strokeWidth={1} className="chart-interaction-marker" aria-hidden="true" />
+        <circle
+          key={i}
+          cx={c.cx}
+          cy={c.cy}
+          r={3.5}
+          fill={c.color}
+          stroke="#fff"
+          strokeWidth={1}
+          className="chart-interaction-marker"
+          aria-hidden="true"
+        />
       ))}
     </>
   );
@@ -186,9 +213,13 @@ export function ChartTooltip({
   const tipRef = useRef<HTMLDivElement | null>(null);
   const title = `Age ${age}`;
   const text = (row: TooltipRow) =>
-    row.format === "percent" ? fmtPercent(row.value)
-    : row.format === "count" ? (Number.isFinite(row.value) ? `${row.value}` : "—")
-    : fmtMoney(row.value);
+    row.format === "percent"
+      ? fmtPercent(row.value)
+      : row.format === "count"
+        ? Number.isFinite(row.value)
+          ? `${row.value}`
+          : "—"
+        : fmtMoney(row.value);
 
   useLayoutEffect(() => {
     const el = tipRef.current;

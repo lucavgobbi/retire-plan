@@ -17,10 +17,21 @@
   gap: 8px;
 }
 
-.inline-editor-heading h3 { margin: .1rem 0; }
-.inline-editor-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.inline-editor-heading h3 {
+  margin: 0.1rem 0;
+}
+.inline-editor-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 
 @media (max-width: 480px) {
-  .inline-editor-panel { padding: 12px; }
-  .inline-editor-actions > button { flex: 1 1 auto; }
+  .inline-editor-panel {
+    padding: 12px;
+  }
+  .inline-editor-actions > button {
+    flex: 1 1 auto;
+  }
 }

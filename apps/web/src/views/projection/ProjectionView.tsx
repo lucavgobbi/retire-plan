@@ -21,7 +21,9 @@ function SettingsGear({ label }: { label: string }) {
     <summary aria-label={label} title={label}>
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
         <g fill="currentColor">
-          {[0, 45, 90, 135, 180, 225, 270, 315].map((angle) => <rect key={angle} x="11" y="2.5" width="2" height="5" rx="1" transform={`rotate(${angle} 12 12)`} />)}
+          {[0, 45, 90, 135, 180, 225, 270, 315].map((angle) => (
+            <rect key={angle} x="11" y="2.5" width="2" height="5" rx="1" transform={`rotate(${angle} 12 12)`} />
+          ))}
           <circle cx="12" cy="12" r="5.2" />
         </g>
         <circle cx="12" cy="12" r="2.2" fill="#fff" />
@@ -57,7 +59,7 @@ export function ProjectionView() {
   const [jumpKey, setJumpKey] = useState(0);
   const workspace = useWorkspace();
   const runs = useRuns();
-  const { validationErrors, runError, resetRuns } = workspace;
+  const { validationErrors, runError, resetRuns, dispatch } = workspace;
   // Scenario selection is PERSISTED as workspace.projectionScenarioId under the
   // agreed contract: "" (the UI's empty option) is an EXPLICIT base choice,
   // undefined is absence/default (also the base), and any NON-EMPTY string is an
@@ -66,6 +68,7 @@ export function ProjectionView() {
   // plan's most recent run is a saved-scenario run.
   const planId = workspace.workspace.meta?.id ?? "unsaved";
   const storedScenarioId = workspace.workspace.projectionScenarioId ?? "";
+  const { scenarios } = workspace.workspace;
   // Run-analysis disclosure preference: persisted as an explicit boolean
   // (true = collapsed, false = expanded); the field's absence is also expanded.
   const summaryCollapsed = workspace.workspace.projectionRunSummaryCollapsed === true;
@@ -77,16 +80,16 @@ export function ProjectionView() {
   // mounted, or an import that dropped it) is also persist-cleared below so
   // autosave/exports stop carrying the dead id.
   useEffect(() => {
-    const stored = workspace.workspace.projectionScenarioId;
-    if (stored === undefined || stored === "") return;
-    if (workspace.workspace.scenarios.some((item) => item.id === stored)) return;
-    workspace.dispatch({ type: "projection/setScenarioId", scenarioId: null });
-  }, [workspace.workspace.projectionScenarioId, workspace.workspace.scenarios]);
-  const selectedScenario = storedScenarioId === ""
-    ? null
-    : workspace.workspace.scenarios.find((item) => item.id === storedScenarioId) ?? null;
+    if (storedScenarioId === "" || scenarios.some((item) => item.id === storedScenarioId)) return;
+    dispatch({ type: "projection/setScenarioId", scenarioId: null });
+  }, [storedScenarioId, scenarios, dispatch]);
+  const selectedScenario =
+    storedScenarioId === "" ? null : (scenarios.find((item) => item.id === storedScenarioId) ?? null);
   const effectiveScenarioId = selectedScenario?.id ?? null;
-  const { run, runProjection, stale, isRunning, runCancelled, cancelRun } = useProjectionRun(planId, effectiveScenarioId);
+  const { run, runProjection, stale, isRunning, runCancelled, cancelRun } = useProjectionRun(
+    planId,
+    effectiveScenarioId,
+  );
 
   // Subtabs: persisted workspace preference (absent = Charts). Switching tabs only
   // changes which mounted panel is exposed — it never dispatches a run.
@@ -130,7 +133,10 @@ export function ProjectionView() {
     }
   });
   // Chart visibility: sanitized against the stable dashboard chart ids.
-  const hiddenCharts = sanitizeHiddenIds(workspace.workspace.hiddenProjectionCharts, PROJECTION_CHARTS.map((chart) => chart.id));
+  const hiddenCharts = sanitizeHiddenIds(
+    workspace.workspace.hiddenProjectionCharts,
+    PROJECTION_CHARTS.map((chart) => chart.id),
+  );
   const columnPickerGroups: { group: string; items: { id: string; label: string }[] }[] = [];
   const pickerByName = new Map<string, { group: string; items: { id: string; label: string }[] }>();
   for (const col of allColumns.slice(1)) {
@@ -158,11 +164,14 @@ export function ProjectionView() {
   // The SAME run snapshot birth year feeds the table and the Sankey so calendar
   // years agree everywhere; a run's snapshot wins over the live plan profile.
   const birthYear = run?.birthYear ?? workspace.workspace.plan.profile.birthYear;
-  const historicalSourceStartYear = run?.analysis?.mode === "historical" ? run.analysis.representativeStartYear : undefined;
+  const historicalSourceStartYear =
+    run?.analysis?.mode === "historical" ? run.analysis.representativeStartYear : undefined;
   // Sankey period: stored preference resolved against the CURRENT run span.
   // A valid stored range is preserved exactly; out-of-span ranges are clamped for
   // display only — mounting a run never rewrites the persisted preference.
-  const sankeyRange = run ? resolveSankeyRange(workspace.workspace.projectionSankeyRange, runYearRange(run.result.years, birthYear)) : null;
+  const sankeyRange = run
+    ? resolveSankeyRange(workspace.workspace.projectionSankeyRange, runYearRange(run.result.years, birthYear))
+    : null;
 
   return (
     <section id="projection-results" tabIndex={-1} aria-label="Projection" className="projection-view">
@@ -175,8 +184,7 @@ export function ProjectionView() {
           </p>
         )}
         <label className="field">
-          Run
-          {" "}
+          Run{" "}
           <select
             aria-label="Scenario to run"
             value={effectiveScenarioId ?? ""}
@@ -189,11 +197,19 @@ export function ProjectionView() {
           >
             <option value="">Baseline — working plan with base scenario</option>
             {workspace.workspace.scenarios.map((scenario) => (
-              <option key={scenario.id} value={scenario.id}>{scenario.name || scenario.id}</option>
+              <option key={scenario.id} value={scenario.id}>
+                {scenario.name || scenario.id}
+              </option>
             ))}
           </select>
         </label>
-        <button type="button" onClick={() => { void runProjection(); }} disabled={validationErrors.length > 0 || isRunning}>
+        <button
+          type="button"
+          onClick={() => {
+            void runProjection();
+          }}
+          disabled={validationErrors.length > 0 || isRunning}
+        >
           Run projection
         </button>
         {(runs.length > 0 || isRunning) && (
@@ -206,10 +222,16 @@ export function ProjectionView() {
             </p>
           </div>
         )}
-        {isRunning && <>
-          <p role="status" aria-live="polite">Projection running in the background…</p>
-          <button type="button" onClick={cancelRun}>Cancel projection</button>
-        </>}
+        {isRunning && (
+          <>
+            <p role="status" aria-live="polite">
+              Projection running in the background…
+            </p>
+            <button type="button" onClick={cancelRun}>
+              Cancel projection
+            </button>
+          </>
+        )}
         {runCancelled && <p role="status">Projection cancelled.</p>}
         {runError && (
           <p role="alert" className="run-error">
@@ -230,7 +252,10 @@ export function ProjectionView() {
             Results for <strong>{run.scenario.name}</strong>
             {effectiveScenarioId === null
               ? " (baseline)"
-              : selectedScenario?.name === run.scenario.name ? "" : " (saved scenario)"} · {new Date(run.createdAt).toLocaleString()}.
+              : selectedScenario?.name === run.scenario.name
+                ? ""
+                : " (saved scenario)"}{" "}
+            · {new Date(run.createdAt).toLocaleString()}.
             {stale && (
               <>
                 {" "}
@@ -238,11 +263,16 @@ export function ProjectionView() {
               </>
             )}
           </p>
-          {failureAge !== null && <FailBanner summary={run.result.summary} onJump={(age) => {
-            setActiveTab("cashflow");
-            setJumpAge(age);
-            setJumpKey((key) => key + 1);
-          }} />}
+          {failureAge !== null && (
+            <FailBanner
+              summary={run.result.summary}
+              onJump={(age) => {
+                setActiveTab("cashflow");
+                setJumpAge(age);
+                setJumpKey((key) => key + 1);
+              }}
+            />
+          )}
           {/* Run summary region (ALL modes that have one): RunAnalysisSummary —
               deterministic = "Tax strategy planning comparison", MC = "Monte Carlo
               ensemble", historical = "Historical rolling-window results" — in ONE
@@ -262,10 +292,13 @@ export function ProjectionView() {
             >
               <summary>Run analysis</summary>
               <RunAnalysisSummary run={run} />
-              {run.analysis && <p className="hint">Year table audit counts and failures describe the representative path shown below.</p>}
+              {run.analysis && (
+                <p className="hint">
+                  Year table audit counts and failures describe the representative path shown below.
+                </p>
+              )}
             </details>
           )}
-
         </>
       )}
 
@@ -275,7 +308,9 @@ export function ProjectionView() {
           return (
             <button
               key={tab.id}
-              ref={(element) => { tabRefs.current[tab.id] = element; }}
+              ref={(element) => {
+                tabRefs.current[tab.id] = element;
+              }}
               type="button"
               role="tab"
               id={`projection-tab-${tab.id}`}
@@ -348,7 +383,10 @@ export function ProjectionView() {
                     checked={(hiddenList ?? []).length === 0}
                     onChange={() => {
                       const allVisible = (hiddenList ?? []).length === 0;
-                      workspace.dispatch({ type: "projection/setHiddenColumns", hiddenColumnIds: allVisible ? selectableIds : null });
+                      workspace.dispatch({
+                        type: "projection/setHiddenColumns",
+                        hiddenColumnIds: allVisible ? selectableIds : null,
+                      });
                     }}
                   />{" "}
                   Select all columns
@@ -362,11 +400,7 @@ export function ProjectionView() {
                   <p className="settings-group-name">{group}</p>
                   {items.map((col) => (
                     <label key={col.id}>
-                      <input
-                        type="checkbox"
-                        checked={!hiddenIds?.has(col.id)}
-                        onChange={() => toggleColumn(col.id)}
-                      />{" "}
+                      <input type="checkbox" checked={!hiddenIds?.has(col.id)} onChange={() => toggleColumn(col.id)} />{" "}
                       {col.label}
                     </label>
                   ))}
@@ -375,27 +409,32 @@ export function ProjectionView() {
             </div>
           </details>
         </div>
-        {run && <ProjectionTable
-          result={run.result}
-          birthYear={birthYear}
-          historicalSourceStartYear={historicalSourceStartYear}
-          jumpAge={jumpAge}
-          jumpKey={jumpKey}
-          hiddenColumnIds={hiddenIds}
-          visible={activeTab === "cashflow"}
-        />}
-        {run && (sankeyRange ? (
-          <CashflowSankey
-            years={run.result.years}
+        {run && (
+          <ProjectionTable
+            result={run.result}
             birthYear={birthYear}
-            range={sankeyRange}
-            onRangeChange={(range) => workspace.dispatch({ type: "projection/setSankeyRange", range })}
-            showAccounts={workspace.workspace.projectionSankeyShowAccounts === true}
-            onShowAccountsChange={(showAccounts) => workspace.dispatch({ type: "projection/setSankeyShowAccounts", showAccounts })}
+            historicalSourceStartYear={historicalSourceStartYear}
+            jumpAge={jumpAge}
+            jumpKey={jumpKey}
+            hiddenColumnIds={hiddenIds}
+            visible={activeTab === "cashflow"}
           />
-        ) : (
-          <p className="hint">No projection years are available for the cashflow diagram.</p>
-        ))}
+        )}
+        {run &&
+          (sankeyRange ? (
+            <CashflowSankey
+              years={run.result.years}
+              birthYear={birthYear}
+              range={sankeyRange}
+              onRangeChange={(range) => workspace.dispatch({ type: "projection/setSankeyRange", range })}
+              showAccounts={workspace.workspace.projectionSankeyShowAccounts === true}
+              onShowAccountsChange={(showAccounts) =>
+                workspace.dispatch({ type: "projection/setSankeyShowAccounts", showAccounts })
+              }
+            />
+          ) : (
+            <p className="hint">No projection years are available for the cashflow diagram.</p>
+          ))}
       </div>
     </section>
   );

@@ -13,7 +13,11 @@ type SvgRect = { left: number; top: number; width: number; height: number };
 const rect: SvgRect = { left: 37, top: 19, width: 1120, height: 480 };
 
 function chartWith(child: ReactNode) {
-  return <ChartCard title="Test chart" ariaLabel="Test chart" help="Test help">{child}</ChartCard>;
+  return (
+    <ChartCard title="Test chart" ariaLabel="Test chart" help="Test help">
+      {child}
+    </ChartCard>
+  );
 }
 
 function setSvgRect(svg: SVGSVGElement, box = rect) {
@@ -27,7 +31,12 @@ function setSvgRect(svg: SVGSVGElement, box = rect) {
   } as DOMRect);
 }
 
-function pointer(svg: SVGSVGElement, type: "pointermove" | "pointerdown" | "pointerup" | "pointerout", pointerType: string, clientX: number) {
+function pointer(
+  svg: SVGSVGElement,
+  type: "pointermove" | "pointerdown" | "pointerup" | "pointerout",
+  pointerType: string,
+  clientX: number,
+) {
   // jsdom currently lacks PointerEvent. A bubbling Event with the relevant
   // PointerEvent fields exercises React's real pointer handlers without a
   // global polyfill that could mask unsupported event behavior.
@@ -73,12 +82,16 @@ describe("chart interactions through rendered charts", () => {
   });
 
   it("shows each stacked-area tax value and total at the selected age", () => {
-    const view = render(chartWith(
-      <TaxStackChart points={[
-        { x: 65, federal: 10_000, provincial: 5_000, surtax: 1_000, oasClawback: 0, total: 16_000 },
-        { x: 66, federal: 12_345, provincial: 6_789, surtax: 1_234, oasClawback: 2_000, total: 22_368 },
-      ]} />,
-    ));
+    const view = render(
+      chartWith(
+        <TaxStackChart
+          points={[
+            { x: 65, federal: 10_000, provincial: 5_000, surtax: 1_000, oasClawback: 0, total: 16_000 },
+            { x: 66, federal: 12_345, provincial: 6_789, surtax: 1_234, oasClawback: 2_000, total: 22_368 },
+          ]}
+        />,
+      ),
+    );
     const svg = view.container.querySelector("svg.chart-interactive") as SVGSVGElement;
     setSvgRect(svg);
     pointer(svg, "pointermove", "mouse", clientXForAge(66, [65, 66]));
@@ -94,10 +107,36 @@ describe("chart interactions through rendered charts", () => {
   });
 
   it("shows account-by-account bar values, debt sign, and net worth", () => {
-    const view = render(chartWith(<NetWorthChart points={[
-      { x: 70, tfsa: 120_000, rrsp: 340_000, nonreg: 45_000, cash: 15_000, home: 700_000, otherAssets: 8_000, debt: 180_000, netWorth: 1_048_000 },
-      { x: 71, tfsa: 125_000, rrsp: 350_000, nonreg: 50_000, cash: 18_000, home: 710_000, otherAssets: 9_000, debt: 175_000, netWorth: 1_087_000 },
-    ]} />));
+    const view = render(
+      chartWith(
+        <NetWorthChart
+          points={[
+            {
+              x: 70,
+              tfsa: 120_000,
+              rrsp: 340_000,
+              nonreg: 45_000,
+              cash: 15_000,
+              home: 700_000,
+              otherAssets: 8_000,
+              debt: 180_000,
+              netWorth: 1_048_000,
+            },
+            {
+              x: 71,
+              tfsa: 125_000,
+              rrsp: 350_000,
+              nonreg: 50_000,
+              cash: 18_000,
+              home: 710_000,
+              otherAssets: 9_000,
+              debt: 175_000,
+              netWorth: 1_087_000,
+            },
+          ]}
+        />,
+      ),
+    );
     const svg = view.container.querySelector("svg.chart-interactive") as SVGSVGElement;
     setSvgRect(svg);
     pointer(svg, "pointermove", "mouse", clientXForAge(71, [70, 71]));
@@ -136,10 +175,16 @@ describe("chart interactions through rendered charts", () => {
   });
 
   it("keeps a tap tooltip after touch pointerleave, then dismisses it for mouse leave", () => {
-    const view = render(chartWith(<IncomeSpendChart points={[
-      { x: 45, income: 10_000, expenses: 8_000, shortfall: 0 },
-      { x: 55, income: 20_000, expenses: 15_000, shortfall: 0 },
-    ]} />));
+    const view = render(
+      chartWith(
+        <IncomeSpendChart
+          points={[
+            { x: 45, income: 10_000, expenses: 8_000, shortfall: 0 },
+            { x: 55, income: 20_000, expenses: 15_000, shortfall: 0 },
+          ]}
+        />,
+      ),
+    );
     const svg = view.container.querySelector("svg.chart-interactive") as SVGSVGElement;
     setSvgRect(svg);
     const targetX = clientXForAge(55, [45, 55]);
@@ -189,15 +234,26 @@ describe("chart interactions through rendered charts", () => {
 
   it("reclamps a wide tooltip after the plot container resizes", () => {
     let notifyResize: (() => void) | undefined;
-    vi.stubGlobal("ResizeObserver", class {
-      constructor(callback: ResizeObserverCallback) { notifyResize = () => callback([], this as unknown as ResizeObserver); }
-      observe() {}
-      disconnect() {}
-    });
-    const view = render(chartWith(<IncomeSpendChart points={[
-      { x: 45, income: 10_000, expenses: 8_000, shortfall: 0 },
-      { x: 55, income: 20_000, expenses: 15_000, shortfall: 0 },
-    ]} />));
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          notifyResize = () => callback([], this as unknown as ResizeObserver);
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    const view = render(
+      chartWith(
+        <IncomeSpendChart
+          points={[
+            { x: 45, income: 10_000, expenses: 8_000, shortfall: 0 },
+            { x: 55, income: 20_000, expenses: 15_000, shortfall: 0 },
+          ]}
+        />,
+      ),
+    );
     const plot = view.container.querySelector(".chart-plot") as HTMLElement;
     Object.defineProperty(plot, "clientWidth", { configurable: true, value: 220 });
     const svg = view.container.querySelector("svg.chart-interactive") as SVGSVGElement;

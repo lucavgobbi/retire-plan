@@ -1,12 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Workspace } from "../domain/types";
 import { SCHEMA_VERSION, validateWorkspace } from "./schema";
-import {
-  buildPlanFile,
-  parsePlanFile,
-  planFileToText,
-  workspaceToText,
-} from "./exportImport";
+import { buildPlanFile, parsePlanFile, planFileToText, workspaceToText } from "./exportImport";
 import { makeSampleWorkspace } from "../data/samplePlan";
 
 describe("buildPlanFile / export text", () => {
@@ -40,7 +35,11 @@ describe("buildPlanFile / export text", () => {
 describe("parsePlanFile", () => {
   it("is a full round-trip incl. optional non-reg bookValue", () => {
     const ws = makeSampleWorkspace();
-    ws.baseScenario = { retirementAge: 61, returnAssumptions: { equity: 0.04, bond: 0.015, cash: 0.01 }, withdrawalOrder: ["cash", "rrsp", "nonreg", "tfsa"] };
+    ws.baseScenario = {
+      retirementAge: 61,
+      returnAssumptions: { equity: 0.04, bond: 0.015, cash: 0.01 },
+      withdrawalOrder: ["cash", "rrsp", "nonreg", "tfsa"],
+    };
     const withAcb = JSON.parse(JSON.stringify(ws)) as Workspace;
     const nonreg = withAcb.plan.accounts.find((a) => a.type === "nonreg");
     if (nonreg) (nonreg as { bookValue?: number }).bookValue = 21_500;
@@ -51,8 +50,15 @@ describe("parsePlanFile", () => {
     if (parsed.ok) {
       const rebuilt = buildPlanFile(parsed.workspace);
       expect(rebuilt).toEqual(buildPlanFile(withAcb));
-      expect((parsed.workspace.plan.accounts.find((a) => a.type === "nonreg") as { bookValue?: number }).bookValue).toBe(21_500);
-      expect(parsed.workspace.plan.accounts.find((a) => a.type === "cash")).toMatchObject({ id: "savings", name: "Savings", balance: 12_000, interestRate: 0.035 });
+      expect(
+        (parsed.workspace.plan.accounts.find((a) => a.type === "nonreg") as { bookValue?: number }).bookValue,
+      ).toBe(21_500);
+      expect(parsed.workspace.plan.accounts.find((a) => a.type === "cash")).toMatchObject({
+        id: "savings",
+        name: "Savings",
+        balance: 12_000,
+        interestRate: 0.035,
+      });
       expect(parsed.workspace.plan.accounts.find((a) => a.type === "cash")?.assetMix).toBeUndefined();
     }
   });
@@ -60,8 +66,11 @@ describe("parsePlanFile", () => {
   it("round-trips scenario benefit choices and withdrawal strategy", () => {
     const ws = makeSampleWorkspace();
     ws.baseScenario = {
-      retirementAge: 65, returnAssumptions: { equity: 0.05, bond: 0.02, cash: 0 }, withdrawalOrder: ["tfsa", "nonreg", "rrsp"],
-      benefits: { cpp: true, oas: true, gis: false }, withdrawalStrategy: "tax-minimizing",
+      retirementAge: 65,
+      returnAssumptions: { equity: 0.05, bond: 0.02, cash: 0 },
+      withdrawalOrder: ["tfsa", "nonreg", "rrsp"],
+      benefits: { cpp: true, oas: true, gis: false },
+      withdrawalStrategy: "tax-minimizing",
     };
     const scenario = ws.scenarios[0]!;
     scenario.benefits = { cpp: false, oas: true, gis: true };
@@ -69,15 +78,23 @@ describe("parsePlanFile", () => {
     const parsed = parsePlanFile(JSON.parse(workspaceToText(ws)));
     expect(parsed.ok).toBe(true);
     if (parsed.ok) {
-      expect(parsed.workspace.scenarios[0]).toMatchObject({ benefits: scenario.benefits, withdrawalStrategy: "tax-minimizing" });
-      expect(parsed.workspace.baseScenario).toMatchObject({ benefits: ws.baseScenario.benefits, withdrawalStrategy: "tax-minimizing" });
+      expect(parsed.workspace.scenarios[0]).toMatchObject({
+        benefits: scenario.benefits,
+        withdrawalStrategy: "tax-minimizing",
+      });
+      expect(parsed.workspace.baseScenario).toMatchObject({
+        benefits: ws.baseScenario.benefits,
+        withdrawalStrategy: "tax-minimizing",
+      });
     }
   });
 
   it("round-trips payroll settings on the base scenario and a scenario delta; legacy files stay absent", () => {
     const ws = makeSampleWorkspace();
     ws.baseScenario = {
-      retirementAge: 65, returnAssumptions: { equity: 0.05, bond: 0.02, cash: 0 }, withdrawalOrder: ["tfsa", "nonreg", "rrsp"],
+      retirementAge: 65,
+      returnAssumptions: { equity: 0.05, bond: 0.02, cash: 0 },
+      withdrawalOrder: ["tfsa", "nonreg", "rrsp"],
       payroll: { cpp: true, ei: true, cppOptOut65to69: false },
     };
     const scenario = ws.scenarios[0]!;
@@ -86,7 +103,9 @@ describe("parsePlanFile", () => {
     expect(parsed.ok).toBe(true);
     if (parsed.ok) {
       expect(parsed.workspace.baseScenario).toMatchObject({ payroll: { cpp: true, ei: true, cppOptOut65to69: false } });
-      expect(parsed.workspace.scenarios[0]).toMatchObject({ payroll: { cpp: false, ei: false, cppOptOut65to69: true } });
+      expect(parsed.workspace.scenarios[0]).toMatchObject({
+        payroll: { cpp: false, ei: false, cppOptOut65to69: true },
+      });
       expect(buildPlanFile(parsed.workspace)).toEqual(buildPlanFile(ws));
     }
     // Legacy file: no payroll keys anywhere — loads with the fields absent.
@@ -94,7 +113,9 @@ describe("parsePlanFile", () => {
     const legacyParsed = parsePlanFile(JSON.parse(workspaceToText(legacy)));
     expect(legacyParsed.ok).toBe(true);
     if (legacyParsed.ok) {
-      expect(legacyParsed.workspace.baseScenario === undefined || !("payroll" in legacyParsed.workspace.baseScenario)).toBe(true);
+      expect(
+        legacyParsed.workspace.baseScenario === undefined || !("payroll" in legacyParsed.workspace.baseScenario),
+      ).toBe(true);
       expect("payroll" in legacyParsed.workspace.scenarios[0]!).toBe(false);
     }
   });
@@ -130,7 +151,13 @@ describe("parsePlanFile", () => {
     if (baseSelection.ok) expect(baseSelection.workspace.projectionScenarioId).toBe("");
 
     const collisionFile = buildPlanFile(makeSampleWorkspace());
-    collisionFile.scenarios.push({ id: "base", name: "Scenario named base", basePlanId: collisionFile.plans[0]!.meta.id, simMode: "deterministic", overrides: {} });
+    collisionFile.scenarios.push({
+      id: "base",
+      name: "Scenario named base",
+      basePlanId: collisionFile.plans[0]!.meta.id,
+      simMode: "deterministic",
+      overrides: {},
+    });
     collisionFile.projectionScenarioId = "base";
     const collision = parsePlanFile(collisionFile);
     expect(collision.ok).toBe(true);
@@ -190,35 +217,45 @@ describe("parsePlanFile", () => {
 
   it("exports valid plan, account, base, scenario, mode and projection configuration together", () => {
     const ws = makeSampleWorkspace({ id: "prefs-plan" });
-    const nonreg = ws.plan.accounts.find(account => account.type === "nonreg")!;
+    const nonreg = ws.plan.accounts.find((account) => account.type === "nonreg")!;
     nonreg.name = "Joint investments";
     nonreg.bookValue = 21_500;
     nonreg.assetMix = { equity: 0.55, bond: 0.35, cash: 0.1 };
     ws.plan.accounts.push({ id: "cash-savings", name: "Savings", type: "cash", balance: 12_500, interestRate: 0.035 });
     ws.plan.assets[0]!.sellEvent = { age: 72, costsPct: 0.025 };
     ws.plan.debts[0]!.paymentFrequency = "biweekly";
-    const employment = ws.plan.incomes.find(income => income.kind === "employment")!;
+    const employment = ws.plan.incomes.find((income) => income.kind === "employment")!;
     employment.name = "Work income";
     delete employment.endAtRetirement;
     employment.endAge = 64;
     ws.plan.expenses[0]!.endAge = 94;
     ws.plan.savingsPolicy[0]!.untilAge = 64;
     ws.baseScenario = {
-      simMode: "montecarlo", retirementAge: 62,
+      simMode: "montecarlo",
+      retirementAge: 62,
       returnAssumptions: { equity: 0.045, bond: 0.018, cash: 0.005 },
       withdrawalOrder: ["cash", "tfsa", "nonreg", "rrsp"],
       mcConfig: { runs: 250, stdDev: { equity: 0.16, bond: 0.05, cash: 0.01 }, seed: 1872 },
-      benefits: { cpp: false, oas: true, gis: false }, withdrawalStrategy: "tax-minimizing",
+      benefits: { cpp: false, oas: true, gis: false },
+      withdrawalStrategy: "tax-minimizing",
     };
     ws.scenarios[0] = {
-      ...ws.scenarios[0]!, simMode: "montecarlo", mcConfig: { runs: 500, stdDev: { equity: 0.18, bond: 0.06, cash: 0.01 }, seed: 91_827 },
-      benefits: { cpp: true, oas: true, gis: true }, withdrawalStrategy: "manual",
+      ...ws.scenarios[0]!,
+      simMode: "montecarlo",
+      mcConfig: { runs: 500, stdDev: { equity: 0.18, bond: 0.06, cash: 0.01 }, seed: 91_827 },
+      benefits: { cpp: true, oas: true, gis: true },
+      withdrawalStrategy: "manual",
       overrides: { retirementAge: 64, withdrawalOrder: ["tfsa", "cash", "nonreg", "rrsp"] },
     };
     ws.scenarios.push({
-      id: "history", name: "Historical windows", basePlanId: "prefs-plan", simMode: "historical",
-      historicalConfig: { startYear: 1929 }, benefits: { cpp: false, oas: true, gis: false },
-      withdrawalStrategy: "tax-minimizing", overrides: { returnAssumptions: { equity: 0.04, bond: 0.015, cash: 0 } },
+      id: "history",
+      name: "Historical windows",
+      basePlanId: "prefs-plan",
+      simMode: "historical",
+      historicalConfig: { startYear: 1929 },
+      benefits: { cpp: false, oas: true, gis: false },
+      withdrawalStrategy: "tax-minimizing",
+      overrides: { returnAssumptions: { equity: 0.04, bond: 0.015, cash: 0 } },
     });
     ws.projectionScenarioId = "sample";
     ws.projectionRunSummaryCollapsed = true;
@@ -230,35 +267,41 @@ describe("parsePlanFile", () => {
     expect(parsed.ok).toBe(true);
     if (parsed.ok) {
       expect(buildPlanFile(parsed.workspace)).toEqual(buildPlanFile(ws));
-      expect(parsed.workspace.plan.accounts.find(account => account.type === "cash")).toMatchObject({ balance: 12_500, interestRate: 0.035 });
-      expect(parsed.workspace.plan.accounts.find(account => account.type === "nonreg")).toMatchObject({ bookValue: 21_500, assetMix: { equity: 0.55, bond: 0.35, cash: 0.1 } });
+      expect(parsed.workspace.plan.accounts.find((account) => account.type === "cash")).toMatchObject({
+        balance: 12_500,
+        interestRate: 0.035,
+      });
+      expect(parsed.workspace.plan.accounts.find((account) => account.type === "nonreg")).toMatchObject({
+        bookValue: 21_500,
+        assetMix: { equity: 0.55, bond: 0.35, cash: 0.1 },
+      });
     }
   });
 
   it("round-trips an employment bonus rate; legacy files without it (or with an explicit 0) load unchanged", () => {
     const ws = makeSampleWorkspace();
-    const salary = ws.plan.incomes.find(income => income.kind === "employment")!;
+    const salary = ws.plan.incomes.find((income) => income.kind === "employment")!;
     salary.bonusRate = 0.1;
     const parsed = parsePlanFile(JSON.parse(workspaceToText(ws)));
     expect(parsed.ok).toBe(true);
     if (parsed.ok) {
-      expect(parsed.workspace.plan.incomes.find(income => income.kind === "employment")?.bonusRate).toBe(0.1);
+      expect(parsed.workspace.plan.incomes.find((income) => income.kind === "employment")?.bonusRate).toBe(0.1);
       expect(buildPlanFile(parsed.workspace)).toEqual(buildPlanFile(ws));
     }
     // Legacy file: no bonusRate key anywhere — loads with the field absent.
     const legacy = parsePlanFile(JSON.parse(workspaceToText(makeSampleWorkspace())));
     expect(legacy.ok).toBe(true);
     if (legacy.ok) {
-      const legacySalary = legacy.workspace.plan.incomes.find(income => income.kind === "employment")!;
+      const legacySalary = legacy.workspace.plan.incomes.find((income) => income.kind === "employment")!;
       expect("bonusRate" in legacySalary).toBe(false);
     }
     // Explicit zero is a valid stored value and survives the round trip.
     const zero = makeSampleWorkspace();
-    (zero.plan.incomes.find(income => income.kind === "employment") as { bonusRate?: number }).bonusRate = 0;
+    (zero.plan.incomes.find((income) => income.kind === "employment") as { bonusRate?: number }).bonusRate = 0;
     const zeroParsed = parsePlanFile(JSON.parse(workspaceToText(zero)));
     expect(zeroParsed.ok).toBe(true);
     if (zeroParsed.ok) {
-      expect(zeroParsed.workspace.plan.incomes.find(income => income.kind === "employment")?.bonusRate).toBe(0);
+      expect(zeroParsed.workspace.plan.incomes.find((income) => income.kind === "employment")?.bonusRate).toBe(0);
     }
   });
 
@@ -303,7 +346,11 @@ describe("parsePlanFile", () => {
   it("treats scenarios of a single-plan file as loadable even with stray basePlanId", () => {
     const file = buildPlanFile(makeSampleWorkspace());
     file.scenarios.push({
-      id: "extra", name: "Extra", basePlanId: "whatever", simMode: "deterministic", overrides: {},
+      id: "extra",
+      name: "Extra",
+      basePlanId: "whatever",
+      simMode: "deterministic",
+      overrides: {},
     });
     const parsed = parsePlanFile(JSON.parse(JSON.stringify(file)));
     expect(parsed.ok).toBe(true);

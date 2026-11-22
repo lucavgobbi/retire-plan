@@ -30,8 +30,8 @@ function shimDom(opts: { objectUrl?: boolean; body?: boolean } = {}) {
   return {
     dom: {
       doc,
-      createObjectURL: opts.objectUrl ? ((blob: Blob) => `blob:fake:${blob.size}`) : undefined,
-      revokeObjectURL: opts.objectUrl ? ((url: string) => revocations.push(url)) : undefined,
+      createObjectURL: opts.objectUrl ? (blob: Blob) => `blob:fake:${blob.size}` : undefined,
+      revokeObjectURL: opts.objectUrl ? (url: string) => revocations.push(url) : undefined,
     },
     clicks,
     revocations,
@@ -45,9 +45,9 @@ describe("export helpers (injected DOM)", () => {
       new Date("2026-03-04T00:00:00.000Z"),
     );
     expect(named).toBe("retire-plan-retire-june-2046-2026-03-04.json");
-    expect(suggestedExportFilename({ ...makeSampleWorkspace(), meta: null }, new Date("2026-03-04T00:00:00.000Z"))).toBe(
-      "retire-plan-2026-03-04.json",
-    );
+    expect(
+      suggestedExportFilename({ ...makeSampleWorkspace(), meta: null }, new Date("2026-03-04T00:00:00.000Z")),
+    ).toBe("retire-plan-2026-03-04.json");
   });
 
   it("downloads via injected createObjectURL and revokes after click", () => {
@@ -83,9 +83,10 @@ describe("import text + preview", () => {
   });
 
   it("readImportFile: injected reader wins; default FileReader resolves text", async () => {
-    expect(await readImportFile(new File(["ignored"], "plan.json", { type: "application/json" }), async () => "injected"))
-      .toBe("injected");
-    const text = await readImportFile(new File(["hello"], "plan.json"),);
+    expect(
+      await readImportFile(new File(["ignored"], "plan.json", { type: "application/json" }), async () => "injected"),
+    ).toBe("injected");
+    const text = await readImportFile(new File(["hello"], "plan.json"));
     expect(text).toBe("hello");
   });
 

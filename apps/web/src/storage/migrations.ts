@@ -45,7 +45,11 @@ function versionOf(raw: Record<string, unknown>): number | null {
 
 export function migratePlanFile(raw: unknown): MigrationOk | MigrationFailure {
   if (!isRecord(raw)) {
-    return { ok: false, errors: ["The file is not a JSON object — this is not a RetirePlan plan file."], newerVersion: null };
+    return {
+      ok: false,
+      errors: ["The file is not a JSON object — this is not a RetirePlan plan file."],
+      newerVersion: null,
+    };
   }
   const version = versionOf(raw);
   if (version === null) {
@@ -128,7 +132,11 @@ export function migrateWorkspaceRow(raw: unknown): RowMigrationOk | RowMigration
   }
   const version = versionOf(raw);
   if (version === null) {
-    return { ok: false, errors: ['The persisted workspace entry has a non-numeric "schemaVersion".'], newerVersion: null };
+    return {
+      ok: false,
+      errors: ['The persisted workspace entry has a non-numeric "schemaVersion".'],
+      newerVersion: null,
+    };
   }
   if (version > SCHEMA_VERSION) {
     return {

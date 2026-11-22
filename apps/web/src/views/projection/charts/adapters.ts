@@ -13,7 +13,12 @@ export function dropNonFinite(points: XyPoint[]): XyPoint[] {
 }
 
 const totalIncome = (year: YearResult): number =>
-  year.income.employment + year.income.cpp + year.income.oas + year.income.gis + year.income.other + (year.cashInterest ?? 0);
+  year.income.employment +
+  year.income.cpp +
+  year.income.oas +
+  year.income.gis +
+  year.income.other +
+  (year.cashInterest ?? 0);
 
 export function netWorthSeries(years: YearResult[]): XyPoint[] {
   return dropNonFinite(years.map((y) => ({ x: y.age, y: y.netWorth })));
@@ -52,7 +57,9 @@ export function netWorthBarSeries(years: YearResult[]): NetWorthBarPoint[] {
   }));
 }
 
-export function incomeSpendSeries(years: YearResult[]): { x: number; income: number; expenses: number; shortfall: number }[] {
+export function incomeSpendSeries(
+  years: YearResult[],
+): { x: number; income: number; expenses: number; shortfall: number }[] {
   return years.map((y) => ({
     x: y.age,
     income: totalIncome(y),
@@ -61,7 +68,9 @@ export function incomeSpendSeries(years: YearResult[]): { x: number; income: num
   }));
 }
 
-export function taxStackSeries(years: YearResult[]): { x: number; federal: number; provincial: number; surtax: number; oasClawback: number; total: number }[] {
+export function taxStackSeries(
+  years: YearResult[],
+): { x: number; federal: number; provincial: number; surtax: number; oasClawback: number; total: number }[] {
   return years.map((y) => ({
     x: y.age,
     federal: y.tax.federal,
@@ -72,7 +81,9 @@ export function taxStackSeries(years: YearResult[]): { x: number; federal: numbe
   }));
 }
 
-export function drawdownSeries(years: YearResult[]): { x: number; tfsa: number; rrsp: number; nonreg: number; cash: number; otherAssets: number }[] {
+export function drawdownSeries(
+  years: YearResult[],
+): { x: number; tfsa: number; rrsp: number; nonreg: number; cash: number; otherAssets: number }[] {
   return years.map((y) => ({
     x: y.age,
     tfsa: y.balances.tfsa,
@@ -89,7 +100,9 @@ export function drawdownSeries(years: YearResult[]): { x: number; tfsa: number; 
  * earned by cash accounts — deliberately NOT merged into `income.other` (which
  * carries other taxable income), so the sources never double-count.
  */
-export function incomeSourcesSeries(years: YearResult[]): { x: number; employment: number; other: number; cashInterest: number; cpp: number; oas: number; gis: number }[] {
+export function incomeSourcesSeries(
+  years: YearResult[],
+): { x: number; employment: number; other: number; cashInterest: number; cpp: number; oas: number; gis: number }[] {
   return years.map((y) => ({
     x: y.age,
     employment: y.income.employment,
@@ -113,8 +126,18 @@ export interface AccountFlowPoint {
 export function accountFlowsSeries(years: YearResult[]): AccountFlowPoint[] {
   return years.map((y) => ({
     x: y.age,
-    contributions: { tfsa: y.contributions.tfsa, rrsp: y.contributions.rrsp, nonreg: y.contributions.nonreg, cash: y.contributions.cash ?? 0 },
-    withdrawals: { tfsa: y.withdrawals.tfsa, rrsp: y.withdrawals.rrsp, nonreg: y.withdrawals.nonreg, cash: y.withdrawals.cash ?? 0 },
+    contributions: {
+      tfsa: y.contributions.tfsa,
+      rrsp: y.contributions.rrsp,
+      nonreg: y.contributions.nonreg,
+      cash: y.contributions.cash ?? 0,
+    },
+    withdrawals: {
+      tfsa: y.withdrawals.tfsa,
+      rrsp: y.withdrawals.rrsp,
+      nonreg: y.withdrawals.nonreg,
+      cash: y.withdrawals.cash ?? 0,
+    },
   }));
 }
 
@@ -187,7 +210,10 @@ export interface RrifPoint {
 export function rrifWithdrawalSeries(years: YearResult[]): RrifPoint[] {
   return years.map((y) => ({
     x: y.age,
-    minimum: y.rrifMinimumWithdrawal !== undefined && Number.isFinite(y.rrifMinimumWithdrawal) ? y.rrifMinimumWithdrawal : null,
+    minimum:
+      y.rrifMinimumWithdrawal !== undefined && Number.isFinite(y.rrifMinimumWithdrawal)
+        ? y.rrifMinimumWithdrawal
+        : null,
     actual: Number.isFinite(y.withdrawals.rrsp) ? y.withdrawals.rrsp : NaN,
     planned: y.plannedRrspDraw !== undefined && Number.isFinite(y.plannedRrspDraw) ? y.plannedRrspDraw : 0,
   }));
@@ -235,7 +261,12 @@ export interface EnsembleStatPoint {
 /** Structural subset of the MC analysis the ensemble charts read (the engine's full type may add fields). */
 export interface MonteCarloAnalysisLike {
   mode?: string;
-  annualStats?: { age: number; netWorth: { p10: number; p50: number; p90: number }; shortfallRate: number; sampleCount: number }[];
+  annualStats?: {
+    age: number;
+    netWorth: { p10: number; p50: number; p90: number };
+    shortfallRate: number;
+    sampleCount: number;
+  }[];
 }
 
 /**

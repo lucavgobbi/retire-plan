@@ -15,11 +15,13 @@ describe("IndexedDB-backed provider", () => {
     workspace.hiddenProjectionColumns = ["tax.total"];
     workspace.hiddenProjectionCharts = ["net-worth"];
     workspace.baseScenario = {
-      simMode: "montecarlo", retirementAge: 63,
+      simMode: "montecarlo",
+      retirementAge: 63,
       returnAssumptions: { equity: 0.05, bond: 0.02, cash: 0 },
       withdrawalOrder: ["tfsa", "nonreg", "rrsp"],
       mcConfig: { runs: 750, stdDev: { equity: 0.17, bond: 0.06, cash: 0.01 }, seed: 4_321 },
-      benefits: { cpp: true, oas: false, gis: false }, withdrawalStrategy: "tax-minimizing",
+      benefits: { cpp: true, oas: false, gis: false },
+      withdrawalStrategy: "tax-minimizing",
     };
     const provider = createStorageProvider(factory, { now: () => savedAt });
     await provider.save(workspace);
@@ -28,9 +30,11 @@ describe("IndexedDB-backed provider", () => {
     expect(reloaded.kind).toBe("loaded");
     if (reloaded.kind !== "loaded") return;
     expect(reloaded.workspace).toMatchObject({
-      projectionScenarioId: "sample", projectionRunSummaryCollapsed: true,
+      projectionScenarioId: "sample",
+      projectionRunSummaryCollapsed: true,
       projectionSankeyShowAccounts: false,
-      hiddenProjectionColumns: ["tax.total"], hiddenProjectionCharts: ["net-worth"],
+      hiddenProjectionColumns: ["tax.total"],
+      hiddenProjectionCharts: ["net-worth"],
       baseScenario: workspace.baseScenario,
     });
 

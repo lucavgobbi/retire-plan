@@ -10,7 +10,12 @@ const runs: RunRecord[] = [baseRun, deltaRun];
 
 const EMPTY_PLAN = {
   profile: { birthYear: 1981, currentAge: 45, province: "ON" as const, endAge: 100 },
-  accounts: [], assets: [], debts: [], incomes: [], expenses: [], savingsPolicy: [],
+  accounts: [],
+  assets: [],
+  debts: [],
+  incomes: [],
+  expenses: [],
+  savingsPolicy: [],
 };
 
 /** Seeds stored runs through the store's own `run/store` action, then renders children. */
@@ -37,7 +42,11 @@ function CompareRunner({ runs: records }: { runs: RunRecord[] }) {
 
 function ResetRunsButton() {
   const { resetRuns } = useWorkspace();
-  return <button type="button" onClick={resetRuns}>Reset runs</button>;
+  return (
+    <button type="button" onClick={resetRuns}>
+      Reset runs
+    </button>
+  );
 }
 
 describe("CompareView", () => {
@@ -89,7 +98,9 @@ describe("CompareView", () => {
 
   it("reset runs drops selected results and returns to the empty state", () => {
     render(
-      <StoreProvider initialWorkspace={{ meta: { id: "plan-test", name: "T", updatedAt: "x" }, plan: EMPTY_PLAN, scenarios: [] }}>
+      <StoreProvider
+        initialWorkspace={{ meta: { id: "plan-test", name: "T", updatedAt: "x" }, plan: EMPTY_PLAN, scenarios: [] }}
+      >
         <RunSeeder runs={runs}>
           <CompareView />
           <ResetRunsButton />

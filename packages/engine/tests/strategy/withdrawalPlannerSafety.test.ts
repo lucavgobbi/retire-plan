@@ -12,7 +12,10 @@ const tables: TaxYearTables = loadTables(tablesJson);
 
 function scenario(): Scenario {
   return {
-    id: "tax-plan", name: "Tax plan", simMode: "deterministic", retirementAge: 60,
+    id: "tax-plan",
+    name: "Tax plan",
+    simMode: "deterministic",
+    retirementAge: 60,
     returnAssumptions: { equity: 0, bond: 0, cash: 0 },
     withdrawalOrder: ["tfsa", "nonreg", "rrsp"],
     benefits: { cpp: false, oas: false, gis: false },
@@ -27,7 +30,8 @@ function noAssetsPlan(expense: number): Plan {
   plan.assets = [];
   plan.debts = [];
   plan.incomes = [];
-  plan.expenses = expense === 0 ? [] : [{ id: "living", annualAmount: expense, startAge: 60, endAge: 61, inflationRate: 0 }];
+  plan.expenses =
+    expense === 0 ? [] : [{ id: "living", annualAmount: expense, startAge: 60, endAge: 61, inflationRate: 0 }];
   plan.savingsPolicy = [];
   return plan;
 }
@@ -53,10 +57,10 @@ describe("withdrawal planner safety", () => {
   }
 
   it("rejects a lower-tax candidate with a pre-retirement shortfall when manual is fully funded", () => {
-    const output = runWith(
-      simResult(true, [0, 0], 100),
-      [simResult(true, [1, 0], 50), ...Array.from({ length: 4 }, () => simResult(true, [0, 0], 100))],
-    );
+    const output = runWith(simResult(true, [0, 0], 100), [
+      simResult(true, [1, 0], 50),
+      ...Array.from({ length: 4 }, () => simResult(true, [0, 0], 100)),
+    ]);
     expect(output.metadata.status).toBe("manual-retained");
     expect(output.planned).toBeNull();
     expect(output.metadata.comparison.manualSuccess).toBe(true);
@@ -77,10 +81,11 @@ describe("withdrawal planner safety", () => {
   });
 
   it("allows a fully funded candidate with higher tax than a failed manual baseline", () => {
-    const output = runWith(
-      simResult(false, [0, 1], 50),
-      [simResult(true, [1, 0], 25), simResult(true, [0, 0], 75), ...Array.from({ length: 3 }, () => simResult(true, [1, 0], 10))],
-    );
+    const output = runWith(simResult(false, [0, 1], 50), [
+      simResult(true, [1, 0], 25),
+      simResult(true, [0, 0], 75),
+      ...Array.from({ length: 3 }, () => simResult(true, [1, 0], 10)),
+    ]);
     expect(output.metadata.status).toBe("optimized");
     expect(output.planned).not.toBeNull();
     expect(output.metadata.comparison.manualSuccess).toBe(false);

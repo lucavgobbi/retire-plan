@@ -16,7 +16,9 @@
   gap: 0.5rem 1.5rem;
 }
 
-.cashflow-header h3 { margin: 0; }
+.cashflow-header h3 {
+  margin: 0;
+}
 
 .cashflow-range {
   display: flex;
@@ -28,14 +30,24 @@
   padding: 0;
 }
 
-.cashflow-range legend, .cashflow-period {
+.cashflow-range legend,
+.cashflow-period {
   color: #52606d;
   font-size: 0.82rem;
 }
 
-.cashflow-range label, .cashflow-show-accounts { display: flex; align-items: center; gap: 0.4rem; }
-.cashflow-period { margin-block: 0.5rem 0; }
-.cashflow-figure { margin: 0.6rem 0 0; }
+.cashflow-range label,
+.cashflow-show-accounts {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.cashflow-period {
+  margin-block: 0.5rem 0;
+}
+.cashflow-figure {
+  margin: 0.6rem 0 0;
+}
 
 .cashflow-tooltip {
   align-items: center;
@@ -49,21 +61,60 @@
   padding: 0.4rem 0.75rem;
 }
 
-.cashflow-tooltip strong, .cashflow-breakdown dd { font-variant-numeric: tabular-nums; }
-.cashflow-plot { overflow-x: auto; }
-.cashflow-plot svg { display: block; margin-inline: auto; }
-.cashflow-plot:not(.cashflow-plot-named) svg { min-width: 800px; width: min(100%, 1050px); }
-.cashflow-svg-heading { fill: #52606d; font-size: 15px; font-weight: 700; }
-.cashflow-flow { cursor: pointer; }
-.cashflow-flow text { fill: #1f2933; font-size: 15px; }
-.cashflow-ribbon { fill: currentColor; fill-opacity: 0.32; }
-.cashflow-flow[data-active="true"] .cashflow-ribbon { fill-opacity: 0.78; }
-.cashflow-flow[data-active="true"] text, .cashflow-flow:focus-visible text { font-weight: 700; }
-.cashflow-flow:focus-visible { outline: none; }
-.cashflow-flow:focus-visible rect { stroke: #1f2933; stroke-width: 2; }
+.cashflow-tooltip strong,
+.cashflow-breakdown dd {
+  font-variant-numeric: tabular-nums;
+}
+.cashflow-plot {
+  overflow-x: auto;
+}
+.cashflow-plot svg {
+  display: block;
+  margin-inline: auto;
+}
+.cashflow-plot:not(.cashflow-plot-named) svg {
+  min-width: 800px;
+  width: min(100%, 1050px);
+}
+.cashflow-svg-heading {
+  fill: #52606d;
+  font-size: 15px;
+  font-weight: 700;
+}
+.cashflow-flow {
+  cursor: pointer;
+}
+.cashflow-flow text {
+  fill: #1f2933;
+  font-size: 15px;
+}
+.cashflow-ribbon {
+  fill: currentColor;
+  fill-opacity: 0.32;
+}
+.cashflow-flow[data-active="true"] .cashflow-ribbon {
+  fill-opacity: 0.78;
+}
+.cashflow-flow[data-active="true"] text,
+.cashflow-flow:focus-visible text {
+  font-weight: 700;
+}
+.cashflow-flow:focus-visible {
+  outline: none;
+}
+.cashflow-flow:focus-visible rect {
+  stroke: #1f2933;
+  stroke-width: 2;
+}
 
-.cashflow-notes p, .cashflow-breakdown p { font-size: 0.88rem; margin-block: 0.5rem; }
-.cashflow-notes strong { color: #9a3412; }
+.cashflow-notes p,
+.cashflow-breakdown p {
+  font-size: 0.88rem;
+  margin-block: 0.5rem;
+}
+.cashflow-notes strong {
+  color: #9a3412;
+}
 .cashflow-direct-transfer {
   display: flex;
   flex-wrap: wrap;
@@ -73,9 +124,21 @@
   background: #f6f3fc;
   padding: 0.55rem 0.75rem;
 }
-.cashflow-direct-transfer span span { display: block; font-size: 0.82rem; color: #52606d; }
-.cashflow-breakdown { border-top: 1px solid #dbe3eb; padding-top: 0.7rem; margin-top: 0.5rem; }
-.cashflow-breakdown summary { cursor: pointer; font-weight: 650; width: fit-content; }
+.cashflow-direct-transfer span span {
+  display: block;
+  font-size: 0.82rem;
+  color: #52606d;
+}
+.cashflow-breakdown {
+  border-top: 1px solid #dbe3eb;
+  padding-top: 0.7rem;
+  margin-top: 0.5rem;
+}
+.cashflow-breakdown summary {
+  cursor: pointer;
+  font-weight: 650;
+  width: fit-content;
+}
 
 .cashflow-breakdown-columns {
   display: grid;
@@ -84,13 +147,33 @@
   align-items: start;
 }
 
-.cashflow-breakdown h4 { margin-block: 0.75rem 0.4rem; }
-.cashflow-breakdown dl { margin: 0; }
-.cashflow-breakdown dl > div { display: flex; justify-content: space-between; gap: 0.75rem; padding-block: 0.2rem; }
-.cashflow-breakdown dd { margin: 0; text-align: right; white-space: nowrap; }
-.cashflow-breakdown dt { min-width: 0; overflow-wrap: anywhere; }
+.cashflow-breakdown h4 {
+  margin-block: 0.75rem 0.4rem;
+}
+.cashflow-breakdown dl {
+  margin: 0;
+}
+.cashflow-breakdown dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-block: 0.2rem;
+}
+.cashflow-breakdown dd {
+  margin: 0;
+  text-align: right;
+  white-space: nowrap;
+}
+.cashflow-breakdown dt {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 
 @media print {
-  .cashflow-plot:not(.cashflow-plot-named) svg { min-width: 0; }
-  .cashflow-plot-named svg { max-width: 100%; }
+  .cashflow-plot:not(.cashflow-plot-named) svg {
+    min-width: 0;
+  }
+  .cashflow-plot-named svg {
+    max-width: 100%;
+  }
 }

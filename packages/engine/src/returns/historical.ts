@@ -1,4 +1,11 @@
-import type { PlannedWithdrawals, Plan, ReturnSeries, Scenario, SimulationResult, WithdrawalPlanMetadata } from "../types";
+import type {
+  PlannedWithdrawals,
+  Plan,
+  ReturnSeries,
+  Scenario,
+  SimulationResult,
+  WithdrawalPlanMetadata,
+} from "../types";
 import type { TaxYearTables } from "../tax/tables";
 import { simulate as realSimulate } from "../simulate";
 import { planWithdrawalPolicy } from "../strategy/withdrawalPlanner";
@@ -32,11 +39,14 @@ export function buildHistoricalReturns(
   }
   const byYear = new Map<number, HistoricalReturnObservation>();
   for (const observation of observations) {
-    if (!Number.isInteger(observation.year)) throw new Error("buildHistoricalReturns: observation years must be whole calendar years.");
-    if (byYear.has(observation.year)) throw new Error(`buildHistoricalReturns: duplicate observation for ${observation.year}.`);
+    if (!Number.isInteger(observation.year))
+      throw new Error("buildHistoricalReturns: observation years must be whole calendar years.");
+    if (byYear.has(observation.year))
+      throw new Error(`buildHistoricalReturns: duplicate observation for ${observation.year}.`);
     for (const key of ["equity", "bond", "cash"] as const) {
       const value = observation[key];
-      if (!Number.isFinite(value) || value < -1) throw new Error(`buildHistoricalReturns: ${observation.year} ${key} must be finite and at least -100%.`);
+      if (!Number.isFinite(value) || value < -1)
+        throw new Error(`buildHistoricalReturns: ${observation.year} ${key} must be finite and at least -100%.`);
     }
     byYear.set(observation.year, observation);
   }
@@ -44,7 +54,8 @@ export function buildHistoricalReturns(
   for (let age = startAge; age <= endAge; age++) {
     const calendarYear = startYear + (age - startAge);
     const observation = byYear.get(calendarYear);
-    if (!observation) throw new Error(`buildHistoricalReturns: no observation for ${calendarYear}; choose a fully covered window.`);
+    if (!observation)
+      throw new Error(`buildHistoricalReturns: no observation for ${calendarYear}; choose a fully covered window.`);
     years.push({ age, equity: observation.equity, bond: observation.bond, cash: observation.cash });
   }
   return { years };
@@ -91,8 +102,12 @@ export function runHistorical(
     throw new Error("runHistorical: scenario.historicalConfig.startYear must be a whole calendar year.");
   }
   const startYear: number = requested;
-  if (!Number.isInteger(plan.profile.currentAge) || !Number.isInteger(plan.profile.endAge) ||
-    plan.profile.currentAge <= 0 || plan.profile.endAge < plan.profile.currentAge) {
+  if (
+    !Number.isInteger(plan.profile.currentAge) ||
+    !Number.isInteger(plan.profile.endAge) ||
+    plan.profile.currentAge <= 0 ||
+    plan.profile.endAge < plan.profile.currentAge
+  ) {
     throw new Error("runHistorical: plan ages must be positive whole numbers with endAge >= currentAge.");
   }
   if (!Object.values(scenario.returnAssumptions).every(Number.isFinite)) {
@@ -113,9 +128,7 @@ export function runHistorical(
     );
   }
   if (startYear < firstYear) {
-    throw new Error(
-      `runHistorical: startYear ${startYear} precedes dataset coverage (earliest ${firstYear}).`,
-    );
+    throw new Error(`runHistorical: startYear ${startYear} precedes dataset coverage (earliest ${firstYear}).`);
   }
   // Inclusive horizon: a window starting at Y covers years Y..Y+(horizonYears-1).
   const lastFittingStart = lastYear - (horizonYears - 1);

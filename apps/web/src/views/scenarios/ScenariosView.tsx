@@ -20,16 +20,21 @@ export function ScenariosView() {
     <section aria-label="Scenarios" className="scenarios-view">
       <header className="no-print">
         <h2>Scenarios</h2>
-        <button type="button" onClick={() => { setEditingId(null); setCreating(true); }}>
+        <button
+          type="button"
+          onClick={() => {
+            setEditingId(null);
+            setCreating(true);
+          }}
+        >
           New scenario
         </button>
       </header>
 
       {workspace.workspace.scenarios.length === 0 && !showEditor && (
         <p className="hint empty-state">
-          No scenarios yet. A scenario is a set of overrides on the plan's working scenario
-          (retirement age, return assumptions, withdrawal order) — the engine-ready
-          Scenario is resolved when the run is dispatched.
+          No scenarios yet. A scenario is a set of overrides on the plan's working scenario (retirement age, return
+          assumptions, withdrawal order) — the engine-ready Scenario is resolved when the run is dispatched.
         </p>
       )}
 
@@ -37,14 +42,20 @@ export function ScenariosView() {
         <ScenarioEditorForm
           key="new"
           delta={null}
-          onDone={() => { setCreating(false); setEditingId(null); }}
+          onDone={() => {
+            setCreating(false);
+            setEditingId(null);
+          }}
         />
       ) : null}
 
       <ScenarioList
         deltas={workspace.workspace.scenarios}
         editingId={editingId}
-        onEdit={(id) => { setCreating(false); setEditingId(id); }}
+        onEdit={(id) => {
+          setCreating(false);
+          setEditingId(id);
+        }}
       />
     </section>
   );

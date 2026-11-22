@@ -216,20 +216,13 @@ const LOWEST_ON_RATE = 0.0505; // T4127 ON chart
 /** Official-formula tax return for one year (Ontario resident). Independent of the engine. */
 export function refTax(shape: RefShape, yearOffset: number): RefTax {
   const cy = refYear(yearOffset);
-  const taxable =
-    shape.employmentIncome +
-    shape.otherTaxableIncome +
-    shape.rrspWithdrawals +
-    shape.capitalGains * 0.5; // ITA s.38 inclusion rate
+  const taxable = shape.employmentIncome + shape.otherTaxableIncome + shape.rrspWithdrawals + shape.capitalGains * 0.5; // ITA s.38 inclusion rate
 
   // Federal: progressive tax − non-refundable credits × lowest rate (ITA s.117(2)/(3)).
   const empAmt = Math.min(shape.employmentIncome, cy.employmentCredit);
   let ageAmt = 0;
   if (shape.age >= 65) {
-    ageAmt = Math.max(
-      0,
-      cy.ageAmount - OFFICIAL.ageAmountReductionRate * Math.max(0, taxable - cy.ageAmountThreshold),
-    );
+    ageAmt = Math.max(0, cy.ageAmount - OFFICIAL.ageAmountReductionRate * Math.max(0, taxable - cy.ageAmountThreshold));
   }
   const pensAmt = Math.min(cy.pensionCredit, Math.max(0, shape.pensionIncome));
   const creditable = Math.max(0, cy.fedBpa + empAmt + ageAmt + pensAmt);
@@ -257,17 +250,8 @@ export function refTax(shape: RefShape, yearOffset: number): RefTax {
  * Known divergence from official law (documented, unchanged): the engine omits the 50%
  * band on employment income between $5,000 and $15,000 (v1 counts everything above
  * $5,000) — flagged in cross-check.md. */
-export function refGis(
-  cpp: number,
-  employment: number,
-  rrspRrifWithdrawals: number,
-  otherTaxable: number,
-): number {
-  const income =
-    cpp +
-    rrspRrifWithdrawals +
-    otherTaxable +
-    Math.max(0, employment - OFFICIAL.gisEmploymentExclusion);
+export function refGis(cpp: number, employment: number, rrspRrifWithdrawals: number, otherTaxable: number): number {
+  const income = cpp + rrspRrifWithdrawals + otherTaxable + Math.max(0, employment - OFFICIAL.gisEmploymentExclusion);
   return Math.max(0, OFFICIAL.gisAnnualMaxSingle - OFFICIAL.gisTaperRate * Math.max(0, income));
 }
 
@@ -406,16 +390,13 @@ describe("external cross-check — golden plan vs official-formula independent r
    * the convention stated in cross-check.md. */
   const retiredPlan: Plan = {
     ...basePlan,
-    incomes: basePlan.incomes.map((s) =>
-      s.kind === "employment" ? { ...s, endAge: 64 } : s,
-    ),
+    incomes: basePlan.incomes.map((s) => (s.kind === "employment" ? { ...s, endAge: 64 } : s)),
   };
   const result = goldenRun(retiredPlan);
   const byAge = new Map(result.years.map((y) => [y.age, y]));
 
   /** Analytic salary for a year: 95,000 with 2% raises while the stream is active (through 64). */
-  const analyticEmployment = (age: number): number =>
-    age <= 64 ? roundCent(95_000 * Math.pow(1.02, age - 45)) : 0;
+  const analyticEmployment = (age: number): number => (age <= 64 ? roundCent(95_000 * Math.pow(1.02, age - 45)) : 0);
 
   /** Engine per-component incomes for one year, as the official formulas would consume
    * them. The income STREAM values are asserted against analytic expectations (M2);
@@ -451,7 +432,17 @@ describe("external cross-check — golden plan vs official-formula independent r
 
   it("year-1 employment-only tax equals the handoff pin 18,986.41 by independent computation", () => {
     // Official formulas on the year-1 shape (95,000 employment, age 45, no OAS yet).
-    const ref = refTax({ employmentIncome: 95_000, otherTaxableIncome: 0, rrspWithdrawals: 0, pensionIncome: 0, capitalGains: 0, age: 45 }, 0);
+    const ref = refTax(
+      {
+        employmentIncome: 95_000,
+        otherTaxableIncome: 0,
+        rrspWithdrawals: 0,
+        pensionIncome: 0,
+        capitalGains: 0,
+        age: 45,
+      },
+      0,
+    );
     expect(roundCent(ref.federal)).toBeCloseTo(13_157.59, 2);
     expect(roundCent(ref.provincial)).toBeCloseTo(5_827.02, 2);
     expect(roundCent(ref.surtax)).toBeCloseTo(1.8, 2);
@@ -460,7 +451,17 @@ describe("external cross-check — golden plan vs official-formula independent r
 
   it("engine year-1 tax matches the independent official-formula figure to the cent", () => {
     const y = byAge.get(45)!;
-    const ref = refTax({ employmentIncome: y.income.employment, otherTaxableIncome: 0, rrspWithdrawals: 0, pensionIncome: 0, capitalGains: 0, age: 45 }, 0);
+    const ref = refTax(
+      {
+        employmentIncome: y.income.employment,
+        otherTaxableIncome: 0,
+        rrspWithdrawals: 0,
+        pensionIncome: 0,
+        capitalGains: 0,
+        age: 45,
+      },
+      0,
+    );
     expect(y.income.employment).toBeCloseTo(95_000, 2);
     expect(y.tax.federal).toBeCloseTo(ref.federal, 1);
     expect(y.tax.provincial).toBeCloseTo(ref.provincial, 1);
@@ -480,15 +481,9 @@ describe("external cross-check — golden plan vs official-formula independent r
       // engine's verified convention matches: OAS is held separately and never passed to
       // the GIS income test). Prior-year RRSP/RRIF withdrawals and prior-year realized
       // non-reg gains enter the income test per the engine's documented sequencing.
-      const gisRef = refGis(
-        y.income.cpp,
-        y.income.employment,
-        y.withdrawals.rrsp,
-        y.income.other,
-      );
+      const gisRef = refGis(y.income.cpp, y.income.employment, y.withdrawals.rrsp, y.income.other);
 
-      const netEngine =
-        y.income.employment + y.income.cpp + y.income.oas + y.income.gis - y.tax.total;
+      const netEngine = y.income.employment + y.income.cpp + y.income.oas + y.income.gis - y.tax.total;
       const netRef = y.income.employment + y.income.cpp + y.income.oas + gisRef - ref.total;
 
       // M2: the engine's reported GIS must equal the official-formula reference exactly
@@ -503,10 +498,14 @@ describe("external cross-check — golden plan vs official-formula independent r
 
       // Plan Task 16 documented tolerance: 10% on per-year taxes and net income.
       if (tol(y.tax.total, ref.total) > 0.1) {
-        failures.push(`age ${age} tax: engine ${y.tax.total.toFixed(2)} vs ref ${ref.total.toFixed(2)} (${(100 * tol(y.tax.total, ref.total)).toFixed(1)}% off)`);
+        failures.push(
+          `age ${age} tax: engine ${y.tax.total.toFixed(2)} vs ref ${ref.total.toFixed(2)} (${(100 * tol(y.tax.total, ref.total)).toFixed(1)}% off)`,
+        );
       }
       if (tol(netEngine, netRef) > 0.1) {
-        failures.push(`age ${age} net income: engine ${netEngine.toFixed(2)} vs ref ${netRef.toFixed(2)} (${(100 * tol(netEngine, netRef)).toFixed(1)}% off)`);
+        failures.push(
+          `age ${age} net income: engine ${netEngine.toFixed(2)} vs ref ${netRef.toFixed(2)} (${(100 * tol(netEngine, netRef)).toFixed(1)}% off)`,
+        );
       }
 
       // Tighter arithmetic sub-check (documented expectation, not the 10% contract):

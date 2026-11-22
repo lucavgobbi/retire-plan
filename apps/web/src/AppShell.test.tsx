@@ -17,14 +17,17 @@ describe("local workspace integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     fireEvent.change(screen.getByLabelText("Base retirement age"), { target: { value: "62" } });
     fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
-    await waitFor(async () => {
-      const loaded = await provider.load();
-      expect(loaded.kind).toBe("loaded");
-      if (loaded.kind === "loaded") {
-        expect(loaded.workspace.plan.profile.currentAge).toBe(46);
-        expect(loaded.workspace.baseScenario?.retirementAge).toBe(62);
-      }
-    }, { timeout: 2000 });
+    await waitFor(
+      async () => {
+        const loaded = await provider.load();
+        expect(loaded.kind).toBe("loaded");
+        if (loaded.kind === "loaded") {
+          expect(loaded.workspace.plan.profile.currentAge).toBe(46);
+          expect(loaded.workspace.baseScenario?.retirementAge).toBe(62);
+        }
+      },
+      { timeout: 2000 },
+    );
     fireEvent.click(screen.getByRole("button", { name: "Projection" }));
     fireEvent.click(screen.getByRole("button", { name: "Run projection" }));
     await screen.findByRole("figure", { name: "Net worth chart" });
@@ -38,15 +41,18 @@ describe("local workspace integration", () => {
     fireEvent.click(showAccounts);
     expect(showAccounts.checked).toBe(true);
     expect(startYear.value).toBe(selectedStart);
-    await waitFor(async () => {
-      const loaded = await provider.load();
-      expect(loaded.kind).toBe("loaded");
-      if (loaded.kind === "loaded") {
-        expect(loaded.workspace.projectionActiveTab).toBe("cashflow");
-        expect(loaded.workspace.projectionSankeyRange?.startYear).toBe(Number(selectedStart));
-        expect(loaded.workspace.projectionSankeyShowAccounts).toBe(true);
-      }
-    }, { timeout: 2000 });
+    await waitFor(
+      async () => {
+        const loaded = await provider.load();
+        expect(loaded.kind).toBe("loaded");
+        if (loaded.kind === "loaded") {
+          expect(loaded.workspace.projectionActiveTab).toBe("cashflow");
+          expect(loaded.workspace.projectionSankeyRange?.startYear).toBe(Number(selectedStart));
+          expect(loaded.workspace.projectionSankeyShowAccounts).toBe(true);
+        }
+      },
+      { timeout: 2000 },
+    );
     first.unmount();
     render(<App storageProvider={provider} />);
     await screen.findByLabelText("Current age");
@@ -58,11 +64,14 @@ describe("local workspace integration", () => {
     const restoredShowAccounts = screen.getByRole<HTMLInputElement>("checkbox", { name: "Show accounts" });
     expect(restoredShowAccounts.checked).toBe(true);
     fireEvent.click(restoredShowAccounts);
-    await waitFor(async () => {
-      const loaded = await provider.load();
-      expect(loaded.kind).toBe("loaded");
-      if (loaded.kind === "loaded") expect(loaded.workspace.projectionSankeyShowAccounts).toBe(false);
-    }, { timeout: 2000 });
+    await waitFor(
+      async () => {
+        const loaded = await provider.load();
+        expect(loaded.kind).toBe("loaded");
+        if (loaded.kind === "loaded") expect(loaded.workspace.projectionSankeyShowAccounts).toBe(false);
+      },
+      { timeout: 2000 },
+    );
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     expect((screen.getByLabelText("Base retirement age") as HTMLInputElement).value).toBe("62");
     fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
@@ -94,7 +103,11 @@ describe("local workspace integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     await screen.findByText("Original");
     const replacement = makeSampleWorkspace({ id: "replacement", name: "Replacement" });
-    const json = JSON.stringify({ schemaVersion: 1, plans: [{ meta: replacement.meta, plan: replacement.plan }], scenarios: replacement.scenarios });
+    const json = JSON.stringify({
+      schemaVersion: 1,
+      plans: [{ meta: replacement.meta, plan: replacement.plan }],
+      scenarios: replacement.scenarios,
+    });
     const file = new File([json], "replacement.json", { type: "application/json" });
     fireEvent.change(screen.getByLabelText(/Import JSON/), { target: { files: [file] } });
     const preview = await screen.findByRole("region", { name: "Import preview" });
@@ -113,10 +126,14 @@ describe("local workspace integration", () => {
 
   it("keeps an unavailable storage failure visible and supports an explicit session-only workspace", async () => {
     const provider: StorageProvider = {
-      load: async () => { throw new Error("Storage unavailable"); },
-      save: async () => {}, snapshot: async () => {}, restore: async () => null,
+      load: async () => {
+        throw new Error("Storage unavailable");
+      },
+      save: async () => {},
+      snapshot: async () => {},
+      restore: async () => null,
       readRawRow: async () => undefined,
-      runExclusive: async operation => operation(provider),
+      runExclusive: async (operation) => operation(provider),
     };
     render(<App storageProvider={provider} />);
     await screen.findByRole("alert");
@@ -130,14 +147,21 @@ describe("local workspace integration", () => {
       const runs = useRuns();
       return <output data-testid="run-records">{JSON.stringify(runs)}</output>;
     }
-    render(<StoreProvider initialWorkspace={makeSampleWorkspace()}><AppShell /><RunProbe /></StoreProvider>);
+    render(
+      <StoreProvider initialWorkspace={makeSampleWorkspace()}>
+        <AppShell />
+        <RunProbe />
+      </StoreProvider>,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Projection" }));
     fireEvent.click(screen.getByRole("button", { name: "Run projection" }));
     await screen.findByRole("figure", { name: "Net worth chart" });
     // Provenance: packages/engine/tests/golden/golden.test.ts:79 pins year-one
     // net worth to 660_532.60 with precision 0 (±$0.50). The current engine emits
     // 660_532.49 due to mortgage monthly rounding, within that documented pin.
-    const records = JSON.parse(screen.getByTestId("run-records").textContent ?? "[]") as { result: { years: { netWorth: number }[] } }[];
+    const records = JSON.parse(screen.getByTestId("run-records").textContent ?? "[]") as {
+      result: { years: { netWorth: number }[] };
+    }[];
     expect(records[0]?.result.years[0]?.netWorth).toBeCloseTo(660_532.6, 0);
     fireEvent.click(screen.getByRole("button", { name: "Scenarios" }));
     fireEvent.click(screen.getByRole("button", { name: "New scenario" }));
@@ -148,7 +172,7 @@ describe("local workspace integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Compare" }));
     const choices = screen.getAllByRole("checkbox");
     expect(choices).toHaveLength(2);
-    choices.forEach(choice => fireEvent.click(choice));
+    choices.forEach((choice) => fireEvent.click(choice));
     const baseline = screen.getByLabelText(/baseline/i);
     fireEvent.change(baseline, { target: { value: (baseline as HTMLSelectElement).options[1]!.value } });
     expect(screen.getByRole("table").textContent).toContain("Final net worth");
@@ -157,7 +181,11 @@ describe("local workspace integration", () => {
   });
 
   it("opens and focuses Projection with Charts selected after running directly from Plan", async () => {
-    render(<StoreProvider initialWorkspace={makeSampleWorkspace()}><AppShell /></StoreProvider>);
+    render(
+      <StoreProvider initialWorkspace={makeSampleWorkspace()}>
+        <AppShell />
+      </StoreProvider>,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Run projection" }));
     await screen.findByRole("figure", { name: "Net worth chart" });
     expect(screen.getByRole("button", { name: "Projection" }).getAttribute("aria-current")).toBe("page");
@@ -169,8 +197,20 @@ describe("local workspace integration", () => {
 
   it("opens the scenario just run rather than a previously stored base result", async () => {
     const workspace = makeSampleWorkspace();
-    workspace.scenarios = [{ id: "early", name: "Early retirement", basePlanId: workspace.meta!.id, simMode: "deterministic", overrides: { retirementAge: 62 } }];
-    render(<StoreProvider initialWorkspace={workspace}><AppShell /></StoreProvider>);
+    workspace.scenarios = [
+      {
+        id: "early",
+        name: "Early retirement",
+        basePlanId: workspace.meta!.id,
+        simMode: "deterministic",
+        overrides: { retirementAge: 62 },
+      },
+    ];
+    render(
+      <StoreProvider initialWorkspace={workspace}>
+        <AppShell />
+      </StoreProvider>,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Run projection" }));
     await screen.findByRole("figure", { name: "Net worth chart" });
     fireEvent.click(screen.getByRole("button", { name: "Scenarios" }));
@@ -187,8 +227,20 @@ describe("local workspace integration", () => {
 
   it("navigating to Projection after a saved-scenario run shows that run: dropdown matches its id and displays the completed result", async () => {
     const workspace = makeSampleWorkspace();
-    workspace.scenarios = [{ id: "early", name: "Early retirement", basePlanId: workspace.meta!.id, simMode: "deterministic", overrides: { retirementAge: 62 } }];
-    render(<StoreProvider initialWorkspace={workspace}><AppShell /></StoreProvider>);
+    workspace.scenarios = [
+      {
+        id: "early",
+        name: "Early retirement",
+        basePlanId: workspace.meta!.id,
+        simMode: "deterministic",
+        overrides: { retirementAge: 62 },
+      },
+    ];
+    render(
+      <StoreProvider initialWorkspace={workspace}>
+        <AppShell />
+      </StoreProvider>,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Scenarios" }));
     fireEvent.click(screen.getByRole("button", { name: "Run Early retirement" }));
     await screen.findByRole("figure", { name: "Net worth chart" });
@@ -207,12 +259,21 @@ describe("local workspace integration", () => {
 
   it("entering Projection mid-background-run locks the dropdown, then follows the just-completed scenario run", async () => {
     const workspace = makeSampleWorkspace();
-    workspace.scenarios = [{ id: "early", name: "Early retirement", basePlanId: workspace.meta!.id, simMode: "deterministic", overrides: { retirementAge: 62 } }];
+    workspace.scenarios = [
+      {
+        id: "early",
+        name: "Early retirement",
+        basePlanId: workspace.meta!.id,
+        simMode: "deterministic",
+        overrides: { retirementAge: 62 },
+      },
+    ];
     let finish: (() => void) | undefined;
     const emptyOutcome: RunOutcome = { result: { years: [], summary: { success: true, finalNetWorth: 0 } } };
-    const simulationRunner: SimulationRunner = () => new Promise<RunOutcome>((resolve) => {
-      finish = () => resolve(emptyOutcome);
-    });
+    const simulationRunner: SimulationRunner = () =>
+      new Promise<RunOutcome>((resolve) => {
+        finish = () => resolve(emptyOutcome);
+      });
     render(
       <StoreProvider initialWorkspace={workspace} simulationRunner={simulationRunner}>
         <AppShell />
@@ -242,11 +303,14 @@ describe("local workspace integration", () => {
     expect((screen.getByRole("button", { name: "Run projection" }) as HTMLButtonElement).disabled).toBe(false);
     expect(screen.queryByLabelText("Workspace save status")).toBeNull();
     expect(screen.queryByText("Saved on this device")).toBeNull();
-    await waitFor(async () => {
-      const loaded = await provider.load();
-      expect(loaded.kind).toBe("loaded");
-      if (loaded.kind === "loaded") expect(loaded.workspace.plan.profile.currentAge).toBe(46);
-    }, { timeout: 2000 });
+    await waitFor(
+      async () => {
+        const loaded = await provider.load();
+        expect(loaded.kind).toBe("loaded");
+        if (loaded.kind === "loaded") expect(loaded.workspace.plan.profile.currentAge).toBe(46);
+      },
+      { timeout: 2000 },
+    );
   });
 
   it("keeps local save failures visible and actionable after removing the routine saved banner", async () => {
@@ -254,13 +318,18 @@ describe("local workspace integration", () => {
     let failNextSave = true;
     const provider: StorageProvider = {
       ...base,
-      save: async workspace => {
-        if (failNextSave) { failNextSave = false; throw new Error("storage is full"); }
+      save: async (workspace) => {
+        if (failNextSave) {
+          failNextSave = false;
+          throw new Error("storage is full");
+        }
         await base.save(workspace);
       },
     };
     render(<App storageProvider={provider} />);
-    expect((await screen.findByRole("alert", { name: "Workspace save error" })).textContent).toContain("Could not save locally: storage is full");
+    expect((await screen.findByRole("alert", { name: "Workspace save error" })).textContent).toContain(
+      "Could not save locally: storage is full",
+    );
     fireEvent.click(screen.getByRole("button", { name: "Retry save" }));
     await waitFor(async () => expect((await provider.load()).kind).toBe("loaded"), { timeout: 2000 });
     expect(screen.queryByText("Saved on this device")).toBeNull();
@@ -275,18 +344,25 @@ describe("local workspace integration", () => {
     const old = makeSampleWorkspace({ id: "old-export", name: "Old export" });
     old.plan.profile.birthYear = new Date().getFullYear() - 45;
     old.plan.profile.currentAge = 44;
-    const file = new File([JSON.stringify({ schemaVersion: 1, plans: [{ meta: old.meta, plan: old.plan }], scenarios: old.scenarios })], "old.json", { type: "application/json" });
+    const file = new File(
+      [JSON.stringify({ schemaVersion: 1, plans: [{ meta: old.meta, plan: old.plan }], scenarios: old.scenarios })],
+      "old.json",
+      { type: "application/json" },
+    );
     fireEvent.change(screen.getByLabelText(/Import JSON/), { target: { files: [file] } });
     await screen.findByRole("region", { name: "Import preview" });
     fireEvent.click(screen.getByRole("button", { name: "Replace workspace" }));
     await screen.findByText(/Imported "Old export"/);
     expect((screen.getByLabelText("Current age") as HTMLInputElement).value).toBe("45");
     fireEvent.change(screen.getByLabelText("Birth year"), { target: { value: String(new Date().getFullYear() - 46) } });
-    await waitFor(async () => {
-      const loaded = await provider.load();
-      expect(loaded.kind).toBe("loaded");
-      if (loaded.kind === "loaded") expect(loaded.workspace.plan.profile.currentAge).toBe(46);
-    }, { timeout: 2000 });
+    await waitFor(
+      async () => {
+        const loaded = await provider.load();
+        expect(loaded.kind).toBe("loaded");
+        if (loaded.kind === "loaded") expect(loaded.workspace.plan.profile.currentAge).toBe(46);
+      },
+      { timeout: 2000 },
+    );
   });
 
   it("rejects an imported horizon that already ended after recalculating the age", async () => {
@@ -297,7 +373,11 @@ describe("local workspace integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     const old = makeSampleWorkspace();
     old.plan.profile = { birthYear: new Date().getFullYear() - 95, currentAge: 45, endAge: 80, province: "ON" };
-    const file = new File([JSON.stringify({ schemaVersion: 1, plans: [{ meta: old.meta, plan: old.plan }], scenarios: old.scenarios })], "expired.json", { type: "application/json" });
+    const file = new File(
+      [JSON.stringify({ schemaVersion: 1, plans: [{ meta: old.meta, plan: old.plan }], scenarios: old.scenarios })],
+      "expired.json",
+      { type: "application/json" },
+    );
     fireEvent.change(screen.getByLabelText(/Import JSON/), { target: { files: [file] } });
     expect((await screen.findByRole("alert")).textContent).toMatch(/endAge.*greater than.*currentAge/i);
     expect(screen.queryByRole("region", { name: "Import preview" })).toBeNull();
@@ -308,7 +388,9 @@ describe("local workspace integration", () => {
   it("autosaves account edits without row Save buttons and keeps invalid drafts out of storage", async () => {
     const provider = createMemoryStorageProvider();
     const workspace = makeSampleWorkspace();
-    workspace.plan.accounts = [{ id: "tfsa", type: "tfsa", balance: 100, assetMix: { equity: 0.6, bond: 0.3, cash: 0.1 } }];
+    workspace.plan.accounts = [
+      { id: "tfsa", type: "tfsa", balance: 100, assetMix: { equity: 0.6, bond: 0.3, cash: 0.1 } },
+    ];
     await provider.save(workspace);
     render(<App storageProvider={provider} />);
     await screen.findByLabelText("Birth year");
@@ -324,24 +406,38 @@ describe("local workspace integration", () => {
     const pending = await provider.load();
     if (pending.kind === "loaded") expect(pending.workspace.plan.accounts[0]?.balance).toBe(100);
     expect(screen.queryByText("Saved on this device")).toBeNull();
-    await waitFor(async () => {
-      const saved = await provider.load();
-      expect(saved.kind).toBe("loaded");
-      if (saved.kind === "loaded") expect(saved.workspace.plan.accounts[0]?.balance).toBe(125);
-    }, { timeout: 2000 });
+    await waitFor(
+      async () => {
+        const saved = await provider.load();
+        expect(saved.kind).toBe("loaded");
+        if (saved.kind === "loaded") expect(saved.workspace.plan.accounts[0]?.balance).toBe(125);
+      },
+      { timeout: 2000 },
+    );
 
     fireEvent.change(within(row).getByLabelText("Equity (%)"), { target: { value: "80" } });
     fireEvent.change(within(row).getByLabelText("Current balance ($)"), { target: { value: "222" } });
     expect(within(row).getByText(/These edits are not applied/)).toBeTruthy();
     const invalidDraft = await provider.load();
-    if (invalidDraft.kind === "loaded") expect(invalidDraft.workspace.plan.accounts[0]).toMatchObject({ balance: 125, assetMix: { equity: 0.6, bond: 0.3, cash: 0.1 } });
+    if (invalidDraft.kind === "loaded")
+      expect(invalidDraft.workspace.plan.accounts[0]).toMatchObject({
+        balance: 125,
+        assetMix: { equity: 0.6, bond: 0.3, cash: 0.1 },
+      });
     fireEvent.change(within(row).getByLabelText("Bonds (%)"), { target: { value: "10" } });
     expect(within(row).queryByRole("alert")).toBeNull();
-    await waitFor(async () => {
-      const corrected = await provider.load();
-      expect(corrected.kind).toBe("loaded");
-      if (corrected.kind === "loaded") expect(corrected.workspace.plan.accounts[0]).toMatchObject({ balance: 222, assetMix: { equity: 0.8, bond: 0.1, cash: 0.1 } });
-    }, { timeout: 2000 });
+    await waitFor(
+      async () => {
+        const corrected = await provider.load();
+        expect(corrected.kind).toBe("loaded");
+        if (corrected.kind === "loaded")
+          expect(corrected.workspace.plan.accounts[0]).toMatchObject({
+            balance: 222,
+            assetMix: { equity: 0.8, bond: 0.1, cash: 0.1 },
+          });
+      },
+      { timeout: 2000 },
+    );
     expect(screen.queryByText("Saved on this device")).toBeNull();
   });
 });

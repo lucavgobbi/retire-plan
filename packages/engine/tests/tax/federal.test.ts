@@ -44,9 +44,7 @@ describe("taxableIncome", () => {
 
   it("treats pensionEligibleIncome as an annotation, not an extra source (subset rule)", () => {
     // A 60k RRIF withdrawal flagged as pension-credit-eligible is taxable only once.
-    expect(
-      taxableIncome(income({ rrspWithdrawals: 60_000, pensionEligibleIncome: 60_000 })),
-    ).toBe(60_000);
+    expect(taxableIncome(income({ rrspWithdrawals: 60_000, pensionEligibleIncome: 60_000 }))).toBe(60_000);
   });
 
   it("rejects eligible dividends (v1 models them off)", () => {
@@ -142,10 +140,7 @@ describe("federalTax — credits", () => {
     // pension credit = min(2,000, 60,000) = 2,000
     // credits = 0.14 x (16,452 + 7,172.8 + 2,000) = 0.14 x 25,624.8 = 3,587.472
     // tax = 4,908.533
-    const r = federalTax(
-      income({ rrspWithdrawals: 60_000, pensionEligibleIncome: 60_000, age: 70 }),
-      tables,
-    );
+    const r = federalTax(income({ rrspWithdrawals: 60_000, pensionEligibleIncome: 60_000, age: 70 }), tables);
     expect(r.credits).toBeCloseTo(3_587.472, 4);
     expect(r.tax).toBeCloseTo(4_908.533, 4);
   });
@@ -154,10 +149,7 @@ describe("federalTax — credits", () => {
     // Only 1,000 pension-eligible: credit = min(2,000, 1,000) = 1,000.
     // employment 0, otherTaxableIncome 5,000 -> taxable 5,000, gross = 700.
     // credits = 0.14 x (16,452 + 1,000) = 2,443.28 -> tax 0
-    const r = federalTax(
-      income({ otherTaxableIncome: 5_000, pensionEligibleIncome: 1_000 }),
-      tables,
-    );
+    const r = federalTax(income({ otherTaxableIncome: 5_000, pensionEligibleIncome: 1_000 }), tables);
     expect(r.credits).toBeCloseTo(2_443.28, 4);
     expect(r.tax).toBe(0);
   });

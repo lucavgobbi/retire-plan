@@ -4,5 +4,9 @@ dist/
 .DS_Store
 .npm-cache/
 .uiqa/
+.codex/
+.agents/
+.aws/
+.superpowers/
 *.backup
 opencode.json

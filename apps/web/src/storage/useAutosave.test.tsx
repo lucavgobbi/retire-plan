@@ -9,8 +9,6 @@ import { createMemoryRowDb } from "./memory";
 import type { Workspace } from "../domain/types";
 import { makeSampleWorkspace } from "../data/samplePlan";
 
-const fork = (): Workspace => makeSampleWorkspace({ name: "Stub" });
-
 /** Deferred-provider harness: save(A) blocks until explicitly released. */
 function deferredProvider() {
   const releases: (() => void)[] = [];
@@ -44,7 +42,10 @@ describe("useAutosave serialization (stale-completion blocker regression)", () =
       ...original,
       plan: {
         ...original.plan,
-        accounts: [...original.plan.accounts, { id: "cash", name: "Savings", type: "cash", balance: 9_250, interestRate: 0.03 }],
+        accounts: [
+          ...original.plan.accounts,
+          { id: "cash", name: "Savings", type: "cash", balance: 9_250, interestRate: 0.03 },
+        ],
       },
       projectionScenarioId: "sample",
       projectionRunSummaryCollapsed: true,
@@ -63,7 +64,10 @@ describe("useAutosave serialization (stale-completion blocker regression)", () =
       expect(restored.workspace.projectionRunSummaryCollapsed).toBe(true);
       expect(restored.workspace.projectionActiveTab).toBe("cashflow");
       expect(restored.workspace.projectionSankeyRange).toEqual({ startYear: 2028, endYear: 2035 });
-      expect(restored.workspace.plan.accounts.find((account) => account.type === "cash")).toMatchObject({ balance: 9_250, interestRate: 0.03 });
+      expect(restored.workspace.plan.accounts.find((account) => account.type === "cash")).toMatchObject({
+        balance: 9_250,
+        interestRate: 0.03,
+      });
       expect(restored.workspace.hiddenProjectionColumns).toEqual(["tax.total"]);
       expect(restored.workspace.hiddenProjectionCharts).toEqual(["net-worth"]);
     }
@@ -71,11 +75,16 @@ describe("useAutosave serialization (stale-completion blocker regression)", () =
 
   it("never reports a newer editing snapshot as saved when an older write completes during its debounce", async () => {
     const { provider, releases } = deferredProvider();
-    const hook = renderHook(({ value }: { value: Workspace }) => useAutosave(value, { storage: provider, delayMs: 60_000 }), { initialProps: { value: ws("Old") } });
+    const hook = renderHook(
+      ({ value }: { value: Workspace }) => useAutosave(value, { storage: provider, delayMs: 60_000 }),
+      { initialProps: { value: ws("Old") } },
+    );
     act(() => hook.result.current.saveNow());
     await waitFor(() => expect(releases).toHaveLength(1));
     act(() => hook.rerender({ value: ws("New") }));
-    await act(async () => { releases[0]!(); });
+    await act(async () => {
+      releases[0]!();
+    });
     await waitFor(() => expect(hook.result.current.status).toBe("saved"));
     expect(hook.result.current.isCurrentSaved).toBe(false);
     act(() => hook.result.current.saveNow());
@@ -137,7 +146,7 @@ describe("useAutosave serialization (stale-completion blocker regression)", () =
   });
 
   it("saveNow() bypasses the debounce and serializes behind in-flight writes", async () => {
-    const { provider, savedNames, releases } = deferredProvider();
+    const { provider, savedNames } = deferredProvider();
     const hook = renderHook(
       ({ value }: { value: Workspace }) => useAutosave(value, { storage: provider, delayMs: 60_000 }),
       { initialProps: { value: ws("Queued") } },

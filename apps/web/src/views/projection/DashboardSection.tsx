@@ -71,10 +71,23 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
       return (
         <section aria-label="Dashboard" className="dashboard empty-state">
           <p className="hint">Run the projection to populate the dashboard charts.</p>
-          <button type="button" disabled={isRunning} onClick={() => { void runProjection(); }}>
+          <button
+            type="button"
+            disabled={isRunning}
+            onClick={() => {
+              void runProjection();
+            }}
+          >
             Run projection
           </button>
-          {isRunning && <><p role="status">Projection running in the background…</p><button type="button" onClick={cancelRun}>Cancel projection</button></>}
+          {isRunning && (
+            <>
+              <p role="status">Projection running in the background…</p>
+              <button type="button" onClick={cancelRun}>
+                Cancel projection
+              </button>
+            </>
+          )}
           {runCancelled && <p role="status">Projection cancelled.</p>}
           {error && <p role="alert">The projection could not run: {error}</p>}
         </section>
@@ -86,7 +99,10 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
 
   // Chart visibility: the workspace persists HIDDEN chart ids (absent or empty =
   // all charts visible, so charts added later default visible; stale ids dropped).
-  const hiddenCharts = sanitizeHiddenIds(workspace.hiddenProjectionCharts, PROJECTION_CHARTS.map((chart) => chart.id));
+  const hiddenCharts = sanitizeHiddenIds(
+    workspace.hiddenProjectionCharts,
+    PROJECTION_CHARTS.map((chart) => chart.id),
+  );
 
   // Non-finite values anywhere already degrade to null points inside the adapters.
   // Per-chart applicability: breakdown/RRIF charts degrade to honest rerun notes for
@@ -97,34 +113,49 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
   const oasPoints = oasKeptSeries(result.years);
   const mcAnalysis = analysis?.mode === "montecarlo" ? analysis : undefined;
   const mcStats = ensembleStatPoints(mcAnalysis);
-  const rerun = (message: string) => <p className="hint" data-chart-state="rerun">{message}</p>;
-  const mcCharts = mcAnalysis === undefined ? [] : [
-    {
-      id: "mc-fan",
-      title: "Net worth range (Monte Carlo)",
-      subtitle: "p10–p90 band across simulated paths; dashed median (ensemble, not one path)",
-      ariaLabel: "Monte Carlo net worth range chart",
-      legend: [
-        { label: "Middle 80% of paths (p10–p90)", color: "rgba(37, 99, 235, 0.35)" },
-        { label: "Median path (p50)", color: PALETTE.color1 },
-      ],
-      help: MC_FAN_HELP,
-      body: mcStats
-        ? <EnsembleFanChart points={mcStats} />
-        : rerun("This Monte Carlo run predates per-age statistics. Run the projection again to see the range across simulated paths."),
-    },
-    {
-      id: "shortfall-risk",
-      title: "Shortfall risk by age (Monte Carlo)",
-      subtitle: "Share of simulated paths with any shortfall so far (0–100% fixed axis)",
-      ariaLabel: "Monte Carlo shortfall risk chart",
-      legend: [{ label: "Cumulative shortfall risk", color: PALETTE.color3 }],
-      help: SHORTFALL_RISK_HELP,
-      body: mcStats
-        ? <ShortfallRiskChart points={mcStats} />
-        : rerun("This Monte Carlo run predates per-age statistics. Run the projection again to see the cumulative shortfall risk."),
-    },
-  ];
+  const rerun = (message: string) => (
+    <p className="hint" data-chart-state="rerun">
+      {message}
+    </p>
+  );
+  const mcCharts =
+    mcAnalysis === undefined
+      ? []
+      : [
+          {
+            id: "mc-fan",
+            title: "Net worth range (Monte Carlo)",
+            subtitle: "p10–p90 band across simulated paths; dashed median (ensemble, not one path)",
+            ariaLabel: "Monte Carlo net worth range chart",
+            legend: [
+              { label: "Middle 80% of paths (p10–p90)", color: "rgba(37, 99, 235, 0.35)" },
+              { label: "Median path (p50)", color: PALETTE.color1 },
+            ],
+            help: MC_FAN_HELP,
+            body: mcStats ? (
+              <EnsembleFanChart points={mcStats} />
+            ) : (
+              rerun(
+                "This Monte Carlo run predates per-age statistics. Run the projection again to see the range across simulated paths.",
+              )
+            ),
+          },
+          {
+            id: "shortfall-risk",
+            title: "Shortfall risk by age (Monte Carlo)",
+            subtitle: "Share of simulated paths with any shortfall so far (0–100% fixed axis)",
+            ariaLabel: "Monte Carlo shortfall risk chart",
+            legend: [{ label: "Cumulative shortfall risk", color: PALETTE.color3 }],
+            help: SHORTFALL_RISK_HELP,
+            body: mcStats ? (
+              <ShortfallRiskChart points={mcStats} />
+            ) : (
+              rerun(
+                "This Monte Carlo run predates per-age statistics. Run the projection again to see the cumulative shortfall risk.",
+              )
+            ),
+          },
+        ];
   const charts = [
     {
       id: "net-worth",
@@ -132,7 +163,10 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
       subtitle: "Stacked owned balances by account type, debt below zero, net worth marker (today's dollars)",
       ariaLabel: "Net worth chart",
       legend: [
-        ...["TFSA", "RRSP", "Non-registered", "Cash", "Home", "Other assets"].map((label, i) => ({ label, color: STACK_COLORS[i % STACK_COLORS.length]! })),
+        ...["TFSA", "RRSP", "Non-registered", "Cash", "Home", "Other assets"].map((label, i) => ({
+          label,
+          color: STACK_COLORS[i % STACK_COLORS.length]!,
+        })),
         { label: "Debt (owed, below zero)", color: "rgba(220, 38, 38, 0.55)" },
         { label: "Net worth marker", color: PALETTE.ink },
       ],
@@ -144,7 +178,10 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
       title: "Income vs spending",
       subtitle: "Total annual income line with the spending band",
       ariaLabel: "Income versus spending chart",
-      legend: [{ label: "Income", color: PALETTE.color1 }, { label: "Spending", color: PALETTE.color3 }],
+      legend: [
+        { label: "Income", color: PALETTE.color1 },
+        { label: "Spending", color: PALETTE.color3 },
+      ],
       help: INCOME_SPEND_HELP,
       body: <IncomeSpendChart points={incomeSpendSeries(result.years)} />,
     },
@@ -153,7 +190,10 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
       title: "Income sources",
       subtitle: "Employment · other income · cash interest · CPP · OAS · GIS",
       ariaLabel: "Income sources chart",
-      legend: ["Employment", "Other income", "Cash interest", "CPP", "OAS", "GIS"].map((label, i) => ({ label, color: STACK_COLORS[i % STACK_COLORS.length]! })),
+      legend: ["Employment", "Other income", "Cash interest", "CPP", "OAS", "GIS"].map((label, i) => ({
+        label,
+        color: STACK_COLORS[i % STACK_COLORS.length]!,
+      })),
       help: INCOME_SOURCES_HELP,
       body: <IncomeSourcesChart points={incomeSourcesSeries(result.years)} />,
     },
@@ -162,7 +202,10 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
       title: "Tax by component",
       subtitle: "Federal + provincial + surtax + OAS clawback",
       ariaLabel: "Tax by component chart",
-      legend: ["Federal", "Provincial", "Surtax", "OAS clawback"].map((label, i) => ({ label, color: STACK_COLORS[i]! })),
+      legend: ["Federal", "Provincial", "Surtax", "OAS clawback"].map((label, i) => ({
+        label,
+        color: STACK_COLORS[i]!,
+      })),
       help: TAX_HELP,
       body: <TaxStackChart points={taxStackSeries(result.years)} />,
     },
@@ -172,9 +215,15 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
       subtitle: "Money into accounts above zero, withdrawn below zero, by account",
       ariaLabel: "Account flows chart",
       legend: [
-        ...["TFSA", "RRSP", "Non-registered", "Cash"].map((label, i) => ({ label: `${label} contributions`, color: STACK_COLORS[i]! })),
+        ...["TFSA", "RRSP", "Non-registered", "Cash"].map((label, i) => ({
+          label: `${label} contributions`,
+          color: STACK_COLORS[i]!,
+        })),
         // Withdrawal swatches reuse the account color at reduced alpha (8-digit hex).
-        ...["TFSA", "RRSP", "Non-registered", "Cash"].map((label, i) => ({ label: `${label} withdrawals (below zero)`, color: `${STACK_COLORS[i]}59` })),
+        ...["TFSA", "RRSP", "Non-registered", "Cash"].map((label, i) => ({
+          label: `${label} withdrawals (below zero)`,
+          color: `${STACK_COLORS[i]}59`,
+        })),
       ],
       help: ACCOUNT_FLOWS_HELP,
       body: <AccountFlowsChart points={accountFlowsSeries(result.years)} />,
@@ -184,7 +233,10 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
       title: "Account drawdown",
       subtitle: "TFSA · RRSP · Non-registered · cash accounts + reserve balances",
       ariaLabel: "Account drawdown chart",
-      legend: ["TFSA", "RRSP", "Non-registered", "Cash accounts + reserve", "Other assets"].map((label, i) => ({ label, color: STACK_COLORS[i]! })),
+      legend: ["TFSA", "RRSP", "Non-registered", "Cash accounts + reserve", "Other assets"].map((label, i) => ({
+        label,
+        color: STACK_COLORS[i]!,
+      })),
       help: DRAWDOWN_HELP,
       body: <DrawDownChart points={drawdownSeries(result.years)} />,
     },
@@ -193,7 +245,10 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
       title: "Contribution room",
       subtitle: "Remaining TFSA and RRSP headroom; zero = room fully used",
       ariaLabel: "Contribution room chart",
-      legend: [{ label: "TFSA room", color: PALETTE.color1 }, { label: "RRSP room", color: PALETTE.color2 }],
+      legend: [
+        { label: "TFSA room", color: PALETTE.color1 },
+        { label: "RRSP room", color: PALETTE.color2 },
+      ],
       help: CONTRIBUTION_ROOM_HELP,
       body: <ContributionRoomChart points={contributionRoomSeries(result.years)} />,
     },
@@ -202,31 +257,51 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
       title: "Spending breakdown",
       subtitle: "Annual spending split by expense item (stacked)",
       ariaLabel: "Spending breakdown chart",
-      legend: breakdown ? breakdown.items.map((item, i) => ({ label: item.name, color: STACK_COLORS[i % STACK_COLORS.length]! })) : [],
+      legend: breakdown
+        ? breakdown.items.map((item, i) => ({ label: item.name, color: STACK_COLORS[i % STACK_COLORS.length]! }))
+        : [],
       help: SPENDING_BREAKDOWN_HELP,
-      body: breakdown
-        ? (breakdown.items.length === 0
-          ? <p className="hint" data-chart-state="no-expenses">This plan records no expense items, so there is nothing to break down.</p>
-          : <SpendingBreakdownChart series={breakdown} />)
-        : rerun("This run predates per-item spending capture. Run the projection again to split spending by expense item."),
+      body: breakdown ? (
+        breakdown.items.length === 0 ? (
+          <p className="hint" data-chart-state="no-expenses">
+            This plan records no expense items, so there is nothing to break down.
+          </p>
+        ) : (
+          <SpendingBreakdownChart series={breakdown} />
+        )
+      ) : (
+        rerun(
+          "This run predates per-item spending capture. Run the projection again to split spending by expense item.",
+        )
+      ),
     },
     {
       id: "rrif-rrsp",
       title: "RRIF vs RRSP withdrawals",
       subtitle: "Actual RRSP withdrawals against the mandatory RRIF minimum",
       ariaLabel: "RRIF versus RRSP withdrawals chart",
-      legend: [{ label: "Actual RRSP withdrawals", color: PALETTE.color2 }, { label: "RRIF minimum", color: PALETTE.color1 }],
+      legend: [
+        { label: "Actual RRSP withdrawals", color: PALETTE.color2 },
+        { label: "RRIF minimum", color: PALETTE.color1 },
+      ],
       help: RRIF_RRSP_HELP,
-      body: runCapturesRrifMinimum(result.years)
-        ? <RrifWithdrawalsChart points={rrifPoints} />
-        : rerun("This run predates RRIF minimum capture. Run the projection again to compare the required minimum with actual withdrawals."),
+      body: runCapturesRrifMinimum(result.years) ? (
+        <RrifWithdrawalsChart points={rrifPoints} />
+      ) : (
+        rerun(
+          "This run predates RRIF minimum capture. Run the projection again to compare the required minimum with actual withdrawals.",
+        )
+      ),
     },
     {
       id: "oas-clawback",
       title: "OAS kept vs clawback",
       subtitle: "OAS received split into kept and recovery tax; kept + clawback = gross",
       ariaLabel: "OAS kept versus clawback chart",
-      legend: [{ label: "OAS kept", color: PALETTE.color2 }, { label: "OAS clawback", color: PALETTE.color4 }],
+      legend: [
+        { label: "OAS kept", color: PALETTE.color2 },
+        { label: "OAS clawback", color: PALETTE.color4 },
+      ],
       help: OAS_KEPT_HELP,
       body: <OasClawbackChart points={oasPoints} />,
     },
@@ -237,7 +312,14 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
     <section aria-label="Dashboard" className="dashboard">
       <div className="chart-grid">
         {charts.map((chart) => (
-          <ChartCard key={chart.id} title={chart.title} subtitle={chart.subtitle} ariaLabel={chart.ariaLabel} legend={chart.legend} help={chart.help}>
+          <ChartCard
+            key={chart.id}
+            title={chart.title}
+            subtitle={chart.subtitle}
+            ariaLabel={chart.ariaLabel}
+            legend={chart.legend}
+            help={chart.help}
+          >
             {chart.body}
           </ChartCard>
         ))}

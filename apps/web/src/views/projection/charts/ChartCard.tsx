@@ -27,9 +27,16 @@ export function ChartCard({
       </figcaption>
       <div className="chart-plot">{children}</div>
       <p className="chart-axis-label">Age</p>
-      {legend.length > 0 && <ul className="chart-legend" aria-label={`${title} series`}>
-        {legend.map((item) => <li key={item.label}><span className="legend-swatch" aria-hidden="true" style={{ backgroundColor: item.color }} /><span>{item.label}</span></li>)}
-      </ul>}
+      {legend.length > 0 && (
+        <ul className="chart-legend" aria-label={`${title} series`}>
+          {legend.map((item) => (
+            <li key={item.label}>
+              <span className="legend-swatch" aria-hidden="true" style={{ backgroundColor: item.color }} />
+              <span>{item.label}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </figure>
   );
 }

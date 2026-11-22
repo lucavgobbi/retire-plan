@@ -43,7 +43,11 @@ describe("YearDetailRow legacy RRIF results", () => {
       warnings: [],
     };
     const { container } = render(
-      <table><tbody><YearDetailRow age={71} year={year} expanded groupExpanded colSpan={10} /></tbody></table>,
+      <table>
+        <tbody>
+          <YearDetailRow age={71} year={year} expanded groupExpanded colSpan={10} />
+        </tbody>
+      </table>,
     );
 
     const warnings = container.querySelector('[aria-label="Warnings"]')!;
@@ -115,7 +119,11 @@ describe("YearDetailRow legacy RRIF results", () => {
     year.shortfall = 500;
     year.warnings = ["negative amortization: mortgage payment does not cover interest; balance grows"];
     const { container } = render(
-      <table><tbody><YearDetailRow age={65} year={year} expanded groupExpanded colSpan={10} /></tbody></table>,
+      <table>
+        <tbody>
+          <YearDetailRow age={65} year={year} expanded groupExpanded colSpan={10} />
+        </tbody>
+      </table>,
     );
     const warnings = container.querySelector('[aria-label="Warnings"]')!;
     expect(warnings.textContent).toContain("mortgage prepayment of $3,000.00 left no mortgage debt");

@@ -8,20 +8,31 @@ import { PlanView } from "./PlanView";
 
 function WorkspaceProbe() {
   const { workspace } = useWorkspace();
-  return <>
-    <output data-testid="workspace-json">{JSON.stringify(workspace.plan)}</output>
-    <output data-testid="saved-retirement-age">{workspace.baseScenario?.retirementAge}</output>
-  </>;
+  return (
+    <>
+      <output data-testid="workspace-json">{JSON.stringify(workspace.plan)}</output>
+      <output data-testid="saved-retirement-age">{workspace.baseScenario?.retirementAge}</output>
+    </>
+  );
 }
 
 function renderPlan(simulationRunner?: SimulationRunner, initialWorkspace = createEmptyWorkspace()) {
-  return render(<StoreProvider now={() => "2026-11-10T12:00:00Z"} initialWorkspace={initialWorkspace} simulationRunner={simulationRunner}>
-    <PlanView /><WorkspaceProbe />
-  </StoreProvider>);
+  return render(
+    <StoreProvider
+      now={() => "2026-11-10T12:00:00Z"}
+      initialWorkspace={initialWorkspace}
+      simulationRunner={simulationRunner}
+    >
+      <PlanView />
+      <WorkspaceProbe />
+    </StoreProvider>,
+  );
 }
 
 function planState() {
-  return JSON.parse(screen.getByTestId("workspace-json").textContent ?? "{}") as ReturnType<typeof createEmptyWorkspace>["plan"];
+  return JSON.parse(screen.getByTestId("workspace-json").textContent ?? "{}") as ReturnType<
+    typeof createEmptyWorkspace
+  >["plan"];
 }
 
 describe("PlanView", () => {
@@ -31,13 +42,45 @@ describe("PlanView", () => {
       { id: "cash", name: "Emergency fund", type: "cash", balance: 12_500, interestRate: 0.0425 },
       { id: "cash-zero", name: "Zero rate account", type: "cash", balance: 0, interestRate: 0 },
       { id: "cash-missing", name: "Unconfigured rate account", type: "cash", balance: 0 },
-      { id: "nonreg", name: "Brokerage", type: "nonreg", balance: 2_000, assetMix: { equity: 0.6, bond: 0.3, cash: 0.1 } },
+      {
+        id: "nonreg",
+        name: "Brokerage",
+        type: "nonreg",
+        balance: 2_000,
+        assetMix: { equity: 0.6, bond: 0.3, cash: 0.1 },
+      },
     ];
-    workspace.plan.assets = [{ id: "home", kind: "primary-home", name: "Home", value: 500_000, appreciationRate: 0.02, sellEvent: { age: 70, costsPct: 0.05 } }];
-    workspace.plan.debts = [{ id: "mortgage", kind: "mortgage", rate: 0.045, termYears: 5, amortizationYears: 25, balance: 250_000, monthlyPayment: 1_800, paymentFrequency: "biweekly" }];
-    workspace.plan.incomes = [{ id: "pension", name: "Pension", kind: "other", annualAmount: 24_000, startAge: 65, raiseRate: 0.02 }];
-    workspace.plan.expenses = [{ id: "living", name: "Living costs", annualAmount: 48_000, startAge: 45, endAge: 90, inflationRate: 0.025 }];
-    workspace.plan.savingsPolicy = [{ id: "match", priority: 1, target: "rrsp-match", perYearCap: 5_000, untilAge: 65, matchRate: 0.05 }];
+    workspace.plan.assets = [
+      {
+        id: "home",
+        kind: "primary-home",
+        name: "Home",
+        value: 500_000,
+        appreciationRate: 0.02,
+        sellEvent: { age: 70, costsPct: 0.05 },
+      },
+    ];
+    workspace.plan.debts = [
+      {
+        id: "mortgage",
+        kind: "mortgage",
+        rate: 0.045,
+        termYears: 5,
+        amortizationYears: 25,
+        balance: 250_000,
+        monthlyPayment: 1_800,
+        paymentFrequency: "biweekly",
+      },
+    ];
+    workspace.plan.incomes = [
+      { id: "pension", name: "Pension", kind: "other", annualAmount: 24_000, startAge: 65, raiseRate: 0.02 },
+    ];
+    workspace.plan.expenses = [
+      { id: "living", name: "Living costs", annualAmount: 48_000, startAge: 45, endAge: 90, inflationRate: 0.025 },
+    ];
+    workspace.plan.savingsPolicy = [
+      { id: "match", priority: 1, target: "rrsp-match", perYearCap: 5_000, untilAge: 65, matchRate: 0.05 },
+    ];
     renderPlan(undefined, workspace);
 
     fireEvent.click(screen.getByRole("tab", { name: "Accounts" }));
@@ -46,8 +89,12 @@ describe("PlanView", () => {
     expect(accountCard.textContent).toContain("$12,500");
     expect(accountCard.textContent).toContain("4.3%");
     expect(screen.getByRole("region", { name: "Zero rate account summary" }).textContent).toContain("0.0%");
-    expect(screen.getByRole("region", { name: "Unconfigured rate account summary" }).textContent).toContain("Not set (defaults to 0%)");
-    expect(screen.getByRole("region", { name: "Brokerage summary" }).textContent).toContain("Not set (defaults to market value)");
+    expect(screen.getByRole("region", { name: "Unconfigured rate account summary" }).textContent).toContain(
+      "Not set (defaults to 0%)",
+    );
+    expect(screen.getByRole("region", { name: "Brokerage summary" }).textContent).toContain(
+      "Not set (defaults to market value)",
+    );
     fireEvent.click(within(accountCard).getByRole("button", { name: "Edit" }));
     expect(screen.queryByRole("region", { name: "Emergency fund summary" })).toBeNull();
     const accountEntry = document.querySelector(".plan-item-entry") as HTMLElement;
@@ -56,7 +103,9 @@ describe("PlanView", () => {
     expect(document.activeElement).toBe(firstEditorField);
     fireEvent.click(within(accountEntry).getByRole("button", { name: "Close editor" }));
     expect(screen.getByRole("region", { name: "Emergency fund summary" })).toBeTruthy();
-    await waitFor(() => expect(document.activeElement).toBe(within(accountEntry).getByRole("button", { name: "Edit" })));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(within(accountEntry).getByRole("button", { name: "Edit" })),
+    );
 
     fireEvent.click(screen.getByRole("tab", { name: "Assets & debts" }));
     const assetCard = screen.getByRole("region", { name: "Home summary" });
@@ -130,7 +179,12 @@ describe("PlanView", () => {
     expect(screen.getByRole("alert").textContent).toMatch(/asset mix must total 100%/i);
     expect(planState().accounts[0]?.assetMix).toEqual({ equity: 0.6, bond: 0.3, cash: 0.1 });
     fireEvent.change(screen.getByLabelText("Bonds (%)"), { target: { value: "10" } });
-    expect(planState().accounts[0]).toMatchObject({ type: "nonreg", balance: 10_000, bookValue: 6_000, assetMix: { equity: 0.8, bond: 0.1, cash: 0.1 } });
+    expect(planState().accounts[0]).toMatchObject({
+      type: "nonreg",
+      balance: 10_000,
+      bookValue: 6_000,
+      assetMix: { equity: 0.8, bond: 0.1, cash: 0.1 },
+    });
 
     fireEvent.change(screen.getByLabelText(/ACB \/ book value/), { target: { value: "" } });
     expect(planState().accounts[0]!.bookValue).toBeUndefined();
@@ -144,8 +198,15 @@ describe("PlanView", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Accounts" }));
     fireEvent.click(screen.getByRole("button", { name: "Add account" }));
     const select = screen.getByLabelText("Account type");
-    expect(within(select).getAllByRole("option").map(option => [option.textContent, (option as HTMLOptionElement).value])).toEqual([
-      ["TFSA", "tfsa"], ["RRSP", "rrsp"], ["Non-registered", "nonreg"], ["Cash account", "cash"],
+    expect(
+      within(select)
+        .getAllByRole("option")
+        .map((option) => [option.textContent, (option as HTMLOptionElement).value]),
+    ).toEqual([
+      ["TFSA", "tfsa"],
+      ["RRSP", "rrsp"],
+      ["Non-registered", "nonreg"],
+      ["Cash account", "cash"],
     ]);
     fireEvent.change(select, { target: { value: "rrsp" } });
     expect(planState().accounts[0]?.type).toBe("rrsp");
@@ -170,12 +231,27 @@ describe("PlanView", () => {
     expect(screen.getByRole("alert").textContent).toContain("Annual interest rate must be at least 0.");
     expect(planState().accounts[0]?.interestRate).toBe(0);
     fireEvent.change(screen.getByLabelText("Annual interest rate (%)"), { target: { value: "4.25" } });
-    expect(planState().accounts[0]).toEqual({ id: expect.any(String), name: "Emergency savings", type: "cash", balance: 12_500, interestRate: 0.0425 });
+    expect(planState().accounts[0]).toEqual({
+      id: expect.any(String),
+      name: "Emergency savings",
+      type: "cash",
+      balance: 12_500,
+      interestRate: 0.0425,
+    });
   });
 
   it("unchecking Plan a sale event removes the planned sale from the plan and restores it from retained fields on re-check", () => {
     const workspace = createEmptyWorkspace();
-    workspace.plan.assets = [{ id: "home", kind: "primary-home", name: "Home", value: 500_000, appreciationRate: 0.02, sellEvent: { age: 70, costsPct: 0.05 } }];
+    workspace.plan.assets = [
+      {
+        id: "home",
+        kind: "primary-home",
+        name: "Home",
+        value: 500_000,
+        appreciationRate: 0.02,
+        sellEvent: { age: 70, costsPct: 0.05 },
+      },
+    ];
     renderPlan(undefined, workspace);
     fireEvent.click(screen.getByRole("tab", { name: "Assets & debts" }));
     fireEvent.click(within(screen.getByRole("region", { name: "Home summary" })).getByRole("button", { name: "Edit" }));
@@ -212,7 +288,12 @@ describe("PlanView", () => {
     fireEvent.click(screen.getByLabelText("Plan a sale event"));
     fireEvent.change(screen.getByLabelText("Sale age"), { target: { value: "65" } });
     fireEvent.change(screen.getByLabelText("Sale costs (%)"), { target: { value: "5" } });
-    expect(planState().assets[0]).toMatchObject({ kind: "primary-home", name: "Home", value: 700_000, sellEvent: { age: 65, costsPct: 0.05 } });
+    expect(planState().assets[0]).toMatchObject({
+      kind: "primary-home",
+      name: "Home",
+      value: 700_000,
+      sellEvent: { age: 65, costsPct: 0.05 },
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "Add mortgage" }));
     expect(planState().debts).toHaveLength(1);
@@ -222,11 +303,22 @@ describe("PlanView", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Income" }));
     fireEvent.click(screen.getByRole("button", { name: "Add employment" }));
-    expect(planState().incomes[0]).toMatchObject({ kind: "employment", annualAmount: 0, startAge: 45, endAtRetirement: true });
+    expect(planState().incomes[0]).toMatchObject({
+      kind: "employment",
+      annualAmount: 0,
+      startAge: 45,
+      endAtRetirement: true,
+    });
     expect(planState().incomes[0]).not.toHaveProperty("endAge");
     expect((screen.getByRole("checkbox", { name: "Until retirement" }) as HTMLInputElement).checked).toBe(true);
     fireEvent.change(screen.getByLabelText("Annual amount ($)"), { target: { value: "95000" } });
-    expect(planState().incomes[0]).toMatchObject({ kind: "employment", annualAmount: 95_000, startAge: 45, endAtRetirement: true, raiseRate: 0.02 });
+    expect(planState().incomes[0]).toMatchObject({
+      kind: "employment",
+      annualAmount: 95_000,
+      startAge: 45,
+      endAtRetirement: true,
+      raiseRate: 0.02,
+    });
 
     fireEvent.click(screen.getByRole("tab", { name: "Expenses" }));
     fireEvent.click(screen.getByRole("button", { name: "Add expense" }));
@@ -255,8 +347,14 @@ describe("PlanView", () => {
     const cppCard = screen.getByRole("region", { name: "CPP summary" });
     fireEvent.click(within(cppCard).getByRole("button", { name: "Edit" }));
     fireEvent.click(screen.getByText("Help estimate your CPP amount"));
-    expect(screen.getByText(/if you expect to stop or reduce work before CPP starts, use an estimate that reflects that expectation/i)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Personal CPP monthly estimate at age 65 ($)"), { target: { value: "1000" } });
+    expect(
+      screen.getByText(
+        /if you expect to stop or reduce work before CPP starts, use an estimate that reflects that expectation/i,
+      ),
+    ).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Personal CPP monthly estimate at age 65 ($)"), {
+      target: { value: "1000" },
+    });
     expect(screen.getByText(/Preview: \$640\.00 per month, or \$7,680\.00 per year/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Use age-65 CPP estimate × 12" }));
     expect(planState().incomes[0]).toMatchObject({ annualAmount: 7_680, startAge: 60, raiseRate: 0.02 });
@@ -265,16 +363,33 @@ describe("PlanView", () => {
     const oasCard = screen.getByRole("region", { name: "OAS summary" });
     fireEvent.click(within(oasCard).getByRole("button", { name: "Edit" }));
     fireEvent.click(screen.getByText("Help estimate your OAS amount"));
-    fireEvent.change(screen.getByLabelText("Full OAS monthly amount at ages 65 to 74 before residence adjustment ($)"), { target: { value: "800" } });
+    fireEvent.change(
+      screen.getByLabelText("Full OAS monthly amount at ages 65 to 74 before residence adjustment ($)"),
+      { target: { value: "800" } },
+    );
     fireEvent.change(screen.getByLabelText("Eligible years lived in Canada after age 18"), { target: { value: "20" } });
     expect(screen.getByText(/Rough preview: \$544\.00 per month, or \$6,528\.00 per year/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Use rough OAS preview × 12" }));
     expect(planState().incomes[1]).toMatchObject({ annualAmount: 6_528, startAge: 70, raiseRate: 0 });
-    expect(screen.getByRole("link", { name: "official OAS amount page" }).getAttribute("href")).toBe("https://www.canada.ca/en/services/benefits/publicpensions/old-age-security/benefit-amount.html");
-    expect(screen.getByRole("link", { name: "official OAS Benefits Estimator" }).getAttribute("href")).toBe("https://estimateursv-oasestimator.service.canada.ca/en");
-    expect(screen.getByText(/at least 10 years of residence if you live in Canada when you apply, or 20 years if you live outside Canada/i)).toBeTruthy();
-    expect(screen.getByText(/you cannot receive GIS during the delay, and GIS does not increase.*model may still show GIS from age 65.*cost of deferring OAS is not fully modeled/i)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "official OAS start guidance" }).getAttribute("href")).toBe("https://www.canada.ca/en/services/benefits/publicpensions/old-age-security/when-start.html");
+    expect(screen.getByRole("link", { name: "official OAS amount page" }).getAttribute("href")).toBe(
+      "https://www.canada.ca/en/services/benefits/publicpensions/old-age-security/benefit-amount.html",
+    );
+    expect(screen.getByRole("link", { name: "official OAS Benefits Estimator" }).getAttribute("href")).toBe(
+      "https://estimateursv-oasestimator.service.canada.ca/en",
+    );
+    expect(
+      screen.getByText(
+        /at least 10 years of residence if you live in Canada when you apply, or 20 years if you live outside Canada/i,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        /you cannot receive GIS during the delay, and GIS does not increase.*model may still show GIS from age 65.*cost of deferring OAS is not fully modeled/i,
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: "official OAS start guidance" }).getAttribute("href")).toBe(
+      "https://www.canada.ca/en/services/benefits/publicpensions/old-age-security/when-start.html",
+    );
     expect(screen.getByText(/does not add the separate 10% increase at 75/i)).toBeTruthy();
   });
 
@@ -289,10 +404,16 @@ describe("PlanView", () => {
     const cppCard = screen.getByRole("region", { name: "CPP summary" });
     fireEvent.click(within(cppCard).getByRole("button", { name: "Edit" }));
     fireEvent.click(screen.getByText("Help estimate your CPP amount"));
-    fireEvent.change(screen.getByLabelText("Personal CPP monthly estimate at age 65 ($)"), { target: { value: "1000" } });
-    expect((screen.getByRole("button", { name: "Use age-65 CPP estimate × 12" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Personal CPP monthly estimate at age 65 ($)"), {
+      target: { value: "1000" },
+    });
+    expect((screen.getByRole("button", { name: "Use age-65 CPP estimate × 12" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
     expect(screen.getByText(/use the already-adjusted amount method above/i)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Current or personal CPP monthly amount for this Start age ($)"), { target: { value: "1200" } });
+    fireEvent.change(screen.getByLabelText("Current or personal CPP monthly amount for this Start age ($)"), {
+      target: { value: "1200" },
+    });
     const cppDirectApply = screen.getByRole("button", { name: "Use adjusted CPP amount × 12" }) as HTMLButtonElement;
     fireEvent.change(screen.getByLabelText("Start age"), { target: { value: "59" } });
     expect(cppDirectApply.disabled).toBe(true);
@@ -306,10 +427,17 @@ describe("PlanView", () => {
     const oasCard = screen.getByRole("region", { name: "OAS summary" });
     fireEvent.click(within(oasCard).getByRole("button", { name: "Edit" }));
     fireEvent.click(screen.getByText("Help estimate your OAS amount"));
-    fireEvent.change(screen.getByLabelText("Full OAS monthly amount at ages 65 to 74 before residence adjustment ($)"), { target: { value: "800" } });
+    fireEvent.change(
+      screen.getByLabelText("Full OAS monthly amount at ages 65 to 74 before residence adjustment ($)"),
+      { target: { value: "800" } },
+    );
     fireEvent.change(screen.getByLabelText("Eligible years lived in Canada after age 18"), { target: { value: "40" } });
-    expect((screen.getByRole("button", { name: "Use rough OAS preview × 12" }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.change(screen.getByLabelText("Current or personal OAS monthly amount for this Start age ($)"), { target: { value: "600" } });
+    expect((screen.getByRole("button", { name: "Use rough OAS preview × 12" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    fireEvent.change(screen.getByLabelText("Current or personal OAS monthly amount for this Start age ($)"), {
+      target: { value: "600" },
+    });
     const oasDirectApply = screen.getByRole("button", { name: "Use adjusted OAS amount × 12" }) as HTMLButtonElement;
     fireEvent.change(screen.getByLabelText("Start age"), { target: { value: "64" } });
     expect(oasDirectApply.disabled).toBe(true);
@@ -318,7 +446,9 @@ describe("PlanView", () => {
     fireEvent.change(screen.getByLabelText("Start age"), { target: { value: "75" } });
     fireEvent.click(oasDirectApply);
     expect(planState().incomes[1]).toMatchObject({ annualAmount: 7_200, startAge: 75 });
-    expect(screen.getByText(/If you enter a current payment at 75 or older, it will not add another age adjustment/i)).toBeTruthy();
+    expect(
+      screen.getByText(/If you enter a current payment at 75 or older, it will not add another age adjustment/i),
+    ).toBeTruthy();
   });
 
   it("shows engine plan validation errors inline", () => {
@@ -372,8 +502,24 @@ describe("PlanView", () => {
     const workspace = createEmptyWorkspace();
     workspace.baseScenario = { ...DEFAULT_SCENARIO_BASE, retirementAge: 67, withdrawalStrategy: "tax-minimizing" };
     workspace.plan.incomes = [
-      { id: "linked", name: "Main salary", kind: "employment", annualAmount: 50_000, startAge: 45, endAtRetirement: true, raiseRate: 0 },
-      { id: "fixed", name: "Part-time salary", kind: "employment", annualAmount: 5_000, startAge: 45, endAge: 67, raiseRate: 0 },
+      {
+        id: "linked",
+        name: "Main salary",
+        kind: "employment",
+        annualAmount: 50_000,
+        startAge: 45,
+        endAtRetirement: true,
+        raiseRate: 0,
+      },
+      {
+        id: "fixed",
+        name: "Part-time salary",
+        kind: "employment",
+        annualAmount: 5_000,
+        startAge: 45,
+        endAge: 67,
+        raiseRate: 0,
+      },
     ];
     let result: SimulationResult | undefined;
     const run: SimulationRunner = async (plan, scenario) => {
@@ -392,9 +538,9 @@ describe("PlanView", () => {
     expect(screen.getByRole("alert").textContent).toContain("Retirement age must be a whole number.");
     expect(screen.getByTestId("saved-retirement-age").textContent).toBe("62");
     fireEvent.click(screen.getByRole("button", { name: "Run projection" }));
-    await waitFor(() => expect(result?.years.find(year => year.events.includes("retirement"))?.age).toBe(62));
-    expect(result?.years.find(year => year.age === 61)?.income.employment).toBe(55_000);
-    expect(result?.years.find(year => year.age === 62)?.income.employment).toBe(5_000);
+    await waitFor(() => expect(result?.years.find((year) => year.events.includes("retirement"))?.age).toBe(62));
+    expect(result?.years.find((year) => year.age === 61)?.income.employment).toBe(55_000);
+    expect(result?.years.find((year) => year.age === 62)?.income.employment).toBe(5_000);
 
     fireEvent.click(screen.getByRole("tab", { name: "Income" }));
     const linked = screen.getByRole("region", { name: "Main salary summary" });
@@ -407,11 +553,15 @@ describe("PlanView", () => {
 
   it("switches between fixed and linked salary, clearing each incompatible stored field", () => {
     const workspace = createEmptyWorkspace();
-    workspace.plan.incomes = [{ id: "salary", kind: "employment", annualAmount: 50_000, startAge: 45, endAge: 67, raiseRate: 0 }];
+    workspace.plan.incomes = [
+      { id: "salary", kind: "employment", annualAmount: 50_000, startAge: 45, endAge: 67, raiseRate: 0 },
+    ];
     renderPlan(undefined, workspace);
     expect(screen.getByText("Manual account order")).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "Income" }));
-    fireEvent.click(within(screen.getByRole("region", { name: "Employment summary" })).getByRole("button", { name: "Edit" }));
+    fireEvent.click(
+      within(screen.getByRole("region", { name: "Employment summary" })).getByRole("button", { name: "Edit" }),
+    );
     const untilRetirement = screen.getByRole("checkbox", { name: "Until retirement" }) as HTMLInputElement;
     expect(untilRetirement.checked).toBe(false);
     fireEvent.click(untilRetirement);
@@ -434,7 +584,15 @@ describe("PlanView", () => {
     function salaryWorkspace() {
       const workspace = createEmptyWorkspace();
       workspace.plan.incomes = [
-        { id: "salary", name: "Day job", kind: "employment", annualAmount: 95_000, startAge: 45, endAge: 64, raiseRate: 0.02 },
+        {
+          id: "salary",
+          name: "Day job",
+          kind: "employment",
+          annualAmount: 95_000,
+          startAge: 45,
+          endAge: 64,
+          raiseRate: 0.02,
+        },
       ];
       return workspace;
     }

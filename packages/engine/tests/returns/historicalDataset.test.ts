@@ -14,14 +14,23 @@ describe("bundled historical dataset (JST R.6 USA)", () => {
 
   it("matches the official XLSX anchor values byte-exactly (first, last, and one mid row)", () => {
     expect(HISTORICAL_OBSERVATIONS[0]).toEqual({
-      year: 1872, equity: 0.13291139900684357, bond: 0.061484627425670624, cash: 0.05999999865889549,
+      year: 1872,
+      equity: 0.13291139900684357,
+      bond: 0.061484627425670624,
+      cash: 0.05999999865889549,
     });
     expect(HISTORICAL_OBSERVATIONS.at(-1)).toEqual({
-      year: 2020, equity: 0.12535415589809418, bond: 0.11865632981061935, cash: 0.0038,
+      year: 2020,
+      equity: 0.12535415589809418,
+      bond: 0.11865632981061935,
+      cash: 0.0038,
     });
     const second = HISTORICAL_OBSERVATIONS[1]!;
     expect(second).toEqual({
-      year: 1873, equity: -0.06311637163162231, bond: 0.06627899408340454, cash: 0.05999999865889549,
+      year: 1873,
+      equity: -0.06311637163162231,
+      bond: 0.06627899408340454,
+      cash: 0.05999999865889549,
     });
   });
 

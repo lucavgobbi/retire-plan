@@ -1,10 +1,25 @@
-import type { AccountType, BenefitSettings, PayrollSettings, Plan, Scenario, SimulationResult, WithdrawalStrategy } from "@retire-plan/engine";
+import type {
+  AccountType,
+  BenefitSettings,
+  PayrollSettings,
+  Plan,
+  Scenario,
+  SimulationResult,
+  WithdrawalStrategy,
+} from "@retire-plan/engine";
 import type { RunAnalysis } from "./run";
 export type * from "@retire-plan/engine";
 
-export interface PlanMeta { id: string; name: string; updatedAt: string }
+export interface PlanMeta {
+  id: string;
+  name: string;
+  updatedAt: string;
+}
 export type ProjectionActiveTab = "charts" | "cashflow";
-export interface ProjectionSankeyRange { startYear: number; endYear: number }
+export interface ProjectionSankeyRange {
+  startYear: number;
+  endYear: number;
+}
 export type { BenefitSettings, PayrollSettings, WithdrawalStrategy };
 export interface ScenarioBase {
   simMode?: Scenario["simMode"];

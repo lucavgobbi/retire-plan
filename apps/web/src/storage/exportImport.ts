@@ -9,7 +9,7 @@
 //   4. snapshot("pre-import")                     ← db.ts
 //   5. swap + save                                ← shell/watcher
 import type { PlanFile, PlanMeta, Workspace } from "../domain/types";
-import { SCHEMA_VERSION, validatePlanFile, validateWorkspace } from "./schema";
+import { SCHEMA_VERSION, validateWorkspace } from "./schema";
 import { migratePlanFile } from "./migrations";
 
 export interface BuildPlanFileOptions {
@@ -38,10 +38,14 @@ export function buildPlanFile(w: Workspace, options: BuildPlanFileOptions = {}):
     ...(w.hiddenProjectionColumns !== undefined ? { hiddenProjectionColumns: [...w.hiddenProjectionColumns] } : {}),
     ...(w.hiddenProjectionCharts !== undefined ? { hiddenProjectionCharts: [...w.hiddenProjectionCharts] } : {}),
     ...(w.projectionScenarioId !== undefined ? { projectionScenarioId: w.projectionScenarioId } : {}),
-    ...(w.projectionRunSummaryCollapsed !== undefined ? { projectionRunSummaryCollapsed: w.projectionRunSummaryCollapsed } : {}),
+    ...(w.projectionRunSummaryCollapsed !== undefined
+      ? { projectionRunSummaryCollapsed: w.projectionRunSummaryCollapsed }
+      : {}),
     ...(w.projectionActiveTab !== undefined ? { projectionActiveTab: w.projectionActiveTab } : {}),
     ...(w.projectionSankeyRange !== undefined ? { projectionSankeyRange: { ...w.projectionSankeyRange } } : {}),
-    ...(w.projectionSankeyShowAccounts !== undefined ? { projectionSankeyShowAccounts: w.projectionSankeyShowAccounts } : {}),
+    ...(w.projectionSankeyShowAccounts !== undefined
+      ? { projectionSankeyShowAccounts: w.projectionSankeyShowAccounts }
+      : {}),
     plans: [{ meta, plan: structuredCopy(w.plan) }],
     scenarios: w.scenarios.map((s) => structuredCopy(s)),
   };
@@ -90,22 +94,43 @@ export function parsePlanFile(json: unknown): ParseOk | ParseFailure {
   }
 
   if (planCount !== 1) {
-    return { ok: false, errors: ["This version supports exactly one plan per file. Split the file into single-plan workspaces before importing."] };
+    return {
+      ok: false,
+      errors: [
+        "This version supports exactly one plan per file. Split the file into single-plan workspaces before importing.",
+      ],
+    };
   }
   // Single-plan workspaces are the current model.
   const entry = planFile.plans[0]!;
   const workspace: Workspace = {
     meta: { ...entry.meta },
     ...(planFile.baseScenario ? { baseScenario: structuredCopy(planFile.baseScenario) } : {}),
-    ...(planFile.hiddenProjectionColumns !== undefined ? { hiddenProjectionColumns: [...planFile.hiddenProjectionColumns] } : {}),
-    ...(planFile.hiddenProjectionCharts !== undefined ? { hiddenProjectionCharts: [...planFile.hiddenProjectionCharts] } : {}),
-    ...(planFile.projectionScenarioId !== undefined
-      ? { projectionScenarioId: planFile.projectionScenarioId !== "" && !planFile.scenarios.some((scenario) => scenario.id === planFile.projectionScenarioId) ? "" : planFile.projectionScenarioId }
+    ...(planFile.hiddenProjectionColumns !== undefined
+      ? { hiddenProjectionColumns: [...planFile.hiddenProjectionColumns] }
       : {}),
-    ...(planFile.projectionRunSummaryCollapsed !== undefined ? { projectionRunSummaryCollapsed: planFile.projectionRunSummaryCollapsed } : {}),
+    ...(planFile.hiddenProjectionCharts !== undefined
+      ? { hiddenProjectionCharts: [...planFile.hiddenProjectionCharts] }
+      : {}),
+    ...(planFile.projectionScenarioId !== undefined
+      ? {
+          projectionScenarioId:
+            planFile.projectionScenarioId !== "" &&
+            !planFile.scenarios.some((scenario) => scenario.id === planFile.projectionScenarioId)
+              ? ""
+              : planFile.projectionScenarioId,
+        }
+      : {}),
+    ...(planFile.projectionRunSummaryCollapsed !== undefined
+      ? { projectionRunSummaryCollapsed: planFile.projectionRunSummaryCollapsed }
+      : {}),
     ...(planFile.projectionActiveTab !== undefined ? { projectionActiveTab: planFile.projectionActiveTab } : {}),
-    ...(planFile.projectionSankeyRange !== undefined ? { projectionSankeyRange: { ...planFile.projectionSankeyRange } } : {}),
-    ...(planFile.projectionSankeyShowAccounts !== undefined ? { projectionSankeyShowAccounts: planFile.projectionSankeyShowAccounts } : {}),
+    ...(planFile.projectionSankeyRange !== undefined
+      ? { projectionSankeyRange: { ...planFile.projectionSankeyRange } }
+      : {}),
+    ...(planFile.projectionSankeyShowAccounts !== undefined
+      ? { projectionSankeyShowAccounts: planFile.projectionSankeyShowAccounts }
+      : {}),
     plan: entry.plan,
     scenarios: planFile.scenarios.filter(
       (scenario) =>

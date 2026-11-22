@@ -17,10 +17,7 @@ export function CompareView() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [baselineId, setBaselineId] = useState<string | null>(null);
 
-  const selected = useMemo<RunRecord[]>(
-    () => runs.filter((run) => selectedIds.includes(run.id)),
-    [runs, selectedIds],
-  );
+  const selected = useMemo<RunRecord[]>(() => runs.filter((run) => selectedIds.includes(run.id)), [runs, selectedIds]);
   const rows = useMemo(
     () => (selected.length === 0 ? [] : computeComparison(selected, baselineId)),
     [selected, baselineId],
@@ -91,9 +88,7 @@ export function CompareView() {
         </>
       )}
       {rows.length === 0 && (
-        <p className="hint empty-state">
-          Check at least one run to build the side-by-side comparison.
-        </p>
+        <p className="hint empty-state">Check at least one run to build the side-by-side comparison.</p>
       )}
     </section>
   );

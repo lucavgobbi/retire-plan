@@ -76,10 +76,7 @@ export async function startFresh(provider: StorageProvider, fresh: Workspace): P
   });
 }
 
-export function createRowBackedStorageProvider(
-  backend: RowDb,
-  options: { now?: () => string } = {},
-): StorageProvider {
+export function createRowBackedStorageProvider(backend: RowDb, options: { now?: () => string } = {}): StorageProvider {
   const now = options.now ?? (() => new Date().toISOString());
   const FIFO_CAP = 3;
 
@@ -138,9 +135,7 @@ export function createRowBackedStorageProvider(
   async function saveDirect(w: Workspace): Promise<void> {
     const errors = validateWorkspace(w);
     if (errors.length > 0) {
-      throw new Error(
-        `Refused to save an invalid workspace (data kept untouched). Problems: ${errors.join("; ")}`,
-      );
+      throw new Error(`Refused to save an invalid workspace (data kept untouched). Problems: ${errors.join("; ")}`);
     }
     const existing = await backend.getWorkspaceRow();
     if (
@@ -161,7 +156,7 @@ export function createRowBackedStorageProvider(
     });
   }
 
-  async function snapshotDirect(reason: string): Promise<void> {
+  async function snapshotDirect(): Promise<void> {
     const raw = await backend.getWorkspaceRow();
     if (raw === undefined || !isRecordRow(raw)) return;
     await backend.addBackupRow(now(), raw.workspace);

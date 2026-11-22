@@ -3,7 +3,10 @@ import type { Workspace } from "../domain/types";
 import { storage, type StorageProvider } from "./db";
 
 export type AutosaveStatus = "idle" | "saving" | "saved" | "error";
-export interface AutosaveOptions { storage?: StorageProvider; delayMs?: number }
+export interface AutosaveOptions {
+  storage?: StorageProvider;
+  delayMs?: number;
+}
 export interface AutosaveResult {
   status: AutosaveStatus;
   error: string | null;
@@ -74,29 +77,40 @@ export function useAutosave(workspace: Workspace, options: AutosaveOptions = {})
     const request = ++generation.current;
     enqueuedJson.current = serialized;
     setStatus("saving");
-    void provider.save(ws).then(() => {
-      if (!mounted.current || generation.current !== request) return;
-      completedJson.current = serialized;
-      enqueuedJson.current = null;
-      setError(null);
-      setStatus("saved");
-      // Fast providers can batch saving→saved into the existing saved state;
-      // render the newly confirmed snapshot even when the status string repeats.
-      setRevision(value => value + 1);
-    }).catch((cause: unknown) => {
-      if (!mounted.current || generation.current !== request) return;
-      enqueuedJson.current = null;
-      setError(cause instanceof Error ? cause.message : String(cause));
-      setStatus("error");
-    });
+    void provider
+      .save(ws)
+      .then(() => {
+        if (!mounted.current || generation.current !== request) return;
+        completedJson.current = serialized;
+        enqueuedJson.current = null;
+        setError(null);
+        setStatus("saved");
+        // Fast providers can batch saving→saved into the existing saved state;
+        // render the newly confirmed snapshot even when the status string repeats.
+        setRevision((value) => value + 1);
+      })
+      .catch((cause: unknown) => {
+        if (!mounted.current || generation.current !== request) return;
+        enqueuedJson.current = null;
+        setError(cause instanceof Error ? cause.message : String(cause));
+        setStatus("error");
+      });
   }, [provider]);
 
   useEffect(() => {
     const serialized = JSON.stringify(workspace);
     if (expectedJson.current === serialized) expectedJson.current = null;
-    if (paused.current || expectedJson.current !== null || completedJson.current === serialized || enqueuedJson.current === serialized) return;
+    if (
+      paused.current ||
+      expectedJson.current !== null ||
+      completedJson.current === serialized ||
+      enqueuedJson.current === serialized
+    )
+      return;
     timer.current = setTimeout(requestSave, delayMs);
-    return () => { if (timer.current !== null) clearTimeout(timer.current); };
+    return () => {
+      if (timer.current !== null) clearTimeout(timer.current);
+    };
   }, [workspace, delayMs, requestSave, revision]);
 
   const saveNow = useCallback(() => {

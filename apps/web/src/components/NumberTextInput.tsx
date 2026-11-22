@@ -12,7 +12,7 @@ export function formatGroupedNumber(value: string): string {
   return `${negative ? "-" : ""}${grouped}${fraction}`;
 }
 
-function cleanNumericDraft(value: string, allowNegative: boolean): string {
+function cleanNumericDraft(value: string): string {
   const source = value.replace(/,/g, "");
   // Keep a typed/pasted sign even where it is not allowed. The owning field's
   // validation must reject it; removing it would silently turn -1000 into 1000.
@@ -21,7 +21,10 @@ function cleanNumericDraft(value: string, allowNegative: boolean): string {
   let decimal = false;
   for (const char of source) {
     if (char >= "0" && char <= "9") result += char;
-    else if (char === "." && !decimal) { result += char; decimal = true; }
+    else if (char === "." && !decimal) {
+      result += char;
+      decimal = true;
+    }
   }
   return `${negative ? "-" : ""}${result}`;
 }
@@ -43,14 +46,12 @@ function caretForSemanticLength(value: string, length: number): number {
 export function NumberTextInput({
   value,
   onChange,
-  allowNegative = true,
   group = true,
   keepInvalidDraft = false,
   ...props
 }: Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "value" | "onChange"> & {
   value: string;
   onChange: (value: string) => void;
-  allowNegative?: boolean;
   group?: boolean;
   /**
    * Opt-in: when the typed/pasted text contains no numeric characters at all
@@ -74,20 +75,28 @@ export function NumberTextInput({
     }
   }, [display, focused]);
 
-  return <input
-    {...props}
-    ref={input}
-    type="text"
-    inputMode="decimal"
-    value={display}
-    onFocus={(event) => { setFocused(true); props.onFocus?.(event); }}
-    onBlur={(event) => { setFocused(false); props.onBlur?.(event); }}
-    onChange={(event) => {
-      const element = event.currentTarget;
-      const caret = semanticLength(element.value, element.selectionStart ?? element.value.length);
-      const clean = cleanNumericDraft(element.value, allowNegative);
-      pendingCaret.current = caret;
-      onChange(keepInvalidDraft && element.value.trim() !== "" && clean === "" ? element.value : clean);
-    }}
-  />;
+  return (
+    <input
+      {...props}
+      ref={input}
+      type="text"
+      inputMode="decimal"
+      value={display}
+      onFocus={(event) => {
+        setFocused(true);
+        props.onFocus?.(event);
+      }}
+      onBlur={(event) => {
+        setFocused(false);
+        props.onBlur?.(event);
+      }}
+      onChange={(event) => {
+        const element = event.currentTarget;
+        const caret = semanticLength(element.value, element.selectionStart ?? element.value.length);
+        const clean = cleanNumericDraft(element.value);
+        pendingCaret.current = caret;
+        onChange(keepInvalidDraft && element.value.trim() !== "" && clean === "" ? element.value : clean);
+      }}
+    />
+  );
 }

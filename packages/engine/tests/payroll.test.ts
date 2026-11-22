@@ -17,7 +17,13 @@ const enabled: PayrollSettings = { cpp: true, ei: true, cppOptOut65to69: false }
 const disabled: PayrollSettings = { cpp: false, ei: false, cppOptOut65to69: false };
 const electOut: PayrollSettings = { ...enabled, cppOptOut65to69: true };
 const noDeductions = {
-  cppBase: 0, cppAdditional: 0, cpp2: 0, ei: 0, total: 0, enhancedCppDeduction: 0, eiRefund: 0,
+  cppBase: 0,
+  cppAdditional: 0,
+  cpp2: 0,
+  ei: 0,
+  total: 0,
+  enhancedCppDeduction: 0,
+  eiRefund: 0,
 };
 
 function salaryPlan(age: number, annualAmount: number): Plan {
@@ -64,12 +70,17 @@ describe("employee payroll projections", () => {
     const year = run(plan, scenario(enabled)).years[0]!;
     expect(year.income.employment).toBe(80_000);
     expect(year.payroll).toEqual({
-      cppBase: 3_519.45, cppAdditional: 711, cpp2: 216, ei: 1_123.07,
-      total: 5_569.52, enhancedCppDeduction: 927, eiRefund: 0,
+      cppBase: 3_519.45,
+      cppAdditional: 711,
+      cpp2: 216,
+      ei: 1_123.07,
+      total: 5_569.52,
+      enhancedCppDeduction: 927,
+      eiRefund: 0,
     });
     // 80,000 less the enhanced deduction. The credit base is 3,519.45 + 1,123.07.
     expect(year.taxableIncome).toBe(79_073);
-    expect(year.tax).toMatchObject({ federal: 9_242.60, provincial: 4_135.26, total: 13_377.85, marginalRate: 0.2965 });
+    expect(year.tax).toMatchObject({ federal: 9_242.6, provincial: 4_135.26, total: 13_377.85, marginalRate: 0.2965 });
     expect(year.contributions.nonreg).toBe(61_052.63);
     expect(year.rrspRoom).toBe(14_400);
     expect(year.warnings.join(" ")).toMatch(/single Ontario employer.*post-retirement benefits.*EI benefits/);
@@ -132,11 +143,11 @@ describe("employee payroll projections", () => {
     plan.profile.endAge = 70;
     plan.incomes.push({ id: "cpp", kind: "cpp", annualAmount: 500, startAge: 66, endAge: 68, raiseRate: 0 });
     const years = run(plan, scenario(electOut)).years;
-    expect(years.map(y => y.payroll?.cpp2)).toEqual([416, 416, 0, 0, 0, 416, 0]);
-    expect(years.map(y => y.income.cpp)).toEqual([0, 0, 500, 500, 500, 0, 0]);
+    expect(years.map((y) => y.payroll?.cpp2)).toEqual([416, 416, 0, 0, 0, 416, 0]);
+    expect(years.map((y) => y.income.cpp)).toEqual([0, 0, 500, 500, 500, 0, 0]);
     expect(years[1]!.warnings.join(" ")).toContain("CPP opt-out could not apply");
     expect(years[2]!.warnings.join(" ")).not.toContain("CPP opt-out could not apply");
-    expect(years.every(y => y.payroll?.ei === 1_123.07)).toBe(true);
+    expect(years.every((y) => y.payroll?.ei === 1_123.07)).toBe(true);
     const gated = run(plan, scenario(electOut, { benefits: { cpp: false, oas: true, gis: true } })).years[2]!;
     expect(gated.payroll?.cpp2).toBe(416);
     expect(gated.warnings.join(" ")).toContain("CPP opt-out could not apply");
@@ -149,7 +160,7 @@ describe("employee payroll projections", () => {
     plan.incomes.push({ id: "other", kind: "other", annualAmount: 60_000, startAge: 45, raiseRate: 0 });
     const first = run(plan, scenario(enabled)).years[0]!;
     const baseline = run(plan, scenario(disabled)).years[0]!;
-    expect(first.payroll).toEqual({ ...noDeductions, ei: 32.60, total: 32.60, eiRefund: 32.60 });
+    expect(first.payroll).toEqual({ ...noDeductions, ei: 32.6, total: 32.6, eiRefund: 32.6 });
     expect(first.tax).toEqual(baseline.tax);
     expect(first.netWorth).toBe(baseline.netWorth);
     plan.incomes[0]!.annualAmount = 2_001;
@@ -169,14 +180,14 @@ describe("employee payroll projections", () => {
     const atLimit = run(plan, scenario(enabled)).years[0]!;
     const baseline = run(plan, scenario(disabled)).years[0]!;
     expect(atLimit.income.employment).toBe(2_000);
-    expect(atLimit.payroll).toMatchObject({ ei: 32.60, eiRefund: 32.60 });
+    expect(atLimit.payroll).toMatchObject({ ei: 32.6, eiRefund: 32.6 });
     expect(atLimit.tax).toEqual(baseline.tax);
     expect(atLimit.balances.cash).toBe(baseline.balances.cash);
 
     plan.incomes[1]!.annualAmount = 873.47;
     const aboveLimit = run(plan, scenario(enabled)).years[0]!;
     expect(aboveLimit.income.employment).toBe(2_000.01);
-    expect(aboveLimit.payroll).toMatchObject({ ei: 32.60, eiRefund: 0 });
+    expect(aboveLimit.payroll).toMatchObject({ ei: 32.6, eiRefund: 0 });
   });
 
   it("uses enhanced CPP in the existing OAS recovery income base", () => {
@@ -185,7 +196,7 @@ describe("employee payroll projections", () => {
     const year = run(plan, scenario(enabled)).years[0]!;
     expect(year.income.oas).toBe(6_000);
     expect(year.taxableIncome).toBe(96_873);
-    expect(year.tax.oasClawback).toBe(232.50); // (96,873 − 95,323) × 15%
+    expect(year.tax.oasClawback).toBe(232.5); // (96,873 − 95,323) × 15%
     // The diagnostic adds a $100 RRSP draw, which also gets the modeled pension credit at age 65.
     expect(year.tax.marginalRate).toBe(0.3275);
   });
@@ -199,10 +210,13 @@ describe("employee payroll projections", () => {
     expect(withPayroll.income.gis - without.income.gis).toBeCloseTo(274.88, 8);
   });
 
-  it.each(["rrsp", "nonreg"] as const)("funds the net payroll cost through %s deficit withdrawals with tax", type => {
+  it.each(["rrsp", "nonreg"] as const)("funds the net payroll cost through %s deficit withdrawals with tax", (type) => {
     const plan = salaryPlan(45, 80_000);
     plan.accounts.push({
-      id: type, type, balance: 100_000, assetMix: cashMix,
+      id: type,
+      type,
+      balance: 100_000,
+      assetMix: cashMix,
       ...(type === "nonreg" ? { bookValue: 60_000 } : {}),
     });
     plan.expenses.push({ id: "living", annualAmount: 75_000, inflationRate: 0, startAge: 45 });
@@ -217,8 +231,8 @@ describe("employee payroll projections", () => {
 
   it.each([
     { first: "nonreg", second: "rrsp", rrspBalance: 100_000, nonregDraw: 20_000, rrspDraw: 2_071.42, tax: 8_489.67 },
-    { first: "rrsp", second: "nonreg", rrspBalance: 5_000, nonregDraw: 17_581.15, rrspDraw: 5_000, tax: 8_999.40 },
-  ] as const)("conserves cash and prices the combined tax with $first before $second", fixture => {
+    { first: "rrsp", second: "nonreg", rrspBalance: 5_000, nonregDraw: 17_581.15, rrspDraw: 5_000, tax: 8_999.4 },
+  ] as const)("conserves cash and prices the combined tax with $first before $second", (fixture) => {
     const plan = salaryPlan(45, 50_000);
     plan.accounts.push(
       { id: "nonreg", type: "nonreg", balance: 20_000, bookValue: 0, assetMix: cashMix },
@@ -248,7 +262,7 @@ describe("employee payroll projections", () => {
     const year = run(plan, settings, { strategy: "tax-minimizing", fillTargetTaxable: 54_535, byAge: [] }).years[0]!;
     expect(year.plannedRrspDraw).toBe(5_000);
     expect(year.withdrawals).toEqual({ nonreg: 17_581.15, rrsp: 5_000, tfsa: 0 });
-    expect(year.tax.total).toBe(8_999.40);
+    expect(year.tax.total).toBe(8_999.4);
     expect(year.balances.cash).toBe(0);
     expect(year.shortfall).toBe(0);
   });
@@ -260,7 +274,13 @@ describe("employee payroll projections", () => {
       { id: "nonreg", type: "nonreg", balance: 15_000, bookValue: 21_000, assetMix: cashMix },
       { id: "rrsp", type: "rrsp", balance: 100_000, assetMix: cashMix },
     );
-    plan.assets.push({ id: "sale", kind: "other", value: 5_000, appreciationRate: 1, sellEvent: { age: 46, costsPct: 0 } });
+    plan.assets.push({
+      id: "sale",
+      kind: "other",
+      value: 5_000,
+      appreciationRate: 1,
+      sellEvent: { age: 46, costsPct: 0 },
+    });
     plan.expenses.push({ id: "living", annualAmount: 80_000, inflationRate: 0, startAge: 46 });
     const year = run(plan, scenario(enabled)).years[1]!;
     // The sale adds $10,000 at cost. Liquidating the combined $25,000 account
@@ -277,7 +297,13 @@ describe("employee payroll projections", () => {
     plan.profile.birthYear = 1981;
     plan.incomes[0]!.startAge = 45;
     plan.accounts.push({ id: "nonreg", type: "nonreg", balance: 1_000, bookValue: 201_000, assetMix: cashMix });
-    plan.assets.push({ id: "sale", kind: "other", value: 5_000, appreciationRate: 1, sellEvent: { age: 45, costsPct: 0 } });
+    plan.assets.push({
+      id: "sale",
+      kind: "other",
+      value: 5_000,
+      appreciationRate: 1,
+      sellEvent: { age: 45, costsPct: 0 },
+    });
     plan.expenses.push({ id: "living", annualAmount: 40_668.69, inflationRate: 0, startAge: 45 });
     const year = run(plan, scenario(enabled)).years[1]!;
     // In 2026 the asset sale contributes $10,000 of proceeds and $5,000 of gains.
@@ -288,23 +314,28 @@ describe("employee payroll projections", () => {
     expect(year.balances.nonreg).toBe(10_853.58);
     expect(year.balances.cash).toBe(0);
     expect(year.shortfall).toBe(0);
-    expect(year.income.employment + year.withdrawals.nonreg - year.expenses - year.payroll!.total - year.tax.total).toBeCloseTo(0, 2);
+    expect(
+      year.income.employment + year.withdrawals.nonreg - year.expenses - year.payroll!.total - year.tax.total,
+    ).toBeCloseTo(0, 2);
   });
 
   it("fills the optimizer target after the enhanced CPP deduction and reports payroll-aware comparisons", () => {
     const plan = salaryPlan(65, 80_000);
     plan.accounts.push({ id: "rrsp", type: "rrsp", balance: 500_000, assetMix: cashMix });
     const settings = scenario(enabled, { withdrawalStrategy: "tax-minimizing" });
-    const explicit = run(plan, settings, { strategy: "tax-minimizing", fillTargetTaxable: 90_000, byAge: [] }).years[0]!;
+    const explicit = run(plan, settings, { strategy: "tax-minimizing", fillTargetTaxable: 90_000, byAge: [] })
+      .years[0]!;
     expect(explicit.plannedRrspDraw).toBe(10_927);
     expect(explicit.taxableIncome).toBe(90_000);
     const manual = run(plan, scenario(enabled));
     const optimized = run(plan, settings);
     expect(optimized.withdrawalPlan?.comparison.manualTotalTax).toBeCloseTo(
-      manual.years.reduce((total, year) => total + year.tax.total, 0), 2,
+      manual.years.reduce((total, year) => total + year.tax.total, 0),
+      2,
     );
     expect(optimized.withdrawalPlan?.comparison.optimizedTotalTax).toBeCloseTo(
-      optimized.years.reduce((total, year) => total + year.tax.total, 0), 2,
+      optimized.years.reduce((total, year) => total + year.tax.total, 0),
+      2,
     );
     expect(optimized.years[0]!.payroll).toEqual(manual.years[0]!.payroll);
   });
@@ -324,9 +355,12 @@ describe("payroll settings and table validation", () => {
     const indexed = applyIndexation(tables, 10);
     expect(indexed.federal.brackets[1]!.threshold).toBeGreaterThan(tables.federal.brackets[1]!.threshold);
     expect(indexed.payroll).toEqual(tables.payroll);
-    expect(() => loadTables({
-      ...tablesJson, payroll: { ...tablesJson.payroll, cppSecondCeiling: 70_000 },
-    })).toThrow(/payroll CPP.*strictly ascending/);
+    expect(() =>
+      loadTables({
+        ...tablesJson,
+        payroll: { ...tablesJson.payroll, cppSecondCeiling: 70_000 },
+      }),
+    ).toThrow(/payroll CPP.*strictly ascending/);
   });
 
   it("retains compatibility with older custom tables until payroll is enabled", () => {
@@ -335,6 +369,8 @@ describe("payroll settings and table validation", () => {
     const plan = salaryPlan(45, 50_000);
     const returns = buildDeterministicReturns(zeroReturns, 45, 46);
     expect(simulate(plan, scenario(), returns, tables).years[0]!.payroll).toEqual(noDeductions);
-    expect(() => simulate(plan, scenario(enabled), returns, tables)).toThrow(/employee payroll parameters are required/);
+    expect(() => simulate(plan, scenario(enabled), returns, tables)).toThrow(
+      /employee payroll parameters are required/,
+    );
   });
 });

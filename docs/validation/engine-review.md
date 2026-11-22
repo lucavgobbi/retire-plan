@@ -58,4 +58,3 @@ The raw recovery calculation is now capped at OAS paid in the simulated year. A 
 - `npm test -w packages/engine`: passed, 186 tests in 18 files.
 - `npx tsc --noEmit -p packages/engine`: passed.
 - First-year golden pins remain unchanged. Later golden years are reconciled against the independently indexed reference calculator.
-

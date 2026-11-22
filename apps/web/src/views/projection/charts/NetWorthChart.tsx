@@ -42,7 +42,10 @@ export function NetWorthChart({ points }: { points: NetWorthBarPoint[] }) {
   const yTicks = ticks(yDomain[0], yDomain[1]);
 
   // Bar geometry: centred on each age, width = 62% of the smallest age step.
-  const steps = xs.slice(1).map((x, i) => x - (xs[i] ?? x)).filter((s) => s > 0);
+  const steps = xs
+    .slice(1)
+    .map((x, i) => x - (xs[i] ?? x))
+    .filter((s) => s > 0);
   const step = steps.length > 0 ? Math.min(...steps) : 1;
   const plotWidth = W - PAD.left - PAD.right;
   const barWidth = Math.min(48, Math.max(4, (step / Math.max(1, xDomain[1] - xDomain[0])) * plotWidth * 0.62));
@@ -50,108 +53,132 @@ export function NetWorthChart({ points }: { points: NetWorthBarPoint[] }) {
 
   return (
     <>
-    <svg className="financial-chart chart-interactive" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label={`Stacked net-worth components by age: owned accounts and assets above zero, debt below zero, with the net worth marker`} role="img" {...it.svgProps}>
-      <title>Projected net worth by account type over age</title>
-      <desc>Stacked bars of owned balances (TFSA, RRSP, non-registered, cash, home, other assets) above zero and debt below zero; the marker on each bar is net worth, the owned stack minus debt.</desc>
-      {yTicks.map((t) => (
-        <g key={t}>
-          <line x1={PAD.left} x2={W - PAD.right} y1={yScale(t, yDomain)} y2={yScale(t, yDomain)} className="chart-gridline" />
-          <text x={PAD.left - 6} y={yScale(t, yDomain) + 3} textAnchor="end" className="chart-tick">
-            {fmtTick(t)}
+      <svg
+        className="financial-chart chart-interactive"
+        width="100%"
+        viewBox={`0 0 ${W} ${H}`}
+        aria-label={`Stacked net-worth components by age: owned accounts and assets above zero, debt below zero, with the net worth marker`}
+        role="img"
+        {...it.svgProps}
+      >
+        <title>Projected net worth by account type over age</title>
+        <desc>
+          Stacked bars of owned balances (TFSA, RRSP, non-registered, cash, home, other assets) above zero and debt
+          below zero; the marker on each bar is net worth, the owned stack minus debt.
+        </desc>
+        {yTicks.map((t) => (
+          <g key={t}>
+            <line
+              x1={PAD.left}
+              x2={W - PAD.right}
+              y1={yScale(t, yDomain)}
+              y2={yScale(t, yDomain)}
+              className="chart-gridline"
+            />
+            <text x={PAD.left - 6} y={yScale(t, yDomain) + 3} textAnchor="end" className="chart-tick">
+              {fmtTick(t)}
+            </text>
+          </g>
+        ))}
+        {ticks(xDomain[0], xDomain[1]).map((t) => (
+          <text key={t} x={xScale(t, xDomain)} y={H - 6} textAnchor="middle" className="chart-tick">
+            {Math.round(t)}
           </text>
-        </g>
-      ))}
-      {ticks(xDomain[0], xDomain[1]).map((t) => (
-        <text key={t} x={xScale(t, xDomain)} y={H - 6} textAnchor="middle" className="chart-tick">
-          {Math.round(t)}
-        </text>
-      ))}
-      {points.map((p, i) => {
-        const cx = xScale(p.x, xDomain);
-        const left = cx - barWidth / 2;
-        const owned = stacks[i] ?? [];
-        const cum: number[] = [];
-        let acc = 0;
-        for (const v of owned) {
-          acc += Math.max(0, v);
-          cum.push(acc);
-        }
-        const debt = debts[i] ?? 0;
-        return (
-          <g key={p.x} data-bar-age={p.x}>
-            {owned.map((v, s) =>
-              v > 0 ? (
+        ))}
+        {points.map((p, i) => {
+          const cx = xScale(p.x, xDomain);
+          const left = cx - barWidth / 2;
+          const owned = stacks[i] ?? [];
+          const cum: number[] = [];
+          let acc = 0;
+          for (const v of owned) {
+            acc += Math.max(0, v);
+            cum.push(acc);
+          }
+          const debt = debts[i] ?? 0;
+          return (
+            <g key={p.x} data-bar-age={p.x}>
+              {owned.map((v, s) =>
+                v > 0 ? (
+                  <rect
+                    key={OWNED_SERIES[s]}
+                    x={left}
+                    width={barWidth}
+                    y={yScale(cum[s] ?? 0, yDomain)}
+                    height={Math.max(0, yScale(cum[s - 1] ?? 0, yDomain) - yScale(cum[s] ?? 0, yDomain))}
+                    fill={STACK_COLORS[s % STACK_COLORS.length]}
+                    data-series={OWNED_SERIES[s]}
+                  >
+                    <title>{`${OWNED_SERIES[s]}: ${fmtTick(v)}`}</title>
+                  </rect>
+                ) : null,
+              )}
+              {debt > 0 && (
                 <rect
-                  key={OWNED_SERIES[s]}
                   x={left}
                   width={barWidth}
-                  y={yScale(cum[s] ?? 0, yDomain)}
-                  height={Math.max(0, yScale(cum[s - 1] ?? 0, yDomain) - yScale(cum[s] ?? 0, yDomain))}
-                  fill={STACK_COLORS[s % STACK_COLORS.length]}
-                  data-series={OWNED_SERIES[s]}
+                  y={zeroY}
+                  height={Math.max(0, yScale(-debt, yDomain) - zeroY)}
+                  fill={PALETTE.color5}
+                  fillOpacity="0.55"
+                  data-series="Debt"
                 >
-                  <title>{`${OWNED_SERIES[s]}: ${fmtTick(v)}`}</title>
+                  <title>{`Debt (owed): ${fmtTick(debt)}`}</title>
                 </rect>
-              ) : null,
-            )}
-            {debt > 0 && (
-              <rect
-                x={left}
-                width={barWidth}
-                y={zeroY}
-                height={Math.max(0, yScale(-debt, yDomain) - zeroY)}
-                fill={PALETTE.color5}
-                fillOpacity="0.55"
-                data-series="Debt"
-              >
-                <title>{`Debt (owed): ${fmtTick(debt)}`}</title>
-              </rect>
-            )}
-            {Number.isFinite(p.netWorth) && (
-              <line
-                x1={left - 2}
-                x2={left + barWidth + 2}
-                y1={yScale(p.netWorth, yDomain)}
-                y2={yScale(p.netWorth, yDomain)}
-                stroke={PALETTE.ink}
-                strokeWidth="2"
-                data-series="Net worth"
-              >
-                <title>{`Net worth: ${fmtTick(p.netWorth)}`}</title>
-              </line>
-            )}
-          </g>
-        );
-      })}
-      {it.active !== null && (() => {
-        const p = points[it.active]!;
-        const cx = xScale(p.x, xDomain);
-        return (
-          <>
-            <ChartCrosshair x={cx} />
-            <ChartMarkers coords={stackTops(stacks[it.active]!).map((top, s) => ({ cx, cy: yScale(top, yDomain), color: STACK_COLORS[s % STACK_COLORS.length]! }))} />
-          </>
-        );
-      })()}
-    </svg>
-    {it.active !== null && (() => {
-      const idx = it.active;
-      const p = points[idx]!;
-      const debt = debts[idx] ?? 0;
-      return (
-        <ChartTooltip
-          age={p.x}
-          fraction={xScale(p.x, xDomain) / W}
-          keyboard={it.keyboard}
-          rows={[
-            ...OWNED_SERIES.map((label, s) => ({ label, value: stacks[idx]![s]! })),
-            // Debt is owed money: shown with its true negative sign (never as owned).
-            { label: "Debt (owed)", value: -debt },
-            { label: "Net worth", value: p.netWorth },
-          ]}
-        />
-      );
-    })()}
+              )}
+              {Number.isFinite(p.netWorth) && (
+                <line
+                  x1={left - 2}
+                  x2={left + barWidth + 2}
+                  y1={yScale(p.netWorth, yDomain)}
+                  y2={yScale(p.netWorth, yDomain)}
+                  stroke={PALETTE.ink}
+                  strokeWidth="2"
+                  data-series="Net worth"
+                >
+                  <title>{`Net worth: ${fmtTick(p.netWorth)}`}</title>
+                </line>
+              )}
+            </g>
+          );
+        })}
+        {it.active !== null &&
+          (() => {
+            const p = points[it.active]!;
+            const cx = xScale(p.x, xDomain);
+            return (
+              <>
+                <ChartCrosshair x={cx} />
+                <ChartMarkers
+                  coords={stackTops(stacks[it.active]!).map((top, s) => ({
+                    cx,
+                    cy: yScale(top, yDomain),
+                    color: STACK_COLORS[s % STACK_COLORS.length]!,
+                  }))}
+                />
+              </>
+            );
+          })()}
+      </svg>
+      {it.active !== null &&
+        (() => {
+          const idx = it.active;
+          const p = points[idx]!;
+          const debt = debts[idx] ?? 0;
+          return (
+            <ChartTooltip
+              age={p.x}
+              fraction={xScale(p.x, xDomain) / W}
+              keyboard={it.keyboard}
+              rows={[
+                ...OWNED_SERIES.map((label, s) => ({ label, value: stacks[idx]![s]! })),
+                // Debt is owed money: shown with its true negative sign (never as owned).
+                { label: "Debt (owed)", value: -debt },
+                { label: "Net worth", value: p.netWorth },
+              ]}
+            />
+          );
+        })()}
     </>
   );
 }

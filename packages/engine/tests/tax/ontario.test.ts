@@ -102,10 +102,7 @@ describe("ontarioSurtax — unit behaviour on the raw ladders", () => {
 
   it("between tiers + $1 does not engage tier B", () => {
     expect(ontarioSurtax(7_446, 100_000, tables)).toBeCloseTo(0.2 * (7_446 - 5_818), 8);
-    expect(ontarioSurtax(7_447, 100_000, tables)).toBeCloseTo(
-      0.2 * (7_447 - 5_818) + 0.36 * 1,
-      8,
-    );
+    expect(ontarioSurtax(7_447, 100_000, tables)).toBeCloseTo(0.2 * (7_447 - 5_818) + 0.36 * 1, 8);
   });
 
   it("above tier B both ladders apply to the excess base only", () => {

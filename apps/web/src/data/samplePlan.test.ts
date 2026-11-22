@@ -30,9 +30,15 @@ describe("built-in sample plan", () => {
     expect("endAge" in plan.incomes[0]!).toBe(false);
     expect(plan.incomes.find((i) => i.kind === "oas")?.annualAmount).toBe(8_907.72);
     expect(plan.debts[0]).toMatchObject({
-      id: "mortgage", rate: 0.045, balance: 350_000, monthlyPayment: 1_930,
+      id: "mortgage",
+      rate: 0.045,
+      balance: 350_000,
+      monthlyPayment: 1_930,
     });
-    expect(plan.savingsPolicy.map((s) => [s.id, s.priority])).toEqual([["tfsa", 1], ["rrsp", 2]]);
+    expect(plan.savingsPolicy.map((s) => [s.id, s.priority])).toEqual([
+      ["tfsa", 1],
+      ["rrsp", 2],
+    ]);
     expect(plan.assets[0]).toMatchObject({ id: "home", value: 700_000, appreciationRate: 0.02 });
   });
 });

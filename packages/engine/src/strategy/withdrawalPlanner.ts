@@ -1,13 +1,7 @@
 import { buildDeterministicReturns } from "../returns/deterministic";
 import { simulate } from "../simulate";
 import type { TaxYearTables } from "../tax/tables";
-import type {
-  PlannedWithdrawals,
-  Plan,
-  Scenario,
-  SimulationResult,
-  WithdrawalPlanMetadata,
-} from "../types";
+import type { PlannedWithdrawals, Plan, Scenario, SimulationResult, WithdrawalPlanMetadata } from "../types";
 
 /**
  * Tax-minimizing withdrawal planner (bounded heuristic).
@@ -55,17 +49,28 @@ const PLANNING_BASIS =
   "then replayed on every path by the same fixed rule using current-year information only — no per-path lookahead.";
 
 /** Bounded candidate grid resolved per year from the indexed federal tables. */
-const CANDIDATE_TARGETS = ["none", "federal-bpa", "federal-bracket-1", "federal-bracket-2", "clawback-threshold"] as const;
+const CANDIDATE_TARGETS = [
+  "none",
+  "federal-bpa",
+  "federal-bracket-1",
+  "federal-bracket-2",
+  "clawback-threshold",
+] as const;
 type CandidateTarget = (typeof CANDIDATE_TARGETS)[number];
 
 function resolveTarget(target: CandidateTarget, tables: TaxYearTables): number {
   const brackets = tables.federal.brackets;
   switch (target) {
-    case "none": return 0;
-    case "federal-bpa": return tables.federal.basicPersonalAmount;
-    case "federal-bracket-1": return brackets[1]?.threshold ?? brackets[brackets.length - 1]!.threshold;
-    case "federal-bracket-2": return brackets[2]?.threshold ?? brackets[brackets.length - 1]!.threshold;
-    case "clawback-threshold": return Math.max(0, tables.oas.clawbackThreshold - 1);
+    case "none":
+      return 0;
+    case "federal-bpa":
+      return tables.federal.basicPersonalAmount;
+    case "federal-bracket-1":
+      return brackets[1]?.threshold ?? brackets[brackets.length - 1]!.threshold;
+    case "federal-bracket-2":
+      return brackets[2]?.threshold ?? brackets[brackets.length - 1]!.threshold;
+    case "clawback-threshold":
+      return Math.max(0, tables.oas.clawbackThreshold - 1);
   }
 }
 
@@ -81,16 +86,10 @@ function totals(result: SimulationResult): { totalTax: number; gisTotal: number 
 
 /** Planner feasibility is stricter than summary.success: no modeled year may be unfunded. */
 function isFullyFunded(result: SimulationResult): boolean {
-  return result.summary.success && result.years.every(
-    (year) => Number.isFinite(year.shortfall) && year.shortfall <= 0,
-  );
+  return result.summary.success && result.years.every((year) => Number.isFinite(year.shortfall) && year.shortfall <= 0);
 }
 
-export function planWithdrawalPolicy(
-  plan: Plan,
-  scenario: Scenario,
-  tables: TaxYearTables,
-): PlannerOutput {
+export function planWithdrawalPolicy(plan: Plan, scenario: Scenario, tables: TaxYearTables): PlannerOutput {
   const startAge = plan.profile.currentAge;
   const endAge = plan.profile.endAge;
   const returns = buildDeterministicReturns(scenario.returnAssumptions, startAge, endAge);
@@ -102,7 +101,11 @@ export function planWithdrawalPolicy(
   const manualFullyFunded = isFullyFunded(manual);
 
   const candidates = CANDIDATE_TARGETS.map((target) => {
-    const planned: PlannedWithdrawals = { strategy: "tax-minimizing", fillTargetTaxable: resolveTarget(target, tables), byAge: [] };
+    const planned: PlannedWithdrawals = {
+      strategy: "tax-minimizing",
+      fillTargetTaxable: resolveTarget(target, tables),
+      byAge: [],
+    };
     const result = simulate(plan, strategyScenario, returns, tables, planned);
     return { target, planned, result, fullyFunded: isFullyFunded(result), ...totals(result) };
   });
@@ -112,9 +115,7 @@ export function planWithdrawalPolicy(
     // Safety contract: chosen must be feasible AND total tax strictly below manual's
     // (a candidate that merely matches manual is not an improvement — manual is
     // retained with planned = null and an honestly empty planned schedule).
-    const improving = candidates.filter(
-      (c) => c.fullyFunded && c.totalTax < manualTotals.totalTax - 0.005,
-    );
+    const improving = candidates.filter((c) => c.fullyFunded && c.totalTax < manualTotals.totalTax - 0.005);
     if (improving.length === 0) {
       chosen = null;
     } else {
@@ -141,14 +142,15 @@ export function planWithdrawalPolicy(
     }
   }
 
-  const planned = chosen === null
-    ? null
-    : {
-        ...chosen.planned,
-        byAge: chosen.result.years
-          .filter((y) => (y.plannedRrspDraw ?? 0) > 0)
-          .map((y) => ({ age: y.age, netRrspDraw: y.plannedRrspDraw! })),
-      };
+  const planned =
+    chosen === null
+      ? null
+      : {
+          ...chosen.planned,
+          byAge: chosen.result.years
+            .filter((y) => (y.plannedRrspDraw ?? 0) > 0)
+            .map((y) => ({ age: y.age, netRrspDraw: y.plannedRrspDraw! })),
+        };
 
   const optimized = chosen === null ? manual : chosen.result;
   const optimizedTotals = chosen === null ? manualTotals : totals(chosen.result);
@@ -156,11 +158,7 @@ export function planWithdrawalPolicy(
   const metadata: WithdrawalPlanMetadata = {
     strategy: "tax-minimizing",
     planningBasis: PLANNING_BASIS,
-    status: chosen !== null
-      ? "optimized"
-      : manualFullyFunded
-        ? "manual-retained"
-        : "no-feasible-policy",
+    status: chosen !== null ? "optimized" : manualFullyFunded ? "manual-retained" : "no-feasible-policy",
     plannedWithdrawals: planned?.byAge ?? [],
     comparison: {
       manualTotalTax: manualTotals.totalTax,

@@ -5,7 +5,12 @@ export { simulate } from "./simulate";
 export { planWithdrawalPolicy, type PlannerOutput } from "./strategy/withdrawalPlanner";
 export { buildDeterministicReturns } from "./returns/deterministic";
 export { runMonteCarlo, type MonteCarloAnnualStat, type MonteCarloSummary } from "./returns/montecarlo";
-export { buildHistoricalReturns, runHistorical, type HistoricalReturnObservation, type HistoricalSummary } from "./returns/historical";
+export {
+  buildHistoricalReturns,
+  runHistorical,
+  type HistoricalReturnObservation,
+  type HistoricalSummary,
+} from "./returns/historical";
 export { HISTORICAL_DATASET, HISTORICAL_OBSERVATIONS } from "./returns/historicalDataset";
 export { seededRandom } from "./returns/seededRandom";
 export { loadTables, applyIndexation, type TaxYearTables } from "./tax/tables";

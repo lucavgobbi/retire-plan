@@ -14,12 +14,11 @@ export interface MemoryRowDbOptions {
 export function createMemoryRowDb(options: MemoryRowDbOptions = {}): RowDb {
   let workspaceRow: unknown = options.seedWorkspaceRow;
   let nextKey = 1;
-  let backups: { key: string; createdAt: string; workspace: unknown }[] =
-    (options.seedBackupRows ?? []).map((row) => ({
-      key: String(nextKey++),
-      createdAt: row.createdAt,
-      workspace: row.workspace,
-    }));
+  let backups: { key: string; createdAt: string; workspace: unknown }[] = (options.seedBackupRows ?? []).map((row) => ({
+    key: String(nextKey++),
+    createdAt: row.createdAt,
+    workspace: row.workspace,
+  }));
 
   return {
     async getWorkspaceRow(): Promise<unknown> {

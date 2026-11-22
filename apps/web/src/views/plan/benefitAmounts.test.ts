@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { cppClaimAgeFactor, estimateCppMonthlyAtStart, estimateOasMonthlyAtStart, monthlyToAnnual } from "./benefitAmounts";
+import {
+  cppClaimAgeFactor,
+  estimateCppMonthlyAtStart,
+  estimateOasMonthlyAtStart,
+  monthlyToAnnual,
+} from "./benefitAmounts";
 
 describe("benefit amount previews", () => {
   it("applies official CPP claim-age factors to a personal age-65 estimate", () => {

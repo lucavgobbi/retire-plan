@@ -4,8 +4,12 @@ import { buildDeterministicReturns, simulate, validatePlan, type Plan, type Scen
 const returns = { equity: 0, bond: 0, cash: 0 };
 const returnsAsCash = { equity: 0, bond: 0, cash: 1 };
 const scenario: Scenario = {
-  id: "base", name: "Base", simMode: "deterministic", retirementAge: 62,
-  returnAssumptions: returns, withdrawalOrder: ["tfsa", "nonreg", "rrsp"],
+  id: "base",
+  name: "Base",
+  simMode: "deterministic",
+  retirementAge: 62,
+  returnAssumptions: returns,
+  withdrawalOrder: ["tfsa", "nonreg", "rrsp"],
 };
 
 function employmentPlan(): Plan {
@@ -18,7 +22,15 @@ function employmentPlan(): Plan {
     assets: [],
     debts: [],
     incomes: [
-      { id: "linked", kind: "employment", annualAmount: 50_000, bonusRate: 0.10, startAge: 60, endAtRetirement: true, raiseRate: 0 },
+      {
+        id: "linked",
+        kind: "employment",
+        annualAmount: 50_000,
+        bonusRate: 0.1,
+        startAge: 60,
+        endAtRetirement: true,
+        raiseRate: 0,
+      },
       { id: "fixed", kind: "employment", annualAmount: 6_000, startAge: 60, endAge: 64, raiseRate: 0 },
       { id: "cpp", kind: "cpp", annualAmount: 12_000, startAge: 63, raiseRate: 0 },
       { id: "oas", kind: "oas", annualAmount: 8_000, startAge: 65, raiseRate: 0 },
@@ -34,7 +46,7 @@ function employmentPlan(): Plan {
 function project(plan: Plan, retirementAge: number) {
   const series = buildDeterministicReturns(returns, plan.profile.currentAge, plan.profile.endAge);
   const result = simulate(plan, { ...scenario, retirementAge }, series);
-  return (age: number) => result.years.find(year => year.age === age)!;
+  return (age: number) => result.years.find((year) => year.age === age)!;
 }
 
 describe("retirement-linked employment", () => {
@@ -82,9 +94,11 @@ describe("retirement-linked employment", () => {
     plan.accounts[0]!.balance = 300_000;
     const series = buildDeterministicReturns(returns, plan.profile.currentAge, plan.profile.endAge);
     const result = simulate(plan, { ...scenario, withdrawalStrategy: "tax-minimizing" }, series, undefined, {
-      strategy: "tax-minimizing", fillTargetTaxable: 45_000, byAge: [],
+      strategy: "tax-minimizing",
+      fillTargetTaxable: 45_000,
+      byAge: [],
     });
-    const year = result.years.find(row => row.age === 65)!;
+    const year = result.years.find((row) => row.age === 65)!;
     expect(year.income.employment).toBe(0);
     expect(year.plannedRrspDraw).toBe(25_000);
     expect(year.withdrawals.rrsp).toBe(25_000);
@@ -110,7 +124,9 @@ describe("retirement-linked employment", () => {
     expect(validatePlan(plan)).toEqual([]);
     plan.incomes[2]!.endAtRetirement = false;
     expect(validatePlan(plan)).toContain('Income "cpp" endAtRetirement is supported only for employment income.');
-    const imported = JSON.parse(JSON.stringify(employmentPlan()).replace('"endAtRetirement":true', '"endAtRetirement":"true"')) as Plan;
+    const imported = JSON.parse(
+      JSON.stringify(employmentPlan()).replace('"endAtRetirement":true', '"endAtRetirement":"true"'),
+    ) as Plan;
     expect(validatePlan(imported)).toContain('Income "linked" endAtRetirement must be a boolean.');
   });
 });

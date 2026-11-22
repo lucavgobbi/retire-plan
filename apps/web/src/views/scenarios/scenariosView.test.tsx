@@ -22,7 +22,11 @@ const emptyOutcome = { result: { years: [], summary: { success: true, finalNetWo
 
 function renderView(workspace = makeWorkspace(), simulationRunner?: SimulationRunner) {
   return render(
-    <StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={simulationRunner}>
+    <StoreProvider
+      initialWorkspace={workspace}
+      initialBaseScenario={DEFAULT_SCENARIO_BASE}
+      simulationRunner={simulationRunner}
+    >
       <ScenariosView />
     </StoreProvider>,
   );
@@ -36,11 +40,19 @@ function ScenariosProbe() {
 describe("describeOverrides", () => {
   it("summarizes explicit payroll overrides, including an all-off override, and only claims inheritance when payroll is absent", () => {
     expect(describeOverrides({ ...delta, overrides: {} })).toBe("inherits the working scenario (no overrides)");
-    expect(describeOverrides({ ...delta, overrides: {}, payroll: { cpp: true, ei: true, cppOptOut65to69: false } })).toBe("payroll CPP + EI");
-    expect(describeOverrides({ ...delta, overrides: {}, payroll: { cpp: true, ei: false, cppOptOut65to69: true } })).toBe("payroll CPP · opt-out 65–69");
+    expect(
+      describeOverrides({ ...delta, overrides: {}, payroll: { cpp: true, ei: true, cppOptOut65to69: false } }),
+    ).toBe("payroll CPP + EI");
+    expect(
+      describeOverrides({ ...delta, overrides: {}, payroll: { cpp: true, ei: false, cppOptOut65to69: true } }),
+    ).toBe("payroll CPP · opt-out 65–69");
     // Explicit all-off settings ARE an override: they differ from absent inheritance.
-    expect(describeOverrides({ ...delta, overrides: {}, payroll: { cpp: false, ei: false, cppOptOut65to69: false } })).toBe("payroll none");
-    expect(describeOverrides({ ...delta, overrides: {}, payroll: { cpp: false, ei: false, cppOptOut65to69: true } })).toBe("payroll none · opt-out 65–69");
+    expect(
+      describeOverrides({ ...delta, overrides: {}, payroll: { cpp: false, ei: false, cppOptOut65to69: false } }),
+    ).toBe("payroll none");
+    expect(
+      describeOverrides({ ...delta, overrides: {}, payroll: { cpp: false, ei: false, cppOptOut65to69: true } }),
+    ).toBe("payroll none · opt-out 65–69");
     // Payroll shows alongside other overrides.
     expect(describeOverrides(delta)).toBe("retirement age 62");
   });
@@ -65,7 +77,15 @@ describe("ScenariosView", () => {
     const copy = duplicateScenario(source, [source.name, "Copy of Retire 3 years earlier"]);
     expect(copy.id).not.toBe(source.id);
     expect(copy.name).toBe("Copy of Retire 3 years earlier (2)");
-    expect(copy).toMatchObject({ simMode: "montecarlo", mcConfig: source.mcConfig, historicalConfig: source.historicalConfig, benefits: source.benefits, payroll: source.payroll, withdrawalStrategy: "tax-minimizing", overrides: source.overrides });
+    expect(copy).toMatchObject({
+      simMode: "montecarlo",
+      mcConfig: source.mcConfig,
+      historicalConfig: source.historicalConfig,
+      benefits: source.benefits,
+      payroll: source.payroll,
+      withdrawalStrategy: "tax-minimizing",
+      overrides: source.overrides,
+    });
     expect(copy.mcConfig).not.toBe(source.mcConfig);
     expect(copy.mcConfig!.stdDev).not.toBe(source.mcConfig!.stdDev);
     expect(copy.overrides.withdrawalOrder).not.toBe(source.overrides.withdrawalOrder);
@@ -106,7 +126,12 @@ describe("ScenariosView", () => {
       },
     };
     ws.scenarios.push(source, { ...delta, id: "existing-copy", name: "Copy of Retire 3 years earlier" });
-    render(<StoreProvider initialWorkspace={ws} initialBaseScenario={DEFAULT_SCENARIO_BASE}><ScenariosView /><ScenariosProbe /></StoreProvider>);
+    render(
+      <StoreProvider initialWorkspace={ws} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+        <ScenariosView />
+        <ScenariosProbe />
+      </StoreProvider>,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Duplicate Retire 3 years earlier" }));
     const copiedName = screen.getByLabelText("Name") as HTMLInputElement;
@@ -124,16 +149,27 @@ describe("ScenariosView", () => {
     expect(originalItem.textContent).toContain("retirement age 61");
     expect(originalItem.textContent).toContain("1900");
     const persistedScenarios = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
-    const copiedDelta = persistedScenarios.find(item => item.name === copiedName.value);
+    const copiedDelta = persistedScenarios.find((item) => item.name === copiedName.value);
     expect(copiedDelta).toMatchObject({
-      simMode: "historical", mcConfig: source.mcConfig, historicalConfig: { startYear: 1900 },
-      benefits: source.benefits, withdrawalStrategy: "tax-minimizing",
-      overrides: { retirementAge: 63, returnAssumptions: source.overrides.returnAssumptions, withdrawalOrder: source.overrides.withdrawalOrder },
+      simMode: "historical",
+      mcConfig: source.mcConfig,
+      historicalConfig: { startYear: 1900 },
+      benefits: source.benefits,
+      withdrawalStrategy: "tax-minimizing",
+      overrides: {
+        retirementAge: 63,
+        returnAssumptions: source.overrides.returnAssumptions,
+        withdrawalOrder: source.overrides.withdrawalOrder,
+      },
     });
-    expect(persistedScenarios.find(item => item.id === source.id)).toMatchObject({
-      name: source.name, simMode: "historical", historicalConfig: { startYear: 1900 }, benefits: source.benefits, withdrawalStrategy: "tax-minimizing", overrides: source.overrides,
+    expect(persistedScenarios.find((item) => item.id === source.id)).toMatchObject({
+      name: source.name,
+      simMode: "historical",
+      historicalConfig: { startYear: 1900 },
+      benefits: source.benefits,
+      withdrawalStrategy: "tax-minimizing",
+      overrides: source.overrides,
     });
-
   });
 
   it("create saves on edit, without a Save button, and later edits update the same delta", () => {
@@ -169,7 +205,9 @@ describe("ScenariosView", () => {
   it("keeps an actionable run error visible while the scenario editor is open", async () => {
     const ws = makeWorkspace();
     ws.scenarios.push(delta);
-    const simulationRunner: SimulationRunner = async () => { throw new Error("worker crashed"); };
+    const simulationRunner: SimulationRunner = async () => {
+      throw new Error("worker crashed");
+    };
     renderView(ws, simulationRunner);
     const row = screen.getByRole("button", { name: "Run Retire 3 years earlier" }).closest("li")!;
     fireEvent.click(within(row).getByRole("button", { name: "Run Retire 3 years earlier" }));
@@ -187,7 +225,11 @@ describe("ScenariosView", () => {
     fireEvent.click(screen.getByText("Account withdrawal order"));
     const first = screen.getByLabelText(/1st drawn/i) as HTMLSelectElement;
     expect(first.value).toBe("tfsa");
-    expect(Array.from(first.options).map(option => option.textContent)).toEqual(["TFSA", "Non-registered", "RRSP/RRIF"]);
+    expect(Array.from(first.options).map((option) => option.textContent)).toEqual([
+      "TFSA",
+      "Non-registered",
+      "RRSP/RRIF",
+    ]);
     const second = screen.getByLabelText(/2nd drawn/i) as HTMLSelectElement;
     fireEvent.change(second, { target: { value: "tfsa" } });
     expect(first.value).toBe("nonreg");
@@ -231,8 +273,13 @@ describe("ScenariosView", () => {
 
   it("saves benefit and tax strategy overrides with clear configured-stream and GIS dependency copy", () => {
     const workspace = makeWorkspace();
-    workspace.plan.incomes = workspace.plan.incomes.filter(income => income.kind !== "cpp" && income.kind !== "oas");
-    render(<StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE}><ScenariosView /><ScenariosProbe /></StoreProvider>);
+    workspace.plan.incomes = workspace.plan.incomes.filter((income) => income.kind !== "cpp" && income.kind !== "oas");
+    render(
+      <StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+        <ScenariosView />
+        <ScenariosProbe />
+      </StoreProvider>,
+    );
     fireEvent.click(screen.getByRole("button", { name: /new scenario/i }));
     expect(screen.getByText(/no CPP income stream is configured/i)).toBeTruthy();
     expect(screen.getByText(/no OAS income stream is configured/i)).toBeTruthy();
@@ -243,14 +290,21 @@ describe("ScenariosView", () => {
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Tax plan" } });
     const saved = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
     expect(saved[0]).toMatchObject({
-      benefits: { cpp: false, oas: false, gis: false }, withdrawalStrategy: "tax-minimizing",
+      benefits: { cpp: false, oas: false, gis: false },
+      withdrawalStrategy: "tax-minimizing",
     });
   });
 
   it("saves a payroll override on the scenario and removes the key when reset to base", () => {
     const workspace = makeWorkspace();
     workspace.scenarios.push({ ...delta, overrides: {} });
-    render(<StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE}><BaseScenarioSettings /><ScenariosView /><ScenariosProbe /></StoreProvider>);
+    render(
+      <StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+        <BaseScenarioSettings />
+        <ScenariosView />
+        <ScenariosProbe />
+      </StoreProvider>,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     // Inherited state: the delta carries no payroll key and follows the base choices.
     let stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
@@ -276,7 +330,13 @@ describe("ScenariosView", () => {
   it("keeps scenario benefit and strategy choices inherited when only the name changes, and refreshes them from base", () => {
     const workspace = makeWorkspace();
     workspace.scenarios.push({ ...delta, overrides: {} });
-    render(<StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE}><BaseScenarioSettings /><ScenariosView /><ScenariosProbe /></StoreProvider>);
+    render(
+      <StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+        <BaseScenarioSettings />
+        <ScenariosView />
+        <ScenariosProbe />
+      </StoreProvider>,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Renamed inherited scenario" } });
     let stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
@@ -308,7 +368,11 @@ describe("ScenariosView", () => {
     const workspace = makeWorkspace();
     workspace.scenarios.push({ ...delta, overrides: {} });
     const base = { ...DEFAULT_SCENARIO_BASE, withdrawalStrategy: "tax-minimizing" as const };
-    render(<StoreProvider initialWorkspace={workspace} initialBaseScenario={base}><ScenariosView /></StoreProvider>);
+    render(
+      <StoreProvider initialWorkspace={workspace} initialBaseScenario={base}>
+        <ScenariosView />
+      </StoreProvider>,
+    );
     const card = screen.getByText(/retire 3 years earlier/i).closest("li")!;
     // The delta has no strategy key, so the card must resolve the base mode the
     // scenario will actually run with rather than claim it is undecided.
@@ -323,7 +387,11 @@ describe("ScenariosView", () => {
     const workspace = makeWorkspace();
     workspace.scenarios.push({ ...delta, withdrawalStrategy: "manual", overrides: {} });
     const base = { ...DEFAULT_SCENARIO_BASE, withdrawalStrategy: "tax-minimizing" as const };
-    render(<StoreProvider initialWorkspace={workspace} initialBaseScenario={base}><ScenariosView /></StoreProvider>);
+    render(
+      <StoreProvider initialWorkspace={workspace} initialBaseScenario={base}>
+        <ScenariosView />
+      </StoreProvider>,
+    );
     const card = screen.getByText(/retire 3 years earlier/i).closest("li")!;
     // Explicit override wins over the tax-minimizing base.
     expect(within(card).getByText(/withdrawal mode/i).textContent).toBe("Withdrawal mode Manual account order");
@@ -333,7 +401,12 @@ describe("ScenariosView", () => {
   it("tax-minimizing strategy hides order controls, keeps the saved order, and restores it when manual returns", () => {
     const ws = makeWorkspace();
     ws.scenarios.push({ ...delta, overrides: { retirementAge: 62, withdrawalOrder: ["nonreg", "tfsa", "rrsp"] } });
-    render(<StoreProvider initialWorkspace={ws} initialBaseScenario={DEFAULT_SCENARIO_BASE}><ScenariosView /><ScenariosProbe /></StoreProvider>);
+    render(
+      <StoreProvider initialWorkspace={ws} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
+        <ScenariosView />
+        <ScenariosProbe />
+      </StoreProvider>,
+    );
     fireEvent.click(screen.getByRole("button", { name: /edit/i }));
     fireEvent.click(screen.getByText("Account withdrawal order"));
     expect(screen.getByLabelText(/1st drawn/i)).toBeTruthy();
@@ -343,7 +416,7 @@ describe("ScenariosView", () => {
     expect(screen.getByText("Your saved account order is retained as the optimizer fallback.")).toBeTruthy();
     // Edits made while the controls are hidden must not lose the stored order override.
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Renamed under optimizer" } });
-    let stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
+    const stored = JSON.parse(screen.getByTestId("scenario-state").textContent ?? "[]") as ScenarioDelta[];
     expect(stored[0]!.overrides.withdrawalOrder).toEqual(["nonreg", "tfsa", "rrsp"]);
     expect(stored[0]!.withdrawalStrategy).toBe("tax-minimizing");
     // Switching back to manual shows the unchanged order again.
@@ -400,7 +473,12 @@ describe("ScenariosView", () => {
     const Probe = () => {
       const workspace = useWorkspace();
       const stored = workspace.workspace.scenarios[0]?.overrides?.returnAssumptions;
-      return <p data-testid="stored-rates">{JSON.stringify(workspace.workspace.scenarios[0]?.overrides ?? {})}|{stored ? `${stored.equity}/${stored.bond}/${stored.cash}` : "none"}</p>;
+      return (
+        <p data-testid="stored-rates">
+          {JSON.stringify(workspace.workspace.scenarios[0]?.overrides ?? {})}|
+          {stored ? `${stored.equity}/${stored.bond}/${stored.cash}` : "none"}
+        </p>
+      );
     };
     render(
       <StoreProvider initialWorkspace={decimal} initialBaseScenario={DEFAULT_SCENARIO_BASE}>
@@ -421,13 +499,15 @@ describe("ScenariosView", () => {
     fireEvent.click(closeEditor);
     await waitFor(() => expect(document.activeElement).toBe(within(scenarioRow).getByRole("button", { name: "Edit" })));
     expect(screen.getByTestId("stored-rates").textContent).toBe(
-      `{"retirementAge":62,"returnAssumptions":{"equity":0.055,"bond":0.035,"cash":0.01},"withdrawalOrder":["tfsa","nonreg","rrsp"]}|0.055/0.035/0.01`);
+      `{"retirementAge":62,"returnAssumptions":{"equity":0.055,"bond":0.035,"cash":0.01},"withdrawalOrder":["tfsa","nonreg","rrsp"]}|0.055/0.035/0.01`,
+    );
 
     // Editing while open updates the same delta in place.
     fireEvent.click(screen.getByRole("button", { name: /edit/i }));
     fireEvent.change(screen.getByLabelText(/equity %/i), { target: { value: "6" } });
     expect(screen.getByTestId("stored-rates").textContent).toBe(
-      `{"retirementAge":62,"returnAssumptions":{"equity":0.06,"bond":0.035,"cash":0.01},"withdrawalOrder":["tfsa","nonreg","rrsp"]}|0.06/0.035/0.01`);
+      `{"retirementAge":62,"returnAssumptions":{"equity":0.06,"bond":0.035,"cash":0.01},"withdrawalOrder":["tfsa","nonreg","rrsp"]}|0.06/0.035/0.01`,
+    );
     expect(screen.getAllByText(/retire 3 years earlier/i)).toHaveLength(1);
   });
 
@@ -453,7 +533,11 @@ describe("scenario retirement-age inheritance", () => {
       return emptyOutcome;
     };
     render(
-      <StoreProvider initialWorkspace={makeWorkspace()} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={simulationRunner}>
+      <StoreProvider
+        initialWorkspace={makeWorkspace()}
+        initialBaseScenario={DEFAULT_SCENARIO_BASE}
+        simulationRunner={simulationRunner}
+      >
         <BaseScenarioSettings />
         <ScenariosView />
         <ScenariosProbe />
@@ -536,7 +620,11 @@ describe("scenario retirement-age inheritance", () => {
       overrides: { retirementAge: 62 },
     });
     render(
-      <StoreProvider initialWorkspace={workspace} initialBaseScenario={DEFAULT_SCENARIO_BASE} simulationRunner={simulationRunner}>
+      <StoreProvider
+        initialWorkspace={workspace}
+        initialBaseScenario={DEFAULT_SCENARIO_BASE}
+        simulationRunner={simulationRunner}
+      >
         <BaseScenarioSettings />
         <ScenariosView />
         <ScenariosProbe />

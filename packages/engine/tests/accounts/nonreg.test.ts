@@ -1,15 +1,12 @@
 import { describe, expect, it } from "vitest";
-import {
-  blendedReturn,
-  nonregGrow,
-  nonregWithdrawal,
-} from "../../src/accounts/nonreg";
+import { blendedReturn, nonregGrow, nonregWithdrawal } from "../../src/accounts/nonreg";
 
 describe("blendedReturn", () => {
   it("weights the year's asset-class returns by the account mix", () => {
-    expect(
-      blendedReturn({ equity: 0.08, bond: 0.02, cash: 0 }, { equity: 0.5, bond: 0.5, cash: 0 }),
-    ).toBeCloseTo(0.05, 10);
+    expect(blendedReturn({ equity: 0.08, bond: 0.02, cash: 0 }, { equity: 0.5, bond: 0.5, cash: 0 })).toBeCloseTo(
+      0.05,
+      10,
+    );
   });
 });
 
@@ -78,7 +75,11 @@ describe("nonregWithdrawal", () => {
     // market 110, book 70
     const w1 = nonregWithdrawal(state, state.market, 22); // 20% of 110
     expect(w1.realizedGain).toBeCloseTo(22 * (1 - 70 / 110), 6);
-    state = nonregGrow({ market: w1.newMarket, book: w1.newBook }, { equity: 0.1, bond: 0, cash: 0 }, { equity: 1, bond: 0, cash: 0 });
+    state = nonregGrow(
+      { market: w1.newMarket, book: w1.newBook },
+      { equity: 0.1, bond: 0, cash: 0 },
+      { equity: 1, bond: 0, cash: 0 },
+    );
     expect(state.market).toBeCloseTo(88 * 1.1, 6);
     expect(state.book).toBeCloseTo(70 - 22 * (70 / 110) + 88 * 0.1, 6);
   });

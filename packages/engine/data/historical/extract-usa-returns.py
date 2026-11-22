@@ -13,6 +13,7 @@ Release: R.6 (2022), Jordà-Schularick-Taylor Macrohistory Database
 Download SHA-256: c1bb91fe56ea50d4f27af5c0fc897d481e89ae38ce41eaecab62134c9354981d
 License: CC BY-NC-SA 4.0 (noncommercial, ShareAlike) — see SOURCES.md in this directory.
 """
+
 import json
 import sys
 import zipfile
@@ -21,7 +22,13 @@ from datetime import date, timezone
 
 NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 COUNTRY = "USA"
-WANTED = {"year": "year", "country": "country", "eq_tr": "equity", "bond_tr": "bond", "bill_rate": "cash"}
+WANTED = {
+    "year": "year",
+    "country": "country",
+    "eq_tr": "equity",
+    "bond_tr": "bond",
+    "bill_rate": "cash",
+}
 
 
 def col_index(cell_ref: str) -> int:
@@ -50,7 +57,9 @@ def main() -> None:
             "".join(t.text or "" for t in si.iter(NS + "t"))
             for si in ET.fromstring(z.read("xl/sharedStrings.xml")).findall(NS + "si")
         ]
-        rows = ET.fromstring(z.read("xl/worksheets/sheet1.xml")).findall(NS + "sheetData/" + NS + "row")
+        rows = ET.fromstring(z.read("xl/worksheets/sheet1.xml")).findall(
+            NS + "sheetData/" + NS + "row"
+        )
 
     header = {}
     observations = []
@@ -74,7 +83,9 @@ def main() -> None:
         cash = cells.get(header["bill_rate"])
         if None in (year, equity, bond, cash):
             continue  # lead-in years with absent return columns drop out of the interlocked window
-        observations.append({"year": int(year), "equity": equity, "bond": bond, "cash": cash})
+        observations.append(
+            {"year": int(year), "equity": equity, "bond": bond, "cash": cash}
+        )
 
     if not observations:
         raise SystemExit("no USA observations extracted")

@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  allocateSurplus,
-  fundDeficit,
-} from "../../src/accounts/flows";
+import { allocateSurplus, fundDeficit } from "../../src/accounts/flows";
 import type { AccountType, SavingsPolicyStep } from "../../src/types";
 
 const empties = {
@@ -29,75 +26,42 @@ describe("allocateSurplus", () => {
       rrsp: out.contributions.rrsp,
       nonreg: out.contributions.nonreg,
     };
-    expect(out.contributions).toEqual(
-      expect.objectContaining({ tfsa: 10_000, rrsp: 0, nonreg: 0 }),
-    );
+    expect(out.contributions).toEqual(expect.objectContaining({ tfsa: 10_000, rrsp: 0, nonreg: 0 }));
     expect(out.newRooms).toEqual({ tfsa: 0, rrsp: 0 });
   });
 
   it("stops at the annual perYearCap", () => {
-    const policy: SavingsPolicyStep[] = [
-      { id: "s", priority: 1, target: "tfsa", perYearCap: 7_000 },
-    ];
-    const out = allocateSurplus(
-      12_000,
-      policy,
-      { tfsa: 20_000, rrsp: 0 },
-      { tfsa: 0, rrsp: 0, nonreg: 0, debt: 0 },
-    );
+    const policy: SavingsPolicyStep[] = [{ id: "s", priority: 1, target: "tfsa", perYearCap: 7_000 }];
+    const out = allocateSurplus(12_000, policy, { tfsa: 20_000, rrsp: 0 }, { tfsa: 0, rrsp: 0, nonreg: 0, debt: 0 });
     expect(out.contributions.tfsa).toBe(7_000);
     // Room reflects only what was contributed.
     expect(out.newRooms.tfsa).toBe(20_000 - 7_000);
   });
 
   it("does not return cash a second time after sweeping surplus to non-reg", () => {
-    const out = allocateSurplus(
-      5_000,
-      [],
-      { tfsa: 0, rrsp: 0 },
-      { tfsa: 0, rrsp: 0, nonreg: 0, debt: 0 },
-    );
+    const out = allocateSurplus(5_000, [], { tfsa: 0, rrsp: 0 }, { tfsa: 0, rrsp: 0, nonreg: 0, debt: 0 });
     expect(out.contributions.nonreg).toBe(5_000);
     expect(out.sweptToNonreg).toBe(5_000);
     expect(out.cash).toBe(0);
   });
 
   it("never exceeds available TFSA room (room-stop)", () => {
-    const policy: SavingsPolicyStep[] = [
-      { id: "s", priority: 1, target: "tfsa", perYearCap: 7_000 },
-    ];
-    const out = allocateSurplus(
-      12_000,
-      policy,
-      { tfsa: 3_000, rrsp: 0 },
-      { tfsa: 0, rrsp: 0, nonreg: 0, debt: 0 },
-    );
+    const policy: SavingsPolicyStep[] = [{ id: "s", priority: 1, target: "tfsa", perYearCap: 7_000 }];
+    const out = allocateSurplus(12_000, policy, { tfsa: 3_000, rrsp: 0 }, { tfsa: 0, rrsp: 0, nonreg: 0, debt: 0 });
     expect(out.contributions.tfsa).toBe(3_000);
     expect(out.newRooms.tfsa).toBe(0);
   });
 
   it("caps RRSP contributions at treaty room", () => {
     const policy: SavingsPolicyStep[] = [{ id: "s", priority: 1, target: "rrsp" }];
-    const out = allocateSurplus(
-      10_000,
-      policy,
-      { tfsa: 0, rrsp: 6_000 },
-      { tfsa: 0, rrsp: 0, nonreg: 0, debt: 0 },
-    );
+    const out = allocateSurplus(10_000, policy, { tfsa: 0, rrsp: 6_000 }, { tfsa: 0, rrsp: 0, nonreg: 0, debt: 0 });
     expect(out.contributions.rrsp).toBe(6_000);
     expect(out.newRooms.rrsp).toBe(0);
   });
 
   it("rrsp-match adds matchRate x contributed as employer match; the match is not surplus", () => {
-    const policy: SavingsPolicyStep[] = [
-      { id: "s", priority: 1, target: "rrsp-match", matchRate: 0.05 },
-    ];
-    const out = allocateSurplus(
-      10_000,
-      policy,
-      { tfsa: 0, rrsp: 20_000 },
-      { tfsa: 0, rrsp: 0, nonreg: 0, debt: 0 },
-    );
+    const policy: SavingsPolicyStep[] = [{ id: "s", priority: 1, target: "rrsp-match", matchRate: 0.05 }];
+    const out = allocateSurplus(10_000, policy, { tfsa: 0, rrsp: 20_000 }, { tfsa: 0, rrsp: 0, nonreg: 0, debt: 0 });
     // 10,000 employee + 500 employer = 10,500 landed; room consumed by both (PA).
     expect(out.contributions.rrsp).toBeCloseTo(10_500, 2);
     expect(out.newRooms.rrsp).toBeCloseTo(20_000 - 10_500, 2);
@@ -131,9 +95,7 @@ describe("allocateSurplus", () => {
   });
 
   it("routes mortgage-prepay into savings.mortgage, capped at the remaining balance", () => {
-    const policy: SavingsPolicyStep[] = [
-      { id: "p", priority: 1, target: "mortgage-prepay" },
-    ];
+    const policy: SavingsPolicyStep[] = [{ id: "p", priority: 1, target: "mortgage-prepay" }];
     const debt = {
       id: "m",
       kind: "mortgage" as const,

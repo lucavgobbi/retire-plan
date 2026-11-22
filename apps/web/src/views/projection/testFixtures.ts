@@ -12,8 +12,20 @@ export function makeSamplePlan(): Plan {
   const plan = createDefaultPlan();
   plan.accounts.push({ id: "tfsa-1", type: "tfsa", balance: 60_000, assetMix: { equity: 0.4, bond: 0.3, cash: 0.3 } });
   plan.accounts.push({ id: "rrsp-1", type: "rrsp", balance: 240_000, assetMix: { equity: 0.6, bond: 0.4, cash: 0 } });
-  plan.accounts.push({ id: "nonreg-1", type: "nonreg", balance: 90_000, assetMix: { equity: 0.5, bond: 0.2, cash: 0.3 } });
-  plan.incomes.push({ id: "salary", kind: "employment", annualAmount: 95_000, startAge: 45, endAge: 64, raiseRate: 0.02 });
+  plan.accounts.push({
+    id: "nonreg-1",
+    type: "nonreg",
+    balance: 90_000,
+    assetMix: { equity: 0.5, bond: 0.2, cash: 0.3 },
+  });
+  plan.incomes.push({
+    id: "salary",
+    kind: "employment",
+    annualAmount: 95_000,
+    startAge: 45,
+    endAge: 64,
+    raiseRate: 0.02,
+  });
   plan.incomes.push({ id: "cpp", kind: "cpp", annualAmount: 8_000, startAge: 65, raiseRate: 0 });
   plan.incomes.push({ id: "oas", kind: "oas", annualAmount: 8_907.72, startAge: 65, raiseRate: 0 });
   plan.expenses.push({ id: "living", name: "Living", annualAmount: 50_000, startAge: 45, inflationRate: 0.02 });

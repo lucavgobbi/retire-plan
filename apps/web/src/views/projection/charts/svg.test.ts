@@ -26,7 +26,15 @@ describe("stackedBandPaths geometry", () => {
 
   it("a zero middle series keeps later bands on their true lower boundary", () => {
     const yDomain = domainOf([200]);
-    const [, zeroPath, topPath] = stackedBandPaths([0, 1], [[100, 100], [0, 0], [100, 100]], yDomain);
+    const [, zeroPath, topPath] = stackedBandPaths(
+      [0, 1],
+      [
+        [100, 100],
+        [0, 0],
+        [100, 100],
+      ],
+      yDomain,
+    );
     // Zero band: degenerate (top == lower == 100), invisible but harmless.
     expect(zeroPath).toContain(formatY(100, yDomain));
     expect(zeroPath).not.toContain(formatY(0, yDomain));
@@ -40,7 +48,14 @@ describe("stackedBandPaths geometry", () => {
     const yDomain = domainOf([150]);
     // Second positive series with an isolated middle sample: its sliver must span
     // y(100)→y(150) — never down to the zero baseline (occlusion edge).
-    const [, topPath] = stackedBandPaths([0, 1, 2], [[100, NaN, 100], [50, NaN, 50]], yDomain);
+    const [, topPath] = stackedBandPaths(
+      [0, 1, 2],
+      [
+        [100, NaN, 100],
+        [50, NaN, 50],
+      ],
+      yDomain,
+    );
     const segments = topPath!.split("M").filter(Boolean);
     expect(segments.length).toBe(2); // two isolated points -> two slivers
     for (const segment of segments) {
@@ -52,7 +67,14 @@ describe("stackedBandPaths geometry", () => {
 
   it("a zero-area single point invents no height", () => {
     const yDomain = domainOf([100]);
-    const [, secondPath] = stackedBandPaths([0, 1, 2], [[100, NaN, 100], [0, NaN, 0]], yDomain);
+    const [, secondPath] = stackedBandPaths(
+      [0, 1, 2],
+      [
+        [100, NaN, 100],
+        [0, NaN, 0],
+      ],
+      yDomain,
+    );
     // Sliver spans its own zero-height slice (top == lower); nothing from the baseline.
     for (const segment of secondPath!.split("M").filter(Boolean)) {
       expect(segment).toContain(formatY(100, yDomain));

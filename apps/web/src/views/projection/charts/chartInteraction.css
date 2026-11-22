@@ -3,21 +3,42 @@
    so this file cannot collide with the table, inline-editor or shell styles. */
 
 /* The tooltip is absolutely positioned within the chart's own plot box. */
-.chart-plot { position: relative; }
+.chart-plot {
+  position: relative;
+}
 
 /* Cursor affordance + keep vertical page scroll working over charts on touch. */
-.chart-interactive { cursor: crosshair; touch-action: pan-y; animation: chart-entrance 0.3s ease both; }
-.chart-interactive:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.chart-interactive {
+  cursor: crosshair;
+  touch-action: pan-y;
+  animation: chart-entrance 0.3s ease both;
+}
+.chart-interactive:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
 
 @keyframes chart-entrance {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* Cursor motion feedback only — amounts themselves are never animated, so no
    transition can misrepresent a value. */
-.chart-interaction-crosshair { stroke: #52606d; stroke-width: 1; stroke-dasharray: 4 3; opacity: 0.9; transition: opacity 0.15s ease; }
-.chart-interaction-marker { transition: opacity 0.15s ease; }
+.chart-interaction-crosshair {
+  stroke: #52606d;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  opacity: 0.9;
+  transition: opacity 0.15s ease;
+}
+.chart-interaction-marker {
+  transition: opacity 0.15s ease;
+}
 .chart-interaction-tooltip {
   position: absolute;
   top: 6px;
@@ -33,10 +54,27 @@
   max-width: min(16rem, calc(100% - 12px));
   transition: left 0.08s ease-out;
 }
-.chart-interaction-tooltip-title { margin: 0 0 4px; font-weight: 600; font-size: 11px; color: #52606d; }
-.chart-interaction-tooltip dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: 2px 10px; }
-.chart-interaction-tooltip dt { color: #52606d; overflow-wrap: anywhere; }
-.chart-interaction-tooltip dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.chart-interaction-tooltip-title {
+  margin: 0 0 4px;
+  font-weight: 600;
+  font-size: 11px;
+  color: #52606d;
+}
+.chart-interaction-tooltip dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 10px;
+}
+.chart-interaction-tooltip dt {
+  color: #52606d;
+  overflow-wrap: anywhere;
+}
+.chart-interaction-tooltip dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 
 /* Screen-reader announcement for keyboard navigation (visually hidden). */
 .chart-interaction-live {
@@ -49,16 +87,24 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chart-interactive { animation: none; }
+  .chart-interactive {
+    animation: none;
+  }
   .chart-interaction-crosshair,
   .chart-interaction-marker,
-  .chart-interaction-tooltip { transition: none; }
+  .chart-interaction-tooltip {
+    transition: none;
+  }
 }
 
 @media print {
-  .chart-interactive { animation: none; }
+  .chart-interactive {
+    animation: none;
+  }
   .chart-interaction-crosshair,
   .chart-interaction-marker,
   .chart-interaction-tooltip,
-  .chart-interaction-live { display: none !important; }
+  .chart-interaction-live {
+    display: none !important;
+  }
 }

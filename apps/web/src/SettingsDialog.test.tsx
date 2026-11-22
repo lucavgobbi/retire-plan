@@ -11,7 +11,11 @@ function openSettings() {
 }
 
 function renderShell() {
-  render(<StoreProvider initialWorkspace={makeSampleWorkspace()}><AppShell provider={createMemoryStorageProvider()} /></StoreProvider>);
+  render(
+    <StoreProvider initialWorkspace={makeSampleWorkspace()}>
+      <AppShell provider={createMemoryStorageProvider()} />
+    </StoreProvider>,
+  );
 }
 
 describe("settings dialog", () => {

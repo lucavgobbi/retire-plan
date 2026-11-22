@@ -14,7 +14,12 @@ export const DEFAULT_SCENARIO_BASE: ScenarioBase = {
 export function createDefaultPlan(): Plan {
   return {
     profile: { birthYear: 1981, currentAge: 45, province: "ON", endAge: 100 },
-    accounts: [], assets: [], debts: [], incomes: [], expenses: [], savingsPolicy: [],
+    accounts: [],
+    assets: [],
+    debts: [],
+    incomes: [],
+    expenses: [],
+    savingsPolicy: [],
   };
 }
 export function createEmptyWorkspace(): Workspace {

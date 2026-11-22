@@ -24,13 +24,17 @@ export function FailBanner({ summary, onJump }: { summary: FailSummary; onJump?:
   };
   return (
     <p role="status" className="fail-banner">
-      <strong>
-        Plan fails at age {failureAge ?? "unknown"}
-      </strong>
-      {worstAge !== undefined && <> — worst shortfall at age {worstAge}</>}
-      {" "}
+      <strong>Plan fails at age {failureAge ?? "unknown"}</strong>
+      {worstAge !== undefined && <> — worst shortfall at age {worstAge}</>}{" "}
       <span className="hint">The remaining years still run.</span>
-      {failureAge !== undefined && <>{" "}<button type="button" className="fail-banner-jump" onClick={jump}>Jump to failing year</button></>}
+      {failureAge !== undefined && (
+        <>
+          {" "}
+          <button type="button" className="fail-banner-jump" onClick={jump}>
+            Jump to failing year
+          </button>
+        </>
+      )}
     </p>
   );
 }

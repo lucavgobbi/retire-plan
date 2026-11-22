@@ -84,9 +84,7 @@ describe("tfsaRoomNextYear", () => {
       // be double-count (2026 limit applied twice); 102,000 would be under-count
       // (2027 limit skipped).
       const net = seeded.room - tables.tfsa.annualLimit;
-      expect(tfsaRoomNextYear({ room: net, currentAge: 50 }, 0, tables, true)).toBe(
-        tables.tfsa.cumulativeRoomAsOf2026,
-      );
+      expect(tfsaRoomNextYear({ room: net, currentAge: 50 }, 0, tables, true)).toBe(tables.tfsa.cumulativeRoomAsOf2026);
     });
 
     it("with no 2026 contributions the first call adds exactly one more limit", () => {
