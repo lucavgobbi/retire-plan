@@ -54,20 +54,31 @@ stream pays nothing. Salary and bonus use the same active years. Fixed end ages
 are inclusive, and older streams without an end age or a retirement link stay
 ongoing. CPP, OAS, expenses and savings steps use their own ages.
 
-In a plan with retirement-linked employment, employer RRSP matching requires
-positive employment pay in the year. Fixed or ongoing employment can still
-qualify. In a year without employment pay, a match step becomes an ordinary
-employee RRSP contribution and follows the proactive-withdrawal guard.
+Employer RRSP matching requires positive employment pay in the year. Fixed,
+ongoing and retirement-linked employment can qualify. In a year without
+employment pay, a match step becomes an ordinary employee RRSP contribution.
+
+An employment stream can also specify an independent employer RRSP contribution
+as a percentage of its raised base salary before any bonus and an optional
+annual dollar cap. It follows the stream's active years and is deposited
+before savings-policy contributions, including in a deficit year. Deposits
+draw on shared RRSP room and account capacity. Any blocked employer amount,
+including when there is no RRSP account, is reported for that year and creates
+no cash, balance, taxable benefit or deduction. A match step's policy cap
+applies to the employee deposit. The employee deposit and its full match must
+fit together in remaining RRSP room and account capacity.
 
 ## Employee payroll deductions
 
 The optional scenario payroll settings enable CPP and EI independently. Legacy
 scenarios omit payroll deductions, and enabled scenarios use the employee share
 for one Ontario taxpayer with one employer per calendar year. All active employment
-streams are combined with their same-year bonuses before calculating CPP, CPP2
-and EI. Each stream should enter gross pay. The annual calculation assumes those
-wages are pensionable and insurable and excludes employer contributions,
-self-employment, Quebec payroll and multi-employer reconciliation.
+streams, bonuses and landed employer RRSP deposits share a single calculation
+of CPP, CPP2 and EI. The model assumes a group RRSP that permits withdrawals
+during employment, so employer deposits are pensionable and insurable under
+the same rules as wages. Payroll models employee deductions only.
+Self-employment, Quebec payroll and multi-employer reconciliation are outside
+the model. [CRA taxable benefits and payroll guide](https://www.canada.ca/en/revenue-agency/services/forms-publications/publications/t4130/employers-guide-taxable-benefits-allowances.html)
 
 The bundled model uses the 2026 payroll rates, earnings ceilings, basic CPP
 exemption and EI refund threshold in every projected year. Like the annual
@@ -142,10 +153,14 @@ schedule is pinned in `packages/engine/tests/benefits/rrif.test.ts` and sourced 
 
 ## Year stepper conventions
 
-- **RRSP room availability (in-year):** the allocator treats a year's earned room
-  (18% of salary, capped at the annual limit) as contributable THAT year; CRA formally
-  makes it contributable the following year. The employer pension adjustment is applied
-  once, at the year-end room roll.
+- **RRSP room availability (in-year):** the projection starts with zero
+  carryforward and makes room on salary and bonuses (18%, capped at the annual
+  limit) usable in the same year. CRA uses prior-year earned income and permits
+  personal RRSP contributions through the year the account holder turns 71.
+  All landed RRSP deposits consume room once. At year end the model adds any
+  incremental room earned on the taxable employer benefit, within the same
+  annual limit, for use in later years. Group RRSP deposits do not generate
+  pension adjustments. [CRA RRSP guide](https://www.canada.ca/en/revenue-agency/services/forms-publications/publications/t4040/rrsps-other-registered-plans-retirement.html) · [CRA Pension Adjustment Guide](https://www.canada.ca/en/revenue-agency/services/forms-publications/publications/t4084/pension-adjustment-guide.html)
 - **RRIF minimum's own tax:** the year's obligation prices the mandatory RRIF minimum's
   marginal tax in, so a year funded only by the minimum lands in the funding branch it
   really belongs to (its tax is never silently swallowed by a surplus clamp).
@@ -154,11 +169,21 @@ schedule is pinned in `packages/engine/tests/benefits/rrif.test.ts` and sourced 
   taken from the next account in the withdrawal order, or recorded as shortfall.
 - **Final mortgage year:** annual mortgage cash is capped at (opening balance +
   interest) — a partial final year does not bill payments that were never due.
-- **Unmatched policy steps:** a savings-policy step aimed at an account type the plan
-  does not hold is skipped (the money stays in the surplus default). Unallocated
-  surplus defaults to non-registered only when a non-registered account exists.
-- **Employer RRSP match:** an income-side inflow (compensation) that lands in the RRSP
-  tax-free in v1 and consumes RRSP room through the pension adjustment.
+- **Savings overflow:** contributions that cannot land continue to the next
+  savings-policy step. The default sweep uses available non-registered account
+  capacity, then retains any excess as idle cash. Savings steps accept whole
+  cents and round down when a step cap or the remaining capacity binds.
+  Without a named cash account an explicit cash step can deposit into idle cash.
+- **Employer RRSP tax and cash flow:** landed employer deposits are taxable
+  employment benefits with an equal modeled RRSP deduction. Employee-funded
+  RRSP deductions are outside this model. Employer deposits appear as direct
+  RRSP transfers, outside household spendable cash. Employee payroll cost,
+  tax credits and enhanced CPP deductions can change with the benefit.
+  The model reconciles contingent match against the surplus available after
+  payroll and income tax, including when a match changes EI refund eligibility.
+  CRA permits an employer to omit income-tax withholding on the benefit
+  when it reasonably expects the employee to deduct it that year.
+  [CRA taxable benefits and payroll guide](https://www.canada.ca/en/revenue-agency/services/forms-publications/publications/t4130/employers-guide-taxable-benefits-allowances.html)
 - **GIS sequencing:** GIS is evaluated on THIS year's income streams but the PRIOR
   year's RRSP/TFSA withdrawals (single-pass-y sequencing simplification).
 - **Projection cash reserve:** the plan has no starting cash account, but cash is tracked
@@ -166,7 +191,7 @@ schedule is pinned in `packages/engine/tests/benefits/rrif.test.ts` and sourced 
   no eligible investment account can receive it. The reserve earns no return and is
   available to meet later-year obligations before investment withdrawals.
 - **Non-registered ACB (Task 14):** basis is tracked as an aggregate across all
-  non-reg accounts. Because flows distribute proportional to balance, the aggregate
+  non-reg accounts. Because withdrawals distribute proportional to balance, the aggregate
   book/market ratio is exact under that distribution. `AccountPlan.bookValue` seeds
   current basis; if omitted, it defaults to market value for backwards compatibility.
   Contributions and home-sale proceeds enter at par. Growth adds the portfolio's dollar
@@ -227,10 +252,14 @@ series, including its cash-class rate, is applied only to invested accounts.
 - **GIS:** the prior year's cash interest counts in the GIS income test
   (`prevCashInterest`), mirroring prior-year realized gains; principal
   withdrawals do not.
-- **Deposits/withdrawals** follow the existing same-type rules: proportional to
-  current balances among same-type accounts, first account when all balances are
-  zero. A `target: "cash"` savings step with no named cash account retains the
-  deposit as the floating pool (still reported as a cash contribution/saving).
+- **Savings deposit order:** within each account type, explicit lower
+  priorities fill first, then accounts with no priority. Ties follow plan
+  order. Setting a priority or an annual deposit limit on any account of a
+  type activates this order for the type. Without either setting, deposits
+  are proportional to current balances or go to the first account if all
+  are empty. Annual limits cover gross savings deposits from all sources,
+  reset each projection year and exclude direct asset-sale transfers.
+  Withdrawals and direct asset-sale transfers remain proportional by balance.
 - **Withdrawal order:** a plan's `withdrawalOrder` contains tfsa/nonreg/rrsp
   exactly once each, plus optional cash once. When named cash accounts exist and
   the stored order predates cash, the engine draws cash first (most-liquid
@@ -297,12 +326,10 @@ Absent (or `"manual"`) means the configured `withdrawalOrder` runs exactly as be
   A feasible candidate chosen over a failed manual baseline may cost more tax; the
   comparison fields disclose that. No arbitrary wealth floor; final net worth is
   disclosed, not optimized.
-- **Circular-redeposit guard:** in a year with a planned proactive draw, only
-  EMPLOYEE `rrsp` savings-policy steps are suppressed (withdrawing does not recreate
-  contribution room, so an immediate re-contribution of the same cash is artificial).
-  Employer `rrsp-match` steps are still subject to the plan's wage eligibility,
-  and every tfsa/nonreg/cash/mortgage step continues on its schedule. The
-  exact suppression is visible per year (`contributions.rrsp === 0` in planned years
-  where an rrsp step would otherwise contribute).
+- **Circular-redeposit guard:** in a year with a planned proactive draw,
+  ordinary employee RRSP savings steps are suppressed. A match step can still
+  use after-tax surplus available without the proactive draw, up to what
+  remains after earlier policy steps. Independent employer deposits and TFSA,
+  non-registered, cash and mortgage steps continue on their schedules.
 - Planned draws are taxed like any RRSP withdrawal and count as GIS income the
   following year via the standard prior-year withdrawal channel.

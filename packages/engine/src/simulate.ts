@@ -22,7 +22,7 @@ import { gisAnnual } from "./benefits/gis";
 import { rrifMinimum } from "./benefits/rrif";
 import { tfsaRoomNextYear, rrspRoomEarn } from "./accounts/rooms";
 import { mortgageYear } from "./mortgage";
-import { allocateSurplus } from "./accounts/flows";
+import { allocateSurplus, type AllocateSurplusResult } from "./accounts/flows";
 
 /** Storage-boundary rounding: money leaves the engine as whole cents. */
 function roundCent(x: number): number {
@@ -67,6 +67,8 @@ interface AccountState {
   balance: number;
   mix: AccountPlan["assetMix"];
   interestRate?: number; // cash accounts only
+  depositPriority?: number;
+  annualDepositLimit?: number;
 }
 
 interface AssetState {
@@ -159,8 +161,8 @@ function taxOf(
  *  8. shortfall = unfunded need; expenses absorb it — successive years stay runnable
  *     (Review Focus #3): never NaN, never negative balances.
  *
- * Employer RRSP match is recognized as an income-side inflow (compensation) that lands
- * in the RRSP tax-free in v1 and consumes RRSP room via the pension adjustment.
+ * Employer-funded RRSP amounts are direct deposits and taxable employment
+ * benefits offset by a deduction, subject to available room and capacity.
  */
 export function simulate(
   plan: Plan,
@@ -232,7 +234,33 @@ export function simulate(
     balance: a.balance,
     mix: a.assetMix,
     ...(a.interestRate === undefined ? {} : { interestRate: a.interestRate }),
+    depositPriority: a.depositPriority,
+    annualDepositLimit: a.annualDepositLimit,
   }));
+  const omittedPriority = Number.MAX_SAFE_INTEGER + 1;
+  const depositOrders = new Map(
+    accountTypes.flatMap((type) => {
+      const group = accounts.filter((account) => account.type === type);
+      if (!group.some((account) => account.depositPriority !== undefined || account.annualDepositLimit !== undefined)) {
+        return [];
+      }
+      return [
+        [
+          type,
+          group.sort((a, b) => (a.depositPriority ?? omittedPriority) - (b.depositPriority ?? omittedPriority)),
+        ] as const,
+      ];
+    }),
+  );
+  const capacity: Partial<Record<AccountType, number>> = {};
+  for (const [type, group] of depositOrders) {
+    capacity[type] = roundCent(group.reduce((sum, account) => sum + (account.annualDepositLimit ?? Infinity), 0));
+  }
+  const availableSavingsAccounts = {
+    tfsa: accounts.some((account) => account.type === "tfsa"),
+    rrsp: accounts.some((account) => account.type === "rrsp"),
+    nonreg: accounts.some((account) => account.type === "nonreg"),
+  };
   const assetStates: AssetState[] = plan.assets.map((h) => ({
     id: h.id,
     ...(h.name === undefined ? {} : { name: h.name }),
@@ -258,8 +286,7 @@ export function simulate(
   let prevCashInterest = 0; // prior year's cash-account interest counts as GIS income (principal never does)
 
   // Aggregate non-reg basis (ACB), plan Task 14 — tracked in aggregate because
-  // applyFlows distributes proportional to balance, which makes the aggregate
-  // ratio math exact (Sum(basis_i)/Sum(market) arithmetic collapses cleanly).
+  // Withdrawals are proportional by balance, so the aggregate basis ratio applies to every draw.
   let nonregBook = plan.accounts.reduce((sum, a) => sum + (a.type === "nonreg" ? (a.bookValue ?? a.balance) : 0), 0);
   let prevNonregGains = 0; // prior year's realized gains count as GIS income (with the taper)
 
@@ -269,12 +296,9 @@ export function simulate(
   let postRetirementShortfall = false;
   // A match step without eligible wages becomes an ordinary employee contribution,
   // including the guard against redepositing a proactive RRSP draw.
-  const hasLinkedEmployment = plan.incomes.some((income) => income.kind === "employment" && income.endAtRetirement);
-  const savingsWithoutEmployerMatch = hasLinkedEmployment
-    ? plan.savingsPolicy.map((step) =>
-        step.target === "rrsp-match" ? { ...step, target: "rrsp" as const, matchRate: undefined } : step,
-      )
-    : plan.savingsPolicy;
+  const savingsWithoutEmployerMatch = plan.savingsPolicy.map((step) =>
+    step.target === "rrsp-match" ? { ...step, target: "rrsp" as const, matchRate: undefined } : step,
+  );
 
   const years: YearResult[] = [];
 
@@ -339,6 +363,7 @@ export function simulate(
       roundCent(s.annualAmount * Math.pow(1 + s.raiseRate, age - s.startAge));
 
     let employment = 0;
+    let requestedEmployerContribution = 0;
     let cpp = 0;
     let oas = 0;
     let otherPlan = 0;
@@ -358,6 +383,10 @@ export function simulate(
         const bonus = bonusRate > 0 ? roundCent(amount * bonusRate) : 0;
         received = amount + bonus;
         employment += received;
+        requestedEmployerContribution += Math.min(
+          roundCent(Math.max(0, amount) * (s.employerContributionRate ?? 0)),
+          s.employerContributionAnnualCap ?? Infinity,
+        );
       } else if (s.kind === "cpp" && benefits.cpp) cpp += amount;
       else if (s.kind === "oas" && benefits.oas) oas += amount;
       else if (s.kind === "other") otherPlan += amount;
@@ -378,24 +407,8 @@ export function simulate(
 
     // Normalize the sum before applying payroll cutoffs or using it in cash flow.
     employment = roundCent(employment);
-    const payroll = annualPayroll(employment, cpp, age, scenario.payroll, yearTables.payroll, warnings);
-    const netPayrollCost = roundCent(payroll.total - payroll.eiRefund);
+    requestedEmployerContribution = roundCent(requestedEmployerContribution);
     const taxForYear = (income: IncomeForTax) => taxOf(income, yearTables, oas);
-
-    const gis =
-      age >= 65 && benefits.gis && benefits.oas
-        ? gisAnnual(
-            age,
-            {
-              cpp,
-              rrspRrifWithdrawals: prevWithdrawals.rrsp,
-              employmentIncome: employment - netPayrollCost,
-              otherTaxableIncome: otherPlan + Math.max(0, prevNonregGains) + prevCashInterest, // positive gains count; losses are not GIS deductions
-              tfsaWithdrawals: prevWithdrawals.tfsa,
-            },
-            yearTables,
-          )
-        : 0;
 
     let expenses = 0;
     const expenseBreakdown: NonNullable<YearResult["expenseBreakdown"]> = [];
@@ -469,114 +482,169 @@ export function simulate(
           Math.min(mres.paymentsMade * debt.monthlyPayment, mortgageStart + mres.interest)
         : 0;
 
-    // ---- 7-pre. Income base for every tax shape this year. CPP, OAS and 'other'
-    // streams are fully taxable and live in otherTaxableIncome; withdrawals are
-    // layered on top per branch (tax0 is the floor, taxWithDue adds the RRIF minimum).
-    const incomeBase: IncomeForTax = {
-      employmentIncome: employment,
-      payrollCreditAmount: roundCent(payroll.cppBase + payroll.ei - payroll.eiRefund),
-      enhancedCppDeduction: payroll.enhancedCppDeduction,
-      otherTaxableIncome: cpp + oas + otherPlan + cashInterest,
-      rrspWithdrawals: 0,
-      pensionEligibleIncome: 0,
-      capitalGains,
-      dividendsEligible: 0,
-      age,
-    };
-    const incomeAfterWithdrawals = (rrspDraw: number, nonregGain: number): IncomeForTax => ({
-      ...incomeBase,
-      rrspWithdrawals: rrspDraw,
-      pensionEligibleIncome: age >= 65 ? rrspDraw : 0,
-      capitalGains: capitalGains + nonregGain,
-    });
+    // Employer money uses pre-benefit RRSP room and cannot create room for itself.
+    const roomRr = age <= 71 ? rrspRoomEarn(age, employment, rrspRoom, tables) : 0;
+    const rrspCapacity = availableSavingsAccounts.rrsp ? (capacity.rrsp ?? Infinity) : 0;
+    const employerContribution = Math.min(
+      requestedEmployerContribution,
+      Math.floor(Math.min(roomRr, rrspCapacity) * 100 + 1e-8) / 100,
+    );
+    const blockedEmployerContribution = roundCent(requestedEmployerContribution - employerContribution);
+    if (blockedEmployerContribution > 0) {
+      warnings.push(
+        `$${blockedEmployerContribution.toFixed(2)} of the independent employer RRSP contribution could not be deposited at age ${age} because eligible RRSP room or account capacity was unavailable.`,
+      );
+    }
+    const remainingCapacity = { ...capacity, rrsp: rrspCapacity - employerContribution };
+    const remainingRooms = { tfsa: tfsaRoom, rrsp: roomRr - employerContribution };
 
-    // ---- 5a. Mandatory RRIF minimum, first and always (Task 8)
+    // Mandatory RRIF and proactive draws use only the balance available before savings.
     const rrspAtStart = sumType(accounts, "rrsp");
     let rrifDue = 0;
     if (age >= 71 && rrspAtStart > 0) {
       const due = rrifMinimum(age, rrspAtStart, yearTables);
       if (due) rrifDue = Math.min(due.minimum, rrspAtStart);
     }
+    const balances = {
+      tfsa: sumType(accounts, "tfsa"),
+      rrsp: rrspAtStart,
+      nonreg: sumType(accounts, "nonreg"),
+      debt: mres.endBalance,
+    };
+    const savingsPolicy = employment > 0 ? plan.savingsPolicy : savingsWithoutEmployerMatch;
 
-    // The obligation prices the mandatory minimum's OWN tax in: a year whose only
-    // funding is the RRIF minimum must land in the deficit branch when minimum plus
-    // streams cannot cover expenses plus its tax (otherwise the surplus branch would
-    // silently swallow the gap with its Math.max(0, ...) clamp).
-    // ---- 5a-pre. Proactive tax-strategy draw (tax-minimizing only): an EXTRA draw
-    // above the mandatory RRIF minimum (the minimum itself is unchanged — it stays
-    // factor x opening balance) that fills this year's taxable income to the planned
-    // target, capped by the RRSP balance remaining after the minimum. The target is a
-    // base-table federal value in the plan; execution re-resolves the SAME semantics
-    // per year from the INDEXED year tables, using current-year state only (no
-    // lookahead). Proceeds land in spendable cash; the draw is taxed like any RRSP
-    // withdrawal and counts as GIS income next year (via prevWithdrawals, automatic).
-    let plannedRrspDraw = 0;
-    if (policy && policy.fillTargetTaxable > 0) {
-      const rrspRoomLeft = Math.max(0, rrspAtStart - rrifDue);
-      if (rrspRoomLeft > 0) {
-        const baseTaxable = taxableIncome(incomeAfterWithdrawals(rrifDue, 0));
-        plannedRrspDraw = roundCent(Math.min(rrspRoomLeft, Math.max(0, policy.fillTargetTaxable - baseTaxable)));
+    const quote = (match: number, matchLimit?: number) => {
+      const payrollWarnings: string[] = [];
+      const employerBenefit = roundCent(employerContribution + match);
+      const grossEmployment = roundCent(employment + employerBenefit);
+      const payroll = annualPayroll(grossEmployment, cpp, age, scenario.payroll, yearTables.payroll, payrollWarnings);
+      const netPayrollCost = roundCent(payroll.total - payroll.eiRefund);
+      const gis =
+        age >= 65 && benefits.gis && benefits.oas
+          ? gisAnnual(
+              age,
+              {
+                cpp,
+                rrspRrifWithdrawals: prevWithdrawals.rrsp,
+                employmentIncome: employment - netPayrollCost,
+                otherTaxableIncome: otherPlan + Math.max(0, prevNonregGains) + prevCashInterest,
+                tfsaWithdrawals: prevWithdrawals.tfsa,
+              },
+              yearTables,
+            )
+          : 0;
+      const incomeAfterWithdrawals = (rrspDraw: number, nonregGain: number): IncomeForTax => ({
+        employmentIncome: grossEmployment,
+        employerRrspDeduction: employerBenefit,
+        payrollCreditAmount: roundCent(payroll.cppBase + payroll.ei - payroll.eiRefund),
+        enhancedCppDeduction: payroll.enhancedCppDeduction,
+        otherTaxableIncome: cpp + oas + otherPlan + cashInterest,
+        rrspWithdrawals: rrspDraw,
+        pensionEligibleIncome: age >= 65 ? rrspDraw : 0,
+        capitalGains: capitalGains + nonregGain,
+        dividendsEligible: 0,
+        age,
+      });
+      const plannedRrspDraw =
+        policy && policy.fillTargetTaxable > 0
+          ? roundCent(
+              Math.min(
+                Math.max(0, rrspAtStart - rrifDue),
+                Math.max(0, policy.fillTargetTaxable - taxableIncome(incomeAfterWithdrawals(rrifDue, 0))),
+              ),
+            )
+          : 0;
+      const fundedRrspDraw = rrifDue + plannedRrspDraw;
+      // Include the draws' own tax before choosing between savings and deficit funding.
+      const taxWithDue = taxForYear(incomeAfterWithdrawals(fundedRrspDraw, 0));
+      const cash = employment + cpp + oas + otherPlan + gis + fundedRrspDraw + cashBalance - netPayrollCost;
+      const obligation = expenses + taxWithDue.total + mortgageCash;
+      const surplusWithoutProactiveDraw =
+        plannedRrspDraw > 0
+          ? cash - plannedRrspDraw - expenses - mortgageCash - taxForYear(incomeAfterWithdrawals(rrifDue, 0)).total
+          : undefined;
+      const allocation =
+        cash >= obligation
+          ? allocateSurplus(
+              cash - obligation,
+              savingsPolicy,
+              remainingRooms,
+              balances,
+              debt,
+              age,
+              availableSavingsAccounts,
+              plannedRrspDraw > 0,
+              remainingCapacity,
+              matchLimit,
+              surplusWithoutProactiveDraw,
+            )
+          : undefined;
+      return {
+        payroll,
+        payrollWarnings,
+        gis,
+        incomeAfterWithdrawals,
+        plannedRrspDraw,
+        fundedRrspDraw,
+        taxWithDue,
+        cash,
+        obligation,
+        allocation,
+      };
+    };
+
+    let settled = quote(0);
+    const initialMatch = settled.allocation?.employerMatch ?? 0;
+    if (initialMatch > 0) {
+      settled = quote(initialMatch);
+      const observedMatch = roundCent(settled.allocation?.employerMatch ?? 0);
+      if (observedMatch !== roundCent(initialMatch)) {
+        // Across the EI refund cutoff, an unconstrained quote can oscillate.
+        // Find the largest match whose own payroll cost the allocation can fund.
+        // A match cannot exceed half the gross deposit, since the rate is at most 1.
+        let low = 0;
+        let high = Math.floor(Math.min(remainingRooms.rrsp, remainingCapacity.rrsp) * 50 + 1e-8);
+        if (observedMatch < initialMatch) high = Math.round(initialMatch * 100) - 1;
+        while (low < high) {
+          const middle = low + Math.ceil((high - low) / 2);
+          const trial = quote(middle / 100);
+          if (Math.round((trial.allocation?.employerMatch ?? 0) * 100) >= middle) low = middle;
+          else high = middle - 1;
+        }
+        settled = quote(low / 100, low / 100);
       }
     }
-    const fundedRrspDraw = rrifDue + plannedRrspDraw;
-    const taxWithDue = taxForYear(incomeAfterWithdrawals(fundedRrspDraw, 0));
-    const cash = employment + cpp + oas + otherPlan + gis + rrifDue + plannedRrspDraw + cashBalance - netPayrollCost;
-    const obligation = expenses + taxWithDue.total + mortgageCash;
+    const {
+      payroll,
+      payrollWarnings,
+      gis,
+      incomeAfterWithdrawals,
+      plannedRrspDraw,
+      fundedRrspDraw,
+      taxWithDue,
+      cash,
+      obligation,
+      allocation,
+    } = settled;
+    warnings.push(...payrollWarnings);
 
     const withdrawals: YearResult["withdrawals"] = { tfsa: 0, rrsp: fundedRrspDraw, nonreg: 0 };
-    const contributions: YearResult["contributions"] = { tfsa: 0, rrsp: 0, nonreg: 0 };
+    const contributions: YearResult["contributions"] = { tfsa: 0, rrsp: employerContribution, nonreg: 0 };
     let contributionsCash = 0;
-    let employerMatch = 0;
+    const employerMatch = roundCent(allocation?.employerMatch ?? 0);
     let mortgagePrepay = 0;
     let shortfall = 0;
     let finalTax = taxWithDue;
-
-    // Each taxable draw updates the year's running tax and the cash still needed.
     let nonregGains = 0;
 
-    const roomTf = tfsaRoom; // this year's room available to the allocator
-    // RRSP room available IN-YEAR: carry-forward plus the room earned this year
-    // (capped at the annual limit). Documented v1 simplification — CRA formally
-    // makes a year's earned room contributable the following year. The employer
-    // pension adjustment is applied once, at the year-end roll below.
-    const roomRr = rrspRoom + Math.min(tables.rrsp.incomeRate * Math.max(0, employment), tables.rrsp.annualLimit);
-
-    if (cash >= obligation) {
-      // ---- Surplus branch: the year funds everything including the RRIF minimum's tax.
-      // Mandatory RRIF minimum is taken even in surplus years (counted as withdrawal,
-      // returned to cash inside `cash`).
-      const allocation = allocateSurplus(
-        Math.max(0, cash - expenses - finalTax.total - mortgageCash),
-        employment > 0 ? plan.savingsPolicy : savingsWithoutEmployerMatch,
-        { tfsa: roomTf, rrsp: roomRr },
-        {
-          tfsa: sumType(accounts, "tfsa"),
-          rrsp: sumType(accounts, "rrsp"),
-          nonreg: sumType(accounts, "nonreg"),
-          debt: mres.endBalance,
-        },
-        debt,
-        age,
-        {
-          tfsa: accounts.some((a) => a.type === "tfsa"),
-          rrsp: accounts.some((a) => a.type === "rrsp"),
-          nonreg: accounts.some((a) => a.type === "nonreg"),
-        },
-        // Circularity guard: suppress only EMPLOYEE rrsp savings steps in years with
-        // a proactive draw (the same cash must not flow RRSP -> out -> RRSP again).
-        // Employer rrsp-match, tfsa/nonreg/cash steps and mortgage prepay continue.
-        plannedRrspDraw > 0,
-      );
+    if (allocation) {
       contributions.tfsa = roundCent(allocation.contributions.tfsa);
-      contributions.rrsp = roundCent(allocation.contributions.rrsp);
+      contributions.rrsp = roundCent(employerContribution + allocation.contributions.rrsp);
       contributions.nonreg = roundCent(allocation.contributions.nonreg);
       contributionsCash = roundCent(allocation.contributions.cash ?? 0);
       mortgagePrepay = roundCent(allocation.amounts.mortgage);
-      employerMatch = roundCent(allocation.employerMatch);
       cashBalance = roundCent(allocation.cash);
-      // A cash-savings deposit with no named cash account to land in is retained
-      // as the floating idle-cash pool (the same store `balances.cash` counts);
-      // it stays reported as a cash contribution, mirroring account deposits.
+      // A cash step without a named destination is reported as an idle-cash deposit.
       if (contributionsCash > 0 && !hasNamedCash) {
         cashBalance = roundCent(cashBalance + contributionsCash);
       }
@@ -649,8 +717,12 @@ export function simulate(
     nonregBook += contributions.nonreg;
     if (contributionsCash > 0) contributions.cash = contributionsCash;
 
-    // ---- 5b. Flows into the accounts (proportional among same-type accounts)
-    applyFlows(accounts, withdrawals, contributions, employerMatch, accountDetails);
+    // ---- 5b. Apply withdrawals, then the accepted savings deposits.
+    applyFlows(accounts, withdrawals, contributions, accountDetails, depositOrders, {
+      independent: employerContribution,
+      match: employerMatch,
+      deposits: allocation?.rrspDeposits ?? [],
+    });
 
     // ---- 6. Growth on post-flow balances, each account at its own mix.
     // Non-reg basis grows with the market (Task 14 convention: ACB absorbs the
@@ -698,8 +770,12 @@ export function simulate(
         ),
       ),
     );
+    // The extra room earned on employer benefits first becomes available next year.
     rrspRoom = roundCent(
-      Math.max(0, rrspRoomEarn(age, employment, rrspRoom - contributions.rrsp, tables, employerMatch)),
+      Math.max(
+        0,
+        rrspRoomEarn(age, employment + employerContribution + employerMatch, rrspRoom - contributions.rrsp, tables),
+      ),
     );
 
     // ---- 7. Final tax figures + marginal rate (numeric derivative per $100)
@@ -738,7 +814,7 @@ export function simulate(
         cpp: roundCent(cpp),
         oas: roundCent(oas),
         gis: roundCent(gis),
-        other: roundCent(otherPlan + employerMatch),
+        other: roundCent(otherPlan + employerContribution + employerMatch),
       },
       // Optional cash fields are ABSENT (not 0) for plans without cash activity,
       // so legacy saved plans keep their exact result shapes.
@@ -797,6 +873,8 @@ export function simulate(
         assetSaleToIdleCash: roundCent(assetSaleToIdleCash),
         assetSaleToNonreg: roundCent(assetSaleToNonreg),
         employerRrspMatch: employerMatch,
+        ...(employerContribution > 0 ? { employerRrspContribution: employerContribution } : {}),
+        ...(blockedEmployerContribution > 0 ? { blockedEmployerRrspContribution: blockedEmployerContribution } : {}),
         cashContributionsToIdleCash: hasNamedCash ? 0 : contributionsCash,
       },
       shortfall: roundCent(shortfall),
@@ -881,8 +959,9 @@ function applyFlows(
   accounts: AccountState[],
   withdrawals: YearResult["withdrawals"],
   contributions: YearResult["contributions"],
-  employerMatch: number,
   details: Map<AccountState, AccountDetail>,
+  depositOrders: ReadonlyMap<AccountType, AccountState[]>,
+  employer: { independent: number; match: number; deposits: AllocateSurplusResult["rrspDeposits"] },
 ): void {
   for (const type of accountTypes) {
     const withdrawal = withdrawals[type] ?? 0;
@@ -898,26 +977,85 @@ function applyFlows(
     });
 
     const contribution = contributions[type] ?? 0;
+    const ordered = depositOrders.get(type);
+    if (ordered) {
+      if (type === "rrsp") {
+        applyOrderedDeposit(ordered, details, employer.independent, 0, true);
+        for (const deposit of employer.deposits) {
+          applyOrderedDeposit(ordered, details, deposit.amount, deposit.match);
+        }
+      } else {
+        applyOrderedDeposit(ordered, details, contribution);
+      }
+      continue;
+    }
+
     const deposits = distributeAccountFlow(accounts, type, contribution, false);
-    const match = type === "rrsp" ? employerMatch : 0;
+    const independent = type === "rrsp" ? employer.independent : 0;
+    const match = type === "rrsp" ? employer.match : 0;
     const gross = reportCents(
       deposits.map(({ amount }) => amount),
       contribution,
     );
-    // A rounded employer share cannot exceed this account's rounded total deposit.
+    const independentShares =
+      independent === 0
+        ? []
+        : reportCents(
+            deposits.map(({ weight }) => weight * independent),
+            independent,
+            gross,
+          );
+    // Both rounded employer shares together must fit the account's deposit.
     const matches =
       match === 0
         ? []
         : reportCents(
             deposits.map(({ weight }) => weight * match),
             match,
-            gross,
+            gross.map((amount, index) => amount - (independentShares[index] ?? 0)),
           );
     deposits.forEach(({ account }, index) => {
       const detail = details.get(account)!;
       const accountMatch = matches[index] ?? 0;
+      const accountIndependent = independentShares[index] ?? 0;
       detail.contributions = gross[index]!;
       if (accountMatch !== 0) detail.employerRrspMatch = accountMatch;
+      if (accountIndependent !== 0) detail.employerRrspContribution = accountIndependent;
+    });
+  }
+}
+
+function applyOrderedDeposit(
+  accounts: AccountState[],
+  details: Map<AccountState, AccountDetail>,
+  amount: number,
+  match = 0,
+  independent = false,
+): void {
+  let remaining = roundCent(amount);
+  const shares: { detail: AccountDetail; amount: number }[] = [];
+  for (const account of accounts) {
+    if (remaining === 0) break;
+    const detail = details.get(account)!;
+    const capacity = (account.annualDepositLimit ?? Infinity) - detail.contributions;
+    const take = roundCent(Math.min(remaining, capacity));
+    if (take <= 0) continue;
+    account.balance += take;
+    detail.contributions = roundCent(detail.contributions + take);
+    if (independent) detail.employerRrspContribution = take;
+    shares.push({ detail, amount: take });
+    remaining = roundCent(remaining - take);
+  }
+  if (match > 0) {
+    const gross = shares.map((share) => share.amount);
+    const matches = reportCents(
+      gross.map((share) => (share / amount) * match),
+      match,
+      gross,
+    );
+    shares.forEach(({ detail }, index) => {
+      const share = matches[index]!;
+      if (share > 0) detail.employerRrspMatch = roundCent((detail.employerRrspMatch ?? 0) + share);
     });
   }
 }

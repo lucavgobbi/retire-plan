@@ -35,7 +35,7 @@ export function tfsaRoomNextYear(
 
 /**
  * RRSP deduction room earned this year (the year's "added room" notice):
- * 18% of earned income net of employer contributions, capped by the annual limit,
+ * 18% of earned income (including any taxable group RRSP benefit), capped by the annual limit,
  * stacked on any unused carry-forward. The cap binds by construction inside the min(),
  * so no second overall cap check is needed.
  */
@@ -44,11 +44,7 @@ export function rrspRoomEarn(
   earnedIncome: number,
   carryforward: number,
   tables: TaxYearTables,
-  employerContributions: number,
 ): number {
   void currentAge; // reserved for future age-gated rules; the room formula has none
-  return (
-    carryforward +
-    Math.min(tables.rrsp.incomeRate * Math.max(0, earnedIncome - employerContributions), tables.rrsp.annualLimit)
-  );
+  return carryforward + Math.min(tables.rrsp.incomeRate * Math.max(0, earnedIncome), tables.rrsp.annualLimit);
 }

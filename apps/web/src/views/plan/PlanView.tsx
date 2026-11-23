@@ -11,7 +11,7 @@ import type {
 import { calculateCurrentAge, useWorkspace } from "../../store/api";
 import { NumberTextInput } from "../../components/NumberTextInput";
 import { InlineEditorPanel } from "../../components/InlineEditorPanel";
-import { fmtMoney, fmtPercent, fmtPercentInput } from "../projection/fmt";
+import { fmtMoney, fmtMoneyDetail, fmtPercent, fmtPercentInput } from "../projection/fmt";
 import { BenefitAmountGuide } from "./BenefitAmountGuide";
 import "./planView.css";
 
@@ -134,6 +134,17 @@ function requiredNumber(raw: string, label: string, errors: string[], minimum?: 
 function optionalNumber(raw: string, label: string, errors: string[], minimum?: number): number | undefined {
   if (raw.trim() === "") return undefined;
   return requiredNumber(raw, label, errors, minimum);
+}
+
+function optionalDepositCap(raw: string, label: string, errors: string[]): number | undefined {
+  const amount = optionalNumber(raw, label, errors, 0);
+  if (amount !== undefined) {
+    const cents = Math.round(amount * 100);
+    if (!Number.isSafeInteger(cents) || cents / 100 !== amount) {
+      errors.push(`${label} must be a dollar amount in whole cents.`);
+    }
+  }
+  return amount;
 }
 
 function requiredInteger(raw: string, label: string, errors: string[], minimum?: number): number {
@@ -304,6 +315,8 @@ interface AccountDraft {
   bond: string;
   cash: string;
   interestRate: string;
+  depositPriority: string;
+  annualDepositLimit: string;
 }
 const ACCOUNT_LABELS: Record<AccountPlan["type"], string> = {
   tfsa: "TFSA",
@@ -323,6 +336,8 @@ function accountDraft(account: AccountPlan): AccountDraft {
       bond: "",
       cash: "",
       interestRate: String((account.interestRate ?? 0) * 100),
+      depositPriority: account.depositPriority === undefined ? "" : String(account.depositPriority),
+      annualDepositLimit: account.annualDepositLimit === undefined ? "" : String(account.annualDepositLimit),
     };
   const mix = account.assetMix ?? { equity: 0.6, bond: 0.3, cash: 0.1 };
   return {
@@ -335,11 +350,18 @@ function accountDraft(account: AccountPlan): AccountDraft {
     bond: String(mix.bond * 100),
     cash: String(mix.cash * 100),
     interestRate: "0",
+    depositPriority: account.depositPriority === undefined ? "" : String(account.depositPriority),
+    annualDepositLimit: account.annualDepositLimit === undefined ? "" : String(account.annualDepositLimit),
   };
 }
 function readAccountDraft(draft: AccountDraft): { errors: string[]; item: AccountPlan } {
   const errors: string[] = [];
   const balance = requiredNumber(draft.balance, "Balance", errors, 0);
+  const depositPriority = optionalInteger(draft.depositPriority, "Deposit priority", errors, 0);
+  if (depositPriority !== undefined && Number.isInteger(depositPriority) && !Number.isSafeInteger(depositPriority)) {
+    errors.push(`Deposit priority must be at most ${Number.MAX_SAFE_INTEGER}.`);
+  }
+  const annualDepositLimit = optionalDepositCap(draft.annualDepositLimit, "Annual savings deposit cap", errors);
   if (draft.type === "cash") {
     const interestRate = requiredNumber(draft.interestRate, "Annual interest rate", errors, 0) / 100;
     return {
@@ -352,6 +374,8 @@ function readAccountDraft(draft: AccountDraft): { errors: string[]; item: Accoun
         bookValue: undefined,
         assetMix: undefined,
         interestRate,
+        depositPriority,
+        annualDepositLimit,
       },
     };
   }
@@ -371,6 +395,8 @@ function readAccountDraft(draft: AccountDraft): { errors: string[]; item: Accoun
       bookValue,
       assetMix: { equity: equity / 100, bond: bond / 100, cash: cash / 100 },
       interestRate: undefined,
+      depositPriority,
+      annualDepositLimit,
     },
   };
 }
@@ -385,6 +411,8 @@ function newAccountDraft(): AccountDraft {
     bond: "30",
     cash: "10",
     interestRate: "0",
+    depositPriority: "",
+    annualDepositLimit: "",
   };
 }
 
@@ -429,6 +457,33 @@ function AccountForm({
         min="0"
         onChange={(balance) => change({ balance })}
       />
+      <TextInput
+        label="Deposit priority"
+        value={draft.depositPriority}
+        min="0"
+        step="1"
+        optional
+        keepInvalidDraft
+        onChange={(depositPriority) => change({ depositPriority })}
+      />
+      <TextInput
+        label="Annual savings deposit cap ($)"
+        value={draft.annualDepositLimit}
+        min="0"
+        optional
+        keepInvalidDraft
+        onChange={(annualDepositLimit) => change({ annualDepositLimit })}
+      />
+      <p className="plan-help">
+        Within each account type, lower priorities receive deposits first. Accounts with a blank priority come last.
+        Ties follow the order shown here. If every account of that type has both fields blank, deposits are split in
+        proportion to balances.
+      </p>
+      <p className="plan-help">
+        The cap resets each year and counts personal, company, and matching RRSP deposits together. Interest and direct
+        asset-sale deposits are excluded. Blank means unlimited and $0 blocks savings deposits. Amounts above the cap go
+        to the next eligible account of the same type.
+      </p>
       {draft.type === "cash" ? (
         <TextInput
           label="Annual interest rate (%)"
@@ -705,6 +760,8 @@ interface IncomeDraft {
   endAtRetirement: boolean;
   raiseRate: string;
   bonusRate: string;
+  employerContributionRate: string;
+  employerContributionAnnualCap: string;
 }
 function incomeDraft(income: IncomePlan): IncomeDraft {
   return {
@@ -717,6 +774,10 @@ function incomeDraft(income: IncomePlan): IncomeDraft {
     endAtRetirement: income.endAtRetirement === true,
     raiseRate: String(income.raiseRate * 100),
     bonusRate: income.bonusRate === undefined ? "" : fmtPercentInput(income.bonusRate),
+    employerContributionRate:
+      income.employerContributionRate === undefined ? "" : fmtPercentInput(income.employerContributionRate),
+    employerContributionAnnualCap:
+      income.employerContributionAnnualCap === undefined ? "" : String(income.employerContributionAnnualCap),
   };
 }
 function newIncomeDraft(kind: IncomePlan["kind"], currentAge: number): IncomeDraft {
@@ -730,6 +791,8 @@ function newIncomeDraft(kind: IncomePlan["kind"], currentAge: number): IncomeDra
     endAtRetirement: kind === "employment",
     raiseRate: kind === "employment" ? "2" : "0",
     bonusRate: "",
+    employerContributionRate: "",
+    employerContributionAnnualCap: "",
   };
 }
 const INCOME_LABELS: Record<IncomePlan["kind"], string> = {
@@ -753,6 +816,21 @@ function readIncomeDraft(draft: IncomeDraft): { errors: string[]; item: IncomePl
   const bonusPct =
     draft.kind === "employment" ? optionalNumber(draft.bonusRate, "Annual bonus (%)", errors, 0) : undefined;
   const bonusRate = bonusPct === undefined ? undefined : bonusPct / 100;
+  const employerContributionPct =
+    draft.kind === "employment"
+      ? optionalNumber(draft.employerContributionRate, "Company RRSP contribution (%)", errors, 0)
+      : undefined;
+  const employerContributionRate = employerContributionPct === undefined ? undefined : employerContributionPct / 100;
+  if (employerContributionRate !== undefined && employerContributionRate > 1) {
+    errors.push("Company RRSP contribution must be between 0% and 100%.");
+  }
+  const employerContributionAnnualCap =
+    draft.kind === "employment"
+      ? optionalDepositCap(draft.employerContributionAnnualCap, "Annual company contribution cap", errors)
+      : undefined;
+  if (employerContributionAnnualCap !== undefined && employerContributionRate === undefined) {
+    errors.push("Annual company contribution cap requires a company contribution rate.");
+  }
   if (endAge !== undefined && endAge < startAge) errors.push("End age must be on or after start age.");
   return {
     errors,
@@ -766,6 +844,8 @@ function readIncomeDraft(draft: IncomeDraft): { errors: string[]; item: IncomePl
       endAtRetirement: endAtRetirement || undefined,
       raiseRate,
       bonusRate,
+      employerContributionRate,
+      employerContributionAnnualCap,
     },
   };
 }
@@ -820,7 +900,13 @@ function IncomeForm({
             kind,
             ...(kind === "employment"
               ? {}
-              : { endAtRetirement: false, ...(draft.endAtRetirement ? { endAge: "" } : {}), bonusRate: "" }),
+              : {
+                  endAtRetirement: false,
+                  ...(draft.endAtRetirement ? { endAge: "" } : {}),
+                  bonusRate: "",
+                  employerContributionRate: "",
+                  employerContributionAnnualCap: "",
+                }),
           })
         }
       />
@@ -882,6 +968,27 @@ function IncomeForm({
             onChange={(bonusRate) => change({ bonusRate })}
           />
           {bonusPreview(draft) !== null && <p className="plan-help">{bonusPreview(draft)}</p>}
+          <TextInput
+            label="Company RRSP contribution (% of base salary)"
+            value={draft.employerContributionRate}
+            min="0"
+            optional
+            keepInvalidDraft
+            onChange={(employerContributionRate) => change({ employerContributionRate })}
+          />
+          <TextInput
+            label="Annual company contribution cap ($)"
+            value={draft.employerContributionAnnualCap}
+            min="0"
+            optional
+            keepInvalidDraft
+            onChange={(employerContributionAnnualCap) => change({ employerContributionAnnualCap })}
+          />
+          <p className="plan-help">
+            Each active year, the company contribution uses your base salary after raises and before bonuses. It applies
+            even if you make no RRSP deposits, subject to available room and account caps. Leave the company cap blank
+            for no limit on the salary-based amount. A $0 cap blocks it.
+          </p>
         </>
       )}
       <ApplyNotice errors={errors} />
@@ -1067,12 +1174,19 @@ function SavingsForm({
         onChange={(untilAge) => change({ untilAge })}
       />
       {draft.target === "rrsp-match" && (
-        <TextInput
-          label="Employer match (%)"
-          value={draft.matchRate}
-          min="0"
-          onChange={(matchRate) => change({ matchRate })}
-        />
+        <>
+          <TextInput
+            label="Employer match (%)"
+            value={draft.matchRate}
+            min="0"
+            onChange={(matchRate) => change({ matchRate })}
+          />
+          <p className="plan-help">
+            The match applies only to your personal RRSP deposits made through this step in years with employment pay,
+            subject to available room and account caps. Set up company salary contributions on the employment income
+            card.
+          </p>
+        </>
       )}
       <ApplyNotice errors={errors} />
     </ItemForm>
@@ -1260,6 +1374,20 @@ function AccountSummary({ account, onEdit }: { account: AccountPlan; onEdit: () 
           ["Bonds", fmtPercent(account.assetMix?.bond)],
           ["Investment cash", fmtPercent(account.assetMix?.cash)],
         ];
+  details.push(
+    [
+      "Deposit priority",
+      account.depositPriority === undefined ? "None set" : `${account.depositPriority} (lower first)`,
+    ],
+    [
+      "Annual savings deposit cap",
+      account.annualDepositLimit === undefined
+        ? "Unlimited"
+        : account.annualDepositLimit === 0
+          ? "$0.00 (blocks deposits)"
+          : fmtMoneyDetail(account.annualDepositLimit),
+    ],
+  );
   return (
     <ReadOnlyItemCard
       title={account.name || `${label} account`}
@@ -1339,6 +1467,17 @@ function IncomeSummary({
     details.push(
       ["Annual bonus", fmtPercent(income.bonusRate!)],
       ["Starting annual pay", fmtMoney(income.annualAmount * (1 + income.bonusRate!))],
+    );
+  }
+  if (income.kind === "employment" && income.employerContributionRate !== undefined) {
+    details.push(
+      ["Company RRSP contribution", `${fmtPercent(income.employerContributionRate)} of base salary`],
+      [
+        "Annual company contribution cap",
+        income.employerContributionAnnualCap === undefined
+          ? "Unlimited"
+          : fmtMoneyDetail(income.employerContributionAnnualCap),
+      ],
     );
   }
   return (

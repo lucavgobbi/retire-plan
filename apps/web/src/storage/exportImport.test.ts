@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { IDBFactory } from "fake-indexeddb";
 import type { Workspace } from "../domain/types";
 import { SCHEMA_VERSION, validateWorkspace } from "./schema";
 import { buildPlanFile, parsePlanFile, planFileToText, workspaceToText } from "./exportImport";
 import { makeSampleWorkspace } from "../data/samplePlan";
+import { createStorageProvider } from "./db";
 
 describe("buildPlanFile / export text", () => {
   it("mirrors the live workspace into the current-schema envelope", () => {
@@ -60,6 +62,38 @@ describe("parsePlanFile", () => {
         interestRate: 0.035,
       });
       expect(parsed.workspace.plan.accounts.find((a) => a.type === "cash")?.assetMix).toBeUndefined();
+    }
+  });
+
+  it("round-trips RRSP deposit routing and company contribution fields through IndexedDB and JSON", async () => {
+    const ws = makeSampleWorkspace();
+    const rrsp = ws.plan.accounts.find((account) => account.type === "rrsp")!;
+    rrsp.depositPriority = 0;
+    rrsp.annualDepositLimit = 12_000.25;
+    ws.plan.accounts.push({
+      id: "rrsp-2",
+      name: "Second RRSP",
+      type: "rrsp",
+      balance: 50_000,
+      assetMix: { equity: 0.6, bond: 0.3, cash: 0.1 },
+      depositPriority: 1,
+      annualDepositLimit: 0,
+    });
+    const job = ws.plan.incomes.find((income) => income.kind === "employment")!;
+    job.employerContributionRate = 0.04;
+    job.employerContributionAnnualCap = 8_000.75;
+
+    const factory = new IDBFactory();
+    await createStorageProvider(factory).save(ws);
+    const loaded = await createStorageProvider(factory).load();
+    expect(loaded).toMatchObject({ kind: "loaded", workspace: { plan: ws.plan } });
+    if (loaded.kind !== "loaded") return;
+
+    const parsed = parsePlanFile(JSON.parse(workspaceToText(loaded.workspace)));
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.workspace.plan.accounts).toEqual(ws.plan.accounts);
+      expect(parsed.workspace.plan.incomes).toEqual(ws.plan.incomes);
     }
   });
 

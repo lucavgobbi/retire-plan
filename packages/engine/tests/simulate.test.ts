@@ -262,11 +262,8 @@ describe("simulate — focused, hand-checked cases", () => {
     const surplus = 120_000 - tax - 80_000;
     expect(y.contributions.rrsp).toBeCloseTo(surplus * 1.05, 1); // employee + 5% employer match
     expect(y.income.other).toBeCloseTo(surplus * 0.05, 1); // match recognized as employer compensation inflow
-    // Pension adjustment: the match reduces the earned room AND the used room is netted
-    // against the carryforward when the next room is computed. (±0.02: the engine
-    // records contributions/match in whole cents and the roll reuses those amounts.)
-    const expectedRoom = -surplus * 1.05 + tables.rrsp.incomeRate * Math.max(0, 120_000 - surplus * 0.05);
-    expect(Math.abs(y.rrspRoom - expectedRoom)).toBeLessThanOrEqual(0.02);
+    const expectedRoom = tables.rrsp.incomeRate * (120_000 + y.cashflow!.employerRrspMatch) - y.contributions.rrsp;
+    expect(y.rrspRoom).toBeCloseTo(expectedRoom, 2);
   });
 
   it("caps mortgage prepayment after scheduled payments and retains excess as cash", () => {

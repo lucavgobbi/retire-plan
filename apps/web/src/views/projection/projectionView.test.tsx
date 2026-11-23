@@ -428,7 +428,7 @@ describe("ProjectionView", () => {
     );
     expect(warnings.textContent).toContain("TFSA $7,000.00");
     expect(warnings.textContent).toContain("non-registered");
-    expect(warnings.textContent).toContain("not new employment savings");
+    expect(warnings.textContent).toContain("This year had no employment income.");
     expect(warnings.querySelectorAll("li")).toHaveLength(0);
   });
 
@@ -1457,11 +1457,11 @@ describe("YearDetailRow payroll card", () => {
     zero.unmount();
   });
 
-  it("details gross employment vs each deduction, the EI refund, and the corrected credit scope", () => {
+  it("details cash employment income, each deduction, the EI refund, and the corrected credit scope", () => {
     renderCard(withheld);
     const card = screen.getByRole("region", { name: "Payroll deductions" });
     const text = card.textContent ?? "";
-    expect(text).toContain("Gross employment");
+    expect(text).toContain("Cash employment income");
     expect(text).toContain(fmtMoneyDetail(95_000));
     expect(text).toContain(fmtMoneyDetail(4230.45));
     expect(text).toContain(fmtMoneyDetail(500));

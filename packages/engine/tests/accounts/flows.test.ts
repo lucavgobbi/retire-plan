@@ -62,7 +62,7 @@ describe("allocateSurplus", () => {
   it("rrsp-match adds matchRate x contributed as employer match; the match is not surplus", () => {
     const policy: SavingsPolicyStep[] = [{ id: "s", priority: 1, target: "rrsp-match", matchRate: 0.05 }];
     const out = allocateSurplus(10_000, policy, { tfsa: 0, rrsp: 20_000 }, { tfsa: 0, rrsp: 0, nonreg: 0, debt: 0 });
-    // 10,000 employee + 500 employer = 10,500 landed; room consumed by both (PA).
+    // 10,000 employee + 500 employer = 10,500 landed; room consumed by both deposits.
     expect(out.contributions.rrsp).toBeCloseTo(10_500, 2);
     expect(out.newRooms.rrsp).toBeCloseTo(20_000 - 10_500, 2);
     // The whole 10,000 surplus was the employee part; the 500 came from the employer.

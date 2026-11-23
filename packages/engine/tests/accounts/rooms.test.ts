@@ -13,7 +13,7 @@ const tables: TaxYearTables = loadTables(tablesJson);
 //   SEEDING: an eligible resident starts a 2026-based projection with room ==
 //   cumulativeRoomAsOf2026, which ALREADY includes the 2026 limit.
 //   RRSP new room = carryforward
-//                   + min(0.18 x max(0, earnedIncome - employerContributions), annualLimit).
+//                   + min(0.18 x max(0, earnedIncome), annualLimit).
 
 const noHistory: TfsaRoomState = { room: 0, currentAge: 18 };
 
@@ -114,33 +114,27 @@ describe("tfsaRoomNextYear", () => {
 
 describe("rrspRoomEarn", () => {
   it("earns 18% of earned income from no carryforward", () => {
-    expect(rrspRoomEarn(40, 100_000, 0, tables, 0)).toBe(18_000);
+    expect(rrspRoomEarn(40, 100_000, 0, tables)).toBe(18_000);
   });
 
   it("the annual limit caps the newly earned room", () => {
     // 0.18 x 300,000 = 54,000 > 33,810 -> capped at 33,810
-    expect(rrspRoomEarn(55, 300_000, 0, tables, 0)).toBe(33_810);
+    expect(rrspRoomEarn(55, 300_000, 0, tables)).toBe(33_810);
     // Room is capped at annualLimit + carryforward (with 0 carryforward, at annualLimit)
-    expect(rrspRoomEarn(55, 300_000, 0, tables, 0)).toBeLessThanOrEqual(tables.rrsp.annualLimit);
+    expect(rrspRoomEarn(55, 300_000, 0, tables)).toBeLessThanOrEqual(tables.rrsp.annualLimit);
   });
 
-  it("employer match reduces the pension-adjusted earned room", () => {
-    // 0.18 x max(0, 100,000 - 6,000) = 16,920
-    expect(rrspRoomEarn(40, 100_000, 0, tables, 6_000)).toBe(16_920);
-  });
-
-  it("employer contributions above income leave only the carryforward", () => {
-    // max(0, 10,000 - 12,000) = 0 -> carryforward only
-    expect(rrspRoomEarn(40, 10_000, 4_500, tables, 12_000)).toBe(4_500);
+  it("includes the taxable employer RRSP benefit in earned income", () => {
+    expect(rrspRoomEarn(40, 100_000 + 6_000, 0, tables)).toBe(19_080);
   });
 
   it("carryforward carries forward alongside newly earned room", () => {
     // carryforward 5,000 + 0.18 x 60,000 (10,800) = 15,800
-    expect(rrspRoomEarn(40, 60_000, 5_000, tables, 0)).toBe(15_800);
+    expect(rrspRoomEarn(40, 60_000, 5_000, tables)).toBe(15_800);
   });
 
   it("zero or negative income earns nothing beyond the carryforward", () => {
-    expect(rrspRoomEarn(40, 0, 2_000, tables, 0)).toBe(2_000);
-    expect(rrspRoomEarn(40, -5_000, 2_000, tables, 0)).toBe(2_000);
+    expect(rrspRoomEarn(40, 0, 2_000, tables)).toBe(2_000);
+    expect(rrspRoomEarn(40, -5_000, 2_000, tables)).toBe(2_000);
   });
 });

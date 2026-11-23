@@ -15,7 +15,7 @@ export interface AssumptionEntry {
 }
 
 export const TAX_MINIMIZING_STRATEGY_HELP =
-  "A bounded planning heuristic requires full funding in every modeled year, then prioritizes total income tax through your end age; it is not a global optimum. In years with a planned draw, employee RRSP savings-policy steps are skipped to avoid draw-and-redeposit circularity. Employer-match RRSP deposits and other savings rules remain available; remaining surplus follows those rules or is retained as cash. Stochastic outcomes can differ from the planning comparison.";
+  "A bounded planning heuristic requires full funding in every modeled year, then prioritizes total income tax through your end age. In years with a planned RRSP draw, ordinary personal RRSP savings steps are skipped. Personal deposits can still earn an employer match using after-tax household surplus calculated before the planned draw. Independent company RRSP contributions and other savings rules remain available. Stochastic outcomes can differ from the planning comparison.";
 
 export const ASSUMPTIONS: AssumptionEntry[] = [
   {
@@ -72,7 +72,7 @@ export const ASSUMPTIONS: AssumptionEntry[] = [
     title: "Earned RRSP room is contributable in the same year",
     category: "approximation",
     since: "v1",
-    body: "CRA formally makes a year's earned room contributable the FOLLOWING calendar year; the allocator treats it as available that year. The employer pension adjustment is applied once, at the year-end room roll.",
+    body: "CRA uses prior-year earned income; the model starts with zero carryforward and makes room on salary and bonuses (18%, capped at the annual limit) usable in the same year. All landed RRSP deposits consume room once. At year end the model adds any incremental room earned on the taxable employer benefit, within the same annual limit. Group RRSP deposits do not generate pension adjustments.",
   },
   {
     id: "rrif-minimum-tax",
@@ -104,10 +104,10 @@ export const ASSUMPTIONS: AssumptionEntry[] = [
   },
   {
     id: "employer-rrsp-match",
-    title: "Employer RRSP match is an income-side inflow",
+    title: "Employer RRSP deposits are taxable benefits with an equal deduction",
     category: "approximation",
     since: "v1",
-    body: "Match contributions land in the RRSP tax-free and consume RRSP room through the pension adjustment.",
+    body: "Employer matches and independent company RRSP deposits are taxable employment benefits with an equal modeled RRSP income tax deduction. The model assumes a group RRSP that permits withdrawals, so employer deposits are included in earnings for enabled CPP and EI calculations. Personal RRSP income tax deductions are outside the model. A match requires employment pay and personal deposits through the match step. Employer deposits go directly into the RRSP and use shared room and account capacity. The model reports any blocked independent company contribution.",
   },
   {
     id: "gis-sequencing",

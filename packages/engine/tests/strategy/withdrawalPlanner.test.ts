@@ -140,7 +140,7 @@ describe("tax-minimizing withdrawal strategy — real efficacy", () => {
     expect(sample.contributions.tfsa).toBeGreaterThan(0);
   });
 
-  it("rrsp-match (employer) steps are NOT suppressed by the circularity guard", () => {
+  it("retains a match funded by ordinary surplus in a planned-draw year", () => {
     const plan = suppressionPlan([
       { id: "match-s", priority: 1, target: "rrsp-match", matchRate: 0.5 },
       { id: "tfsa-s", priority: 2, target: "tfsa", perYearCap: 7_000 },
@@ -151,7 +151,8 @@ describe("tax-minimizing withdrawal strategy — real efficacy", () => {
     const plannedAges = new Set(meta.plannedWithdrawals.map((w) => w.age));
     const sample = optimized.years.find((y) => plannedAges.has(y.age) && y.shortfall === 0)!;
     expect(sample.plannedRrspDraw!).toBeGreaterThan(0);
-    expect(sample.contributions.rrsp).toBeGreaterThan(0); // employer match still lands
+    expect(sample.contributions.rrsp).toBe(9_000);
+    expect(sample.cashflow?.employerRrspMatch).toBe(3_000);
   });
 
   it("manual and legacy (absent strategy) are byte-identical, with no optimizer fields", () => {

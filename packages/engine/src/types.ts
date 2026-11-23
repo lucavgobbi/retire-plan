@@ -15,6 +15,10 @@ export interface AccountPlan {
   assetMix?: { equity: number; bond: number; cash: number };
   /** Fixed nominal annual interest for cash accounts only; omitted defaults to 0%. */
   interestRate?: number;
+  /** Same-type savings deposits fill lower priorities first. */
+  depositPriority?: number;
+  /** Gross annual savings deposits, including employer money. Direct asset sales are separate. */
+  annualDepositLimit?: number;
 }
 
 export interface AssetPlan {
@@ -59,6 +63,9 @@ export interface IncomePlan {
    * The bonus is paid the same year as the raised base — no separate payout date.
    */
   bonusRate?: number;
+  /** Independent employer RRSP contribution as a fraction of raised base salary. */
+  employerContributionRate?: number;
+  employerContributionAnnualCap?: number;
 }
 
 export interface ExpensePlan {
@@ -178,6 +185,8 @@ export interface YearResult {
     contributions: number;
     /** Included in contributions. */
     employerRrspMatch?: number;
+    /** Independent employer amount included in contributions. */
+    employerRrspContribution?: number;
     cashInterest?: number;
     /** Sale proceeds deposited directly, separate from contributions. */
     assetSaleDeposit?: number;
@@ -209,6 +218,10 @@ export interface YearResult {
     assetSaleToNonreg: number;
     /** Already included in both income.other and contributions.rrsp. */
     employerRrspMatch: number;
+    /** Independent employer amount included in both income.other and contributions.rrsp. */
+    employerRrspContribution?: number;
+    /** Independent employer amount that could not be deposited this year. */
+    blockedEmployerRrspContribution?: number;
     /** Already included in contributions.cash and closingIdleCash. */
     cashContributionsToIdleCash: number;
   };
@@ -292,6 +305,11 @@ export interface SimulationResult {
   withdrawalPlan?: WithdrawalPlanMetadata;
 }
 
+function isCentAmount(value: number): boolean {
+  const cents = Math.round(value * 100);
+  return value >= 0 && Number.isSafeInteger(cents) && cents / 100 === value;
+}
+
 /**
  * Validates a plan and returns plain-language error messages.
  * An empty array means the plan is valid.
@@ -316,6 +334,15 @@ export function validatePlan(plan: Plan): string[] {
   }
 
   for (const account of plan.accounts) {
+    if (
+      account.depositPriority !== undefined &&
+      (!Number.isSafeInteger(account.depositPriority) || account.depositPriority < 0)
+    ) {
+      errors.push(`Account "${account.id}" depositPriority must be a non-negative safe integer.`);
+    }
+    if (account.annualDepositLimit !== undefined && !isCentAmount(account.annualDepositLimit)) {
+      errors.push(`Account "${account.id}" annualDepositLimit must be a non-negative dollar amount in whole cents.`);
+    }
     if (account.balance < 0) {
       errors.push(`Account "${account.id}" has a negative balance (${account.balance}); balances cannot be negative.`);
     }
@@ -382,6 +409,19 @@ export function validatePlan(plan: Plan): string[] {
   }
 
   for (const income of plan.incomes) {
+    const employerRate = income.employerContributionRate;
+    const employerCap = income.employerContributionAnnualCap;
+    if (employerRate !== undefined && (!Number.isFinite(employerRate) || employerRate < 0 || employerRate > 1)) {
+      errors.push(`Income "${income.id}" employerContributionRate must be between 0 and 1.`);
+    }
+    if (employerCap !== undefined && (!isCentAmount(employerCap) || employerRate === undefined)) {
+      errors.push(
+        `Income "${income.id}" employerContributionAnnualCap requires a rate and a non-negative dollar amount in whole cents.`,
+      );
+    }
+    if ((employerRate !== undefined || employerCap !== undefined) && income.kind !== "employment") {
+      errors.push(`Income "${income.id}" employer RRSP contributions are supported only for employment income.`);
+    }
     if (income.startAge <= 0) {
       errors.push(`Income "${income.id}" startAge must be a positive age (got ${income.startAge}).`);
     }
@@ -429,7 +469,10 @@ export function validatePlan(plan: Plan): string[] {
         `Savings step "${step.id}" perYearCap must be >= 0 (got ${step.perYearCap}); negative savings targets are inconsistent.`,
       );
     }
-    if (step.matchRate !== undefined && (step.matchRate < 0 || step.matchRate > 1)) {
+    if (
+      step.matchRate !== undefined &&
+      (!Number.isFinite(step.matchRate) || step.matchRate < 0 || step.matchRate > 1)
+    ) {
       errors.push(`Savings step "${step.id}" matchRate must be between 0 and 1 (got ${step.matchRate}).`);
     }
     if (step.untilAge !== undefined && step.untilAge <= 0) {

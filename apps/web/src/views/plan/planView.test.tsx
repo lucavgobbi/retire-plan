@@ -240,6 +240,100 @@ describe("PlanView", () => {
     });
   });
 
+  it("edits RRSP deposit priority and annual savings deposit cap and shows them on the account card", () => {
+    renderPlan();
+    fireEvent.click(screen.getByRole("tab", { name: "Accounts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+    fireEvent.change(screen.getByLabelText("Account type"), { target: { value: "rrsp" } });
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: "Work RRSP" } });
+    fireEvent.change(screen.getByLabelText(/^Deposit priority/), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText(/Annual savings deposit cap/), { target: { value: "10000.25" } });
+    expect(planState().accounts[0]).toMatchObject({ depositPriority: 1, annualDepositLimit: 10_000.25 });
+    expect(screen.getByText(/counts personal, company, and matching RRSP deposits together/).textContent).toContain(
+      "next eligible account of the same type",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Close editor" }));
+    const card = screen.getByRole("region", { name: "Work RRSP summary" });
+    expect(card.textContent).toContain("Deposit priority");
+    expect(card.textContent).toContain("1 (lower first)");
+    expect(card.textContent).toContain("Annual savings deposit cap");
+    expect(card.textContent).toContain("$10,000.25");
+
+    fireEvent.click(within(card).getByRole("button", { name: "Edit" }));
+    const cap = screen.getByLabelText(/Annual savings deposit cap/);
+    expect((cap as HTMLInputElement).value).toBe("10,000.25");
+    fireEvent.change(cap, { target: { value: "10000.251" } });
+    expect(screen.getByRole("alert").textContent).toContain("must be a dollar amount in whole cents");
+    expect(planState().accounts[0]?.annualDepositLimit).toBe(10_000.25);
+    fireEvent.change(cap, { target: { value: "0" } });
+    expect(planState().accounts[0]?.annualDepositLimit).toBe(0);
+    fireEvent.change(cap, { target: { value: "" } });
+    expect(planState().accounts[0]).not.toHaveProperty("annualDepositLimit");
+  });
+
+  it("rejects a negative RRSP deposit priority without changing the saved account", () => {
+    renderPlan();
+    fireEvent.click(screen.getByRole("tab", { name: "Accounts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+    fireEvent.change(screen.getByLabelText("Account type"), { target: { value: "rrsp" } });
+    fireEvent.change(screen.getByLabelText(/^Deposit priority/), { target: { value: "-1" } });
+    expect(screen.getByRole("alert").textContent).toContain("Deposit priority must be at least 0.");
+    expect(planState().accounts[0]).not.toHaveProperty("depositPriority");
+  });
+
+  it("edits independent company RRSP contributions on employment income", () => {
+    renderPlan();
+    fireEvent.click(screen.getByRole("tab", { name: "Income" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add employment" }));
+    expect(screen.getByLabelText(/Company RRSP contribution \(% of base salary\)/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: "Day job" } });
+    fireEvent.change(screen.getByLabelText("Annual amount ($)"), { target: { value: "100000" } });
+    fireEvent.change(screen.getByLabelText(/Company RRSP contribution \(% of base salary\)/), {
+      target: { value: "5" },
+    });
+    fireEvent.change(screen.getByLabelText(/Annual company contribution cap/), { target: { value: "6000.27" } });
+    expect(planState().incomes[0]).toMatchObject({
+      employerContributionRate: 0.05,
+      employerContributionAnnualCap: 6_000.27,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Close editor" }));
+    const card = screen.getByRole("region", { name: "Day job summary" });
+    expect(card.textContent).toContain("Company RRSP contribution");
+    expect(card.textContent).toContain("5.0% of base salary");
+    expect(card.textContent).toContain("Annual company contribution cap");
+    expect(card.textContent).toContain("$6,000.27");
+
+    fireEvent.click(within(card).getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText(/Annual company contribution cap/), { target: { value: "" } });
+    expect(planState().incomes[0]).not.toHaveProperty("employerContributionAnnualCap");
+    fireEvent.change(screen.getByLabelText(/Company RRSP contribution \(% of base salary\)/), {
+      target: { value: "" },
+    });
+    expect(planState().incomes[0]).not.toHaveProperty("employerContributionRate");
+  });
+
+  it("requires a company contribution rate before accepting an annual company cap", () => {
+    renderPlan();
+    fireEvent.click(screen.getByRole("tab", { name: "Income" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add employment" }));
+    fireEvent.change(screen.getByLabelText(/Annual company contribution cap/), { target: { value: "5000" } });
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Annual company contribution cap requires a company contribution rate.",
+    );
+    expect(planState().incomes[0]).not.toHaveProperty("employerContributionAnnualCap");
+  });
+
+  it("explains company salary contributions separately from the match on personal deposits", () => {
+    renderPlan();
+    fireEvent.click(screen.getByRole("tab", { name: "Savings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add savings step" }));
+    fireEvent.change(screen.getByLabelText("Savings target"), { target: { value: "rrsp-match" } });
+    expect(screen.getByText(/Set up company salary contributions on the employment income card/)).toBeTruthy();
+    expect(screen.getByText(/match applies only to your personal RRSP deposits/)).toBeTruthy();
+  });
+
   it("unchecking Plan a sale event removes the planned sale from the plan and restores it from retained fields on re-check", () => {
     const workspace = createEmptyWorkspace();
     workspace.plan.assets = [

@@ -258,6 +258,7 @@ export function CashflowSankey({
         : aggregateCashflow(years, birthYear, { startYear, endYear }, showAccounts),
     [years, birthYear, startYear, endYear, showAccounts],
   );
+  const employerTransfers = data ? [...data.matches, ...data.employerContributions] : [];
 
   return (
     <section className="cashflow-sankey" aria-labelledby={id}>
@@ -317,7 +318,7 @@ export function CashflowSankey({
           ) : (
             <p className="hint">No pooled cash movements to show for the selected years.</p>
           )}
-          {data.matches.map(({ id, label, cents }) => (
+          {employerTransfers.map(({ id, label, cents }) => (
             <p key={id} className="cashflow-direct-transfer">
               <span>
                 <strong>{label}</strong> <span>Direct transfer outside the cashflow pool</span>
@@ -356,8 +357,8 @@ export function CashflowSankey({
             {data.legacyYears > 0 && (
               <p>
                 Some saved years lack cashflow detail such as scheduled mortgage payments, idle cash and asset-sale
-                routing. Their saved Other income and RRSP deposit totals can include employer match. Run the projection
-                again for those details.
+                routing. Their saved Other income and RRSP deposit totals can include employer match or independent
+                company RRSP contributions. Run the projection again for those details.
               </p>
             )}
             {data.missingPayrollYears > 0 && <p>Some saved years lack payroll deduction data.</p>}
@@ -386,7 +387,7 @@ export function CashflowSankey({
           {(data.sources.length > 0 ||
             data.uses.length > 0 ||
             data.obligations.length > 0 ||
-            data.matches.length > 0 ||
+            employerTransfers.length > 0 ||
             data.assetSaleToNonreg > 0 ||
             data.cashContributionsToIdleCash > 0) && (
             <details className="cashflow-breakdown">
@@ -397,7 +398,7 @@ export function CashflowSankey({
                 {data.shortfallCents > 0 && (
                   <BreakdownList heading="Reported obligations before shortfalls" items={data.obligations} />
                 )}
-                <BreakdownList heading="Direct transfers outside the cashflow pool" items={data.matches} />
+                <BreakdownList heading="Direct transfers outside the cashflow pool" items={employerTransfers} />
                 <BreakdownList heading="Asset sales routed outside the pool" items={data.directSales} />
                 <BreakdownList heading="Accounts credited with asset sales" items={data.saleDeposits} />
               </div>

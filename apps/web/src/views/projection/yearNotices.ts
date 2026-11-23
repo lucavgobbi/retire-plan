@@ -8,6 +8,9 @@ export function yearNotices(
 ): string[] {
   const notices: string[] = [];
   const minimum = year.rrifMinimumWithdrawal;
+  const employerContribution = year.cashflow?.employerRrspContribution ?? 0;
+  const employerMatch = year.cashflow?.employerRrspMatch ?? 0;
+  const blockedEmployerContribution = year.cashflow?.blockedEmployerRrspContribution ?? 0;
 
   if (minimum !== undefined && minimum > 0) {
     notices.push(
@@ -25,7 +28,7 @@ export function yearNotices(
       `Planned voluntary RRSP draw under the tax-minimizing strategy: ${fmtMoneyDetail(year.plannedRrspDraw!)}. It is separate from any required RRIF minimum and is included in total RRSP withdrawals.`,
     );
     notices.push(
-      "In this planned-draw year, employee RRSP savings-policy steps are skipped to avoid withdrawing and redepositing the same funds. Employer-match RRSP deposits and other savings rules remain available; remaining surplus follows those rules or is retained as cash.",
+      "Ordinary personal RRSP savings steps are skipped in a planned-draw year. Personal deposits can still earn an employer match using after-tax household surplus calculated before the planned draw. Independent company RRSP contributions continue under their usual room and account limits.",
     );
   }
 
@@ -40,16 +43,29 @@ export function yearNotices(
   }
 
   const contributions = year.contributions;
-  if (contributions.tfsa > 0 || contributions.rrsp > 0 || contributions.nonreg > 0 || (contributions.cash ?? 0) > 0) {
-    if (year.income.employment === 0) {
-      notices.push(
-        `After spending, tax, and scheduled mortgage payments, surplus cash was reinvested: TFSA ${fmtMoneyDetail(contributions.tfsa)}; RRSP ${fmtMoneyDetail(contributions.rrsp)}; non-registered ${fmtMoneyDetail(contributions.nonreg)}; cash accounts ${fmtMoneyDetail(contributions.cash ?? 0)}. These are reinvested contributions, not new employment savings. The result does not track each dollar's source.`,
-      );
-    } else {
-      notices.push(
-        `After spending, tax, and scheduled mortgage payments, surplus cash was allocated to savings: TFSA ${fmtMoneyDetail(contributions.tfsa)}; RRSP ${fmtMoneyDetail(contributions.rrsp)}; non-registered ${fmtMoneyDetail(contributions.nonreg)}; cash accounts ${fmtMoneyDetail(contributions.cash ?? 0)}. The result does not track each dollar's source.`,
-      );
-    }
+  const personalRrsp = Math.round((contributions.rrsp - employerContribution - employerMatch) * 100) / 100;
+  if (contributions.tfsa > 0 || personalRrsp > 0 || contributions.nonreg > 0 || (contributions.cash ?? 0) > 0) {
+    const action = year.income.employment === 0 ? "reinvested" : "allocated to savings";
+    notices.push(
+      `After spending, tax, and scheduled mortgage payments, surplus cash was ${action}: TFSA ${fmtMoneyDetail(contributions.tfsa)}, personal RRSP ${fmtMoneyDetail(personalRrsp)}, non-registered ${fmtMoneyDetail(contributions.nonreg)}, cash accounts ${fmtMoneyDetail(contributions.cash ?? 0)}. The result does not track each dollar's source.`,
+    );
+    if (year.income.employment === 0) notices.push("This year had no employment income.");
+  }
+
+  if (employerContribution > 0) {
+    notices.push(
+      `The company deposited ${fmtMoneyDetail(employerContribution)} directly into the RRSP based on salary. The amount is included in total RRSP contributions.`,
+    );
+  }
+  if (employerMatch > 0) {
+    notices.push(
+      `The employer deposited a ${fmtMoneyDetail(employerMatch)} match directly into the RRSP based on personal deposits. The amount is included in total RRSP contributions.`,
+    );
+  }
+  if (blockedEmployerContribution > 0) {
+    notices.push(
+      `${fmtMoneyDetail(blockedEmployerContribution)} of the company RRSP contribution could not be deposited. Deposits are subject to RRSP age eligibility, available room and account capacity.`,
+    );
   }
 
   if (year.balances.cash > 0.005) {

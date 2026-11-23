@@ -184,6 +184,53 @@ describe("CashflowSankey", () => {
     expect(screen.queryByRole("button", { name: /employer match/i })).toBeNull();
   });
 
+  it("shows independent company RRSP contributions separately from match and subtracts both from household cash", () => {
+    const base = testRun(true).years[0]!;
+    const account = base.accountBreakdown![0]!;
+    const match = account.employerRrspMatch!;
+    const company = 300;
+    const employee = account.contributions - match;
+    const years = [
+      {
+        ...base,
+        income: { ...base.income, other: base.income.other + company },
+        contributions: { ...base.contributions, rrsp: employee + match + company },
+        accountBreakdown: [
+          {
+            ...account,
+            name: "Work RRSP",
+            contributions: employee + match + company,
+            employerRrspContribution: company,
+          },
+        ],
+        cashflow: { ...base.cashflow!, employerRrspContribution: company },
+      },
+    ];
+    const props = {
+      years,
+      birthYear: 1981,
+      range: { startYear: 2026, endYear: 2026 },
+      onRangeChange: vi.fn(),
+      onShowAccountsChange: vi.fn(),
+    };
+    const { rerender } = render(<CashflowSankey {...props} showAccounts={false} />);
+    const summary = screen.getByText("Cashflow breakdown");
+    fireEvent.click(summary);
+    const breakdown = within(summary.closest("details")!);
+    expect(breakdown.getByText("Company RRSP contribution → RRSP").nextElementSibling?.textContent).toBe("$300.00");
+    expect(breakdown.getByText("Employer match → RRSP").nextElementSibling?.textContent).toBe("$250.00");
+    expect(screen.getByRole("button", { name: "Cashflow pool to RRSP contributions, $500.00" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Other income to Cashflow pool/ })).toBeNull();
+
+    rerender(<CashflowSankey {...props} showAccounts />);
+    expect(breakdown.getByText("Company RRSP contribution → Work RRSP").nextElementSibling?.textContent).toBe(
+      "$300.00",
+    );
+    expect(breakdown.getByText("Employer match → Work RRSP").nextElementSibling?.textContent).toBe("$250.00");
+    expect(screen.getByRole("button", { name: "Cashflow pool to Work RRSP contributions, $500.00" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /company RRSP contribution|employer match/i })).toBeNull();
+  });
+
   it("keeps a match-only breakdown available and names the recipient when checked", () => {
     const base = testRun(true).years[0]!;
     const account = base.accountBreakdown![0]!;

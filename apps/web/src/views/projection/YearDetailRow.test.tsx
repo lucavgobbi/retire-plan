@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { YearResult } from "@retire-plan/engine";
 import { YearDetailRow } from "./YearDetailRow";
@@ -54,7 +54,7 @@ describe("YearDetailRow legacy RRIF results", () => {
     expect(warnings.textContent).toContain("No warnings");
     expect(warnings.querySelector(".detail-notices")?.textContent).toContain("surplus cash was reinvested");
     expect(warnings.textContent).not.toContain("Required RRIF minimum");
-    expect(warnings.textContent).not.toContain("employee RRSP savings-policy steps are skipped");
+    expect(warnings.textContent).not.toContain("Ordinary personal RRSP savings steps are skipped");
   });
 
   it("explains required minimum separately from additional RRSP/RRIF withdrawals", () => {
@@ -74,8 +74,11 @@ describe("YearDetailRow legacy RRIF results", () => {
     expect(notices).toContain("Additional RRSP/RRIF withdrawal above the required minimum: $20,000.00");
     expect(notices).toContain("Planned voluntary RRSP draw under the tax-minimizing strategy: $15,000.00");
     expect(notices).toContain("included in total RRSP withdrawals");
-    expect(notices).toContain("employee RRSP savings-policy steps are skipped");
-    expect(notices).toContain("Employer-match RRSP deposits and other savings rules remain available");
+    expect(notices).toContain("Ordinary personal RRSP savings steps are skipped");
+    expect(notices).toContain(
+      "earn an employer match using after-tax household surplus calculated before the planned draw",
+    );
+    expect(notices).toContain("Independent company RRSP contributions continue");
   });
 
   it("explains surplus allocation without attributing all deposits to RRIF withdrawals", () => {
@@ -86,9 +89,103 @@ describe("YearDetailRow legacy RRIF results", () => {
     year.contributions.nonreg = 5_000;
     const notices = yearNotices(year).join(" ");
     expect(notices).toContain("After spending, tax, and scheduled mortgage payments, surplus cash was reinvested:");
-    expect(notices).toContain("not new employment savings");
+    expect(notices).toContain("This year had no employment income.");
     expect(notices).toContain("does not track each dollar's source");
     expect(notices).not.toContain("all from RRIF");
+  });
+
+  it("shows company deposits and match inside named account contributions and outside surplus savings", () => {
+    const year = baseYear();
+    year.income = { ...year.income, employment: 45_000, other: 1_030 };
+    year.contributions.rrsp = 1_000;
+    year.payroll = { cppBase: 100, cppAdditional: 0, cpp2: 0, ei: 0, eiRefund: 0, enhancedCppDeduction: 0, total: 100 };
+    year.cashflow = {
+      scheduledMortgagePayment: 0,
+      openingIdleCash: 0,
+      closingIdleCash: 0,
+      assetSaleToIdleCash: 0,
+      assetSaleToNonreg: 0,
+      employerRrspMatch: 100,
+      employerRrspContribution: 700,
+      blockedEmployerRrspContribution: 50,
+      cashContributionsToIdleCash: 0,
+    };
+    year.accountBreakdown = [
+      {
+        id: "work",
+        name: "Work RRSP",
+        type: "rrsp",
+        openingBalance: 0,
+        closingBalance: 1_000,
+        withdrawals: 0,
+        contributions: 1_000,
+        employerRrspContribution: 700,
+        employerRrspMatch: 100,
+      },
+    ];
+    render(
+      <table>
+        <tbody>
+          <YearDetailRow age={65} year={year} expanded colSpan={10} />
+        </tbody>
+      </table>,
+    );
+    const account = within(screen.getByRole("list", { name: "Account details" }));
+    expect(account.getByText("Work RRSP")).toBeTruthy();
+    expect(account.getByText("Contributions").nextElementSibling?.textContent).toBe("$1,000.00");
+    expect(account.getByText("Personal RRSP deposits within contributions").nextElementSibling?.textContent).toBe(
+      "$200.00",
+    );
+    expect(account.getByText("Company RRSP contribution within contributions").nextElementSibling?.textContent).toBe(
+      "$700.00",
+    );
+    expect(account.getByText("Employer match within contributions").nextElementSibling?.textContent).toBe("$100.00");
+    const income = within(screen.getByRole("region", { name: "Income" }));
+    expect(income.getByText("Other income").nextElementSibling?.textContent).toBe("$230.00");
+    const payroll = within(screen.getByRole("region", { name: "Payroll deductions" }));
+    expect(payroll.getByText("Cash employment income").nextElementSibling?.textContent).toBe("$45,000.00");
+    expect(payroll.getByText(/In new projections, company RRSP contributions and employer matches count/)).toBeTruthy();
+    const notices = screen.getByRole("note", { name: "Year cashflow explanations" });
+    expect(notices.textContent).toContain("personal RRSP $200.00");
+    expect(notices.textContent).toContain("$50.00 of the company RRSP contribution could not be deposited");
+
+    year.contributions.rrsp = 800;
+    expect(yearNotices(year).join(" ")).not.toContain("surplus cash");
+  });
+
+  it("splits aggregate RRSP deposits with cashflow capture and reconciles Other income to zero cents", () => {
+    const year = baseYear();
+    year.income.other = 0.3;
+    year.savings.rrsp = 0.35;
+    year.contributions.rrsp = 0.35;
+    year.cashflow = {
+      scheduledMortgagePayment: 0,
+      openingIdleCash: 0,
+      closingIdleCash: 0,
+      assetSaleToIdleCash: 0,
+      assetSaleToNonreg: 0,
+      employerRrspMatch: 0.2,
+      employerRrspContribution: 0.1,
+      cashContributionsToIdleCash: 0,
+    };
+    render(
+      <table>
+        <tbody>
+          <YearDetailRow age={65} year={year} expanded colSpan={10} />
+        </tbody>
+      </table>,
+    );
+    const savings = within(screen.getByRole("region", { name: "Savings flows" }));
+    expect(savings.getByText("RRSP").nextElementSibling?.textContent).toBe("$0.35");
+    expect(savings.getByText("Personal RRSP deposits within contributions").nextElementSibling?.textContent).toBe(
+      "$0.05",
+    );
+    expect(savings.getByText("Company RRSP contribution within contributions").nextElementSibling?.textContent).toBe(
+      "$0.10",
+    );
+    expect(savings.getByText("Employer match within contributions").nextElementSibling?.textContent).toBe("$0.20");
+    const income = within(screen.getByRole("region", { name: "Income" }));
+    expect(income.getByText("Other income").nextElementSibling?.textContent).toBe("$0.00");
   });
 
   it("explains recorded transitions, sales, non-registered draws, retained cash and depletion", () => {

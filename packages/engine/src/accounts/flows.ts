@@ -20,6 +20,8 @@ export interface AllocateSurplusResult {
   cash: number;
   /** Employer money added by rrsp-match steps. */
   employerMatch: number;
+  /** Gross RRSP deposits in policy order, with their employer share. */
+  rrspDeposits: { amount: number; match: number }[];
 }
 
 export interface FundDeficitInput {
@@ -56,6 +58,26 @@ function isActive(step: SavingsPolicyStep, age: number | undefined): boolean {
   return !(step.untilAge !== undefined && age > step.untilAge);
 }
 
+function floorCents(amount: number): number {
+  return Math.floor(amount * 100 + 1e-8);
+}
+
+function matchedDeposit(employeeLimit: number, grossLimit: number, rate: number, matchLimit: number) {
+  const gross = floorCents(grossLimit);
+  const employer = floorCents(matchLimit);
+  const match = (employee: number) => Math.round(employee * rate);
+  const fits = (employee: number) => employee + match(employee) <= gross && match(employee) <= employer;
+  let high = floorCents(Math.min(employeeLimit, grossLimit));
+  let low = 0;
+  if (fits(high)) low = high;
+  while (low < high) {
+    const middle = low + Math.ceil((high - low) / 2);
+    if (fits(middle)) low = middle;
+    else high = middle - 1;
+  }
+  return { employee: low / 100, match: match(low) / 100 };
+}
+
 /**
  * Walks savings policy steps by ascending priority, allocating `amount` of
  * after-tax surplus.
@@ -64,7 +86,8 @@ function isActive(step: SavingsPolicyStep, age: number | undefined): boolean {
  *   the surplus, but both employee and employer parts consume RRSP room.
  * - `tfsa`/`rrsp` are gated by available room (`perYearCap` applies before room).
  * - `mortgage-prepay` is capped at the outstanding mortgage balance.
- * - Any surplus no step consumed is swept to non-reg so cash-flow conservation holds.
+ * - Policy steps and the default sweep accept only whole cents.
+ * - Any surplus no step consumed is swept to available non-reg capacity, then idle cash.
  * - `rooms`/`balances` are read-only inputs; the caller replays mutated balances.
  */
 export function allocateSurplus(
@@ -75,20 +98,22 @@ export function allocateSurplus(
   mortgage?: DebtPlan,
   age?: number,
   availableAccounts: AvailableSavingsAccounts = { tfsa: true, rrsp: true, nonreg: true },
-  /**
-   * Tax-minimizing circularity guard: when the year executed a proactive RRSP
-   * draw, EMPLOYEE `rrsp` steps are suppressed (that same cash must not be
-   * re-contributed — withdrawing does not recreate contribution room, so the
-   * re-deposit would be artificial). ONLY employee rrsp steps stop: employer
-   * `rrsp-match` compensation and every tfsa/nonreg/cash/mortgage step continue.
-   */
-  suppressEmployeeRrsp = false,
+  /** Proactive draws suppress ordinary RRSP steps and limit match steps to non-draw surplus. */
+  suppressOrdinaryRrsp = false,
+  capacity: Partial<Record<AccountType, number>> = {},
+  matchLimit = Number.POSITIVE_INFINITY,
+  surplusWithoutProactiveDraw = Number.POSITIVE_INFINITY,
 ): AllocateSurplusResult {
   const contributions = zeroContributions();
   const amountsOut = zeroAmounts();
   const newRooms = { tfsa: rooms.tfsa, rrsp: rooms.rrsp };
-  let remaining = amount;
+  // Round the annual cash budget once, before splitting it across destinations.
+  const availableSurplus = Math.round(amount * 100) / 100;
+  let remaining = availableSurplus;
   let employerMatch = 0;
+  const rrspDeposits: AllocateSurplusResult["rrspDeposits"] = [];
+  const remainingCapacity = (type: AccountType) =>
+    Math.max(0, (capacity[type] ?? Number.POSITIVE_INFINITY) - (contributions[type] ?? 0));
 
   const steps = [...policy].sort((a, b) => a.priority - b.priority);
   let reachedPrepay = false;
@@ -106,36 +131,37 @@ export function allocateSurplus(
 
     switch (step.target) {
       case "tfsa": {
-        const take = Math.min(remaining, capFor(step), Math.max(0, newRooms.tfsa));
+        const take =
+          floorCents(Math.min(remaining, capFor(step), Math.max(0, newRooms.tfsa), remainingCapacity("tfsa"))) / 100;
         contributions.tfsa += take;
         amountsOut.tfsa += take;
         newRooms.tfsa -= take;
         remaining -= take;
         break;
       }
-      case "rrsp": {
-        if (suppressEmployeeRrsp) break;
-        const take = Math.min(remaining, capFor(step), Math.max(0, newRooms.rrsp));
-        contributions.rrsp += take;
-        amountsOut.rrsp += take;
-        newRooms.rrsp -= take;
-        remaining -= take;
-        break;
-      }
+      case "rrsp":
       case "rrsp-match": {
-        const rate = step.matchRate ?? 0;
-        const employee = Math.min(remaining, capFor(step), Math.max(0, newRooms.rrsp));
-        const employer = Math.min(rate * employee, Math.max(0, newRooms.rrsp - employee));
-        const landed = employee + employer;
+        const rate = step.target === "rrsp-match" ? (step.matchRate ?? 0) : 0;
+        if (suppressOrdinaryRrsp && rate === 0) break;
+        const eligibleSurplus = Math.max(0, surplusWithoutProactiveDraw - (availableSurplus - remaining));
+        const { employee, match } = matchedDeposit(
+          Math.min(remaining, eligibleSurplus, capFor(step)),
+          Math.min(Math.max(0, newRooms.rrsp), remainingCapacity("rrsp")),
+          rate,
+          Math.max(0, matchLimit - employerMatch),
+        );
+        const landed = employee + match;
+        if (landed === 0) break;
+        rrspDeposits.push({ amount: landed, match });
         contributions.rrsp += landed;
         amountsOut.rrsp += landed;
         newRooms.rrsp -= landed;
         remaining -= employee; // the employer match is additive, not surplus
-        employerMatch += employer;
+        employerMatch += match;
         break;
       }
       case "nonreg": {
-        const take = Math.min(remaining, capFor(step));
+        const take = floorCents(Math.min(remaining, capFor(step), remainingCapacity("nonreg"))) / 100;
         contributions.nonreg += take;
         amountsOut.nonreg += take;
         remaining -= take;
@@ -144,7 +170,7 @@ export function allocateSurplus(
       case "cash": {
         // Deliberately NOT gated on a named cash account existing: with none, the
         // caller retains the deposit as the floating idle-cash pool instead.
-        const take = Math.min(remaining, capFor(step));
+        const take = floorCents(Math.min(remaining, capFor(step), remainingCapacity("cash"))) / 100;
         contributions.cash = (contributions.cash ?? 0) + take;
         amountsOut.cash = (amountsOut.cash ?? 0) + take;
         remaining -= take;
@@ -153,7 +179,7 @@ export function allocateSurplus(
       case "mortgage-prepay": {
         if (!mortgage || balances.debt <= 0) break; // nothing to prepay
         reachedPrepay = true; // terminal: leftover after a prepay rests as cash
-        const take = Math.min(remaining, Math.max(0, balances.debt), capFor(step));
+        const take = floorCents(Math.min(remaining, Math.max(0, balances.debt), capFor(step))) / 100;
         amountsOut.mortgage += take;
         remaining -= take;
         break;
@@ -167,10 +193,10 @@ export function allocateSurplus(
   // cash by design (prepay is terminal; the stepper books it as cash).
   let swept = 0;
   if (remaining > 0 && !reachedPrepay && availableAccounts.nonreg) {
-    contributions.nonreg += remaining;
-    amountsOut.nonreg += remaining;
-    swept = remaining;
-    remaining = 0;
+    swept = floorCents(Math.min(remaining, remainingCapacity("nonreg"))) / 100;
+    contributions.nonreg += swept;
+    amountsOut.nonreg += swept;
+    remaining -= swept;
   }
 
   return {
@@ -180,6 +206,7 @@ export function allocateSurplus(
     sweptToNonreg: swept,
     cash: remaining,
     employerMatch,
+    rrspDeposits,
   };
 }
 

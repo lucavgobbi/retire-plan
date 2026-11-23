@@ -156,7 +156,7 @@ function namedFlows(row: NamedYear) {
               item,
               `${accountName(item)} contributions`,
               "transfer",
-              item.contributions - (item.employerRrspMatch ?? 0),
+              item.contributions - (item.employerRrspMatch ?? 0) - (item.employerRrspContribution ?? 0),
             ),
           ),
       ]),
@@ -171,6 +171,17 @@ function namedFlows(row: NamedYear) {
       .filter((item) => item.employerRrspMatch)
       .map((item) =>
         itemFlow("match", item, `Employer match → ${accountName(item)}`, "transfer", item.employerRrspMatch ?? 0),
+      ),
+    employerContributions: accounts
+      .filter((item) => item.employerRrspContribution)
+      .map((item) =>
+        itemFlow(
+          "employer-contribution",
+          item,
+          `Company RRSP contribution → ${accountName(item)}`,
+          "transfer",
+          item.employerRrspContribution ?? 0,
+        ),
       ),
     directSales: sales.filter((item) => item.sale?.destination === "nonreg").map(saleFlow),
     saleDeposits: accounts
@@ -216,6 +227,7 @@ export function aggregateCashflow(years: YearResult[], birthYear: number, range:
   const sides = { sources: new Map<string, CashflowAmount>(), uses: new Map<string, CashflowAmount>() };
   const obligations = new Map<string, CashflowAmount>();
   const matches = new Map<string, CashflowAmount>();
+  const employerContributions = new Map<string, CashflowAmount>();
   const directSales = new Map<string, CashflowAmount>();
   const saleDeposits = new Map<string, CashflowAmount>();
   const named = showAccounts && rows.every(({ row }) => hasNamedCashflow(row));
@@ -225,6 +237,7 @@ export function aggregateCashflow(years: YearResult[], birthYear: number, range:
   let assetSaleToNonreg = 0;
   let cashContributionsToIdleCash = 0;
   let employerRrspMatch = 0;
+  let employerRrspContribution = 0;
   let shortfallCents = 0;
   let unknownCoverageYears = 0;
   let categoryOffsetCents = 0;
@@ -249,6 +262,7 @@ export function aggregateCashflow(years: YearResult[], birthYear: number, range:
   const entries = rows.map(({ row, year }) => {
     const capture = row.cashflow;
     const captured = capture ?? noCapture;
+    const employerDeposits = captured.employerRrspMatch + (captured.employerRrspContribution ?? 0);
     const { income, withdrawals, contributions, savings, payroll } = row;
     const recordedSources: FlowSpec[] = [
       ["employment", "Employment", "income", income.employment],
@@ -259,7 +273,7 @@ export function aggregateCashflow(years: YearResult[], birthYear: number, range:
         capture ? "other" : "legacy-other",
         capture ? "Other income" : "Other income (saved total)",
         "income",
-        income.other - captured.employerRrspMatch,
+        income.other - employerDeposits,
       ],
       ["tfsa-withdrawal", "TFSA withdrawals", "transfer", withdrawals.tfsa],
       ["rrsp-withdrawal", "RRSP / RRIF withdrawals", "transfer", withdrawals.rrsp],
@@ -280,7 +294,7 @@ export function aggregateCashflow(years: YearResult[], birthYear: number, range:
         capture ? "rrsp-contribution" : "legacy-rrsp-contribution",
         capture ? "RRSP contributions" : "RRSP deposits (saved total)",
         "transfer",
-        contributions.rrsp - captured.employerRrspMatch,
+        contributions.rrsp - employerDeposits,
       ],
       ["nonreg-contribution", "Non-registered contributions", "transfer", contributions.nonreg],
       [
@@ -320,6 +334,7 @@ export function aggregateCashflow(years: YearResult[], birthYear: number, range:
         ...billItems,
         ...uses,
         ...(items?.matches ?? []),
+        ...(items?.employerContributions ?? []),
         ...(items?.directSales ?? []),
         ...(items?.saleDeposits ?? []),
       ].every(([, , , amount]) => Number.isSafeInteger(toCents(amount))) &&
@@ -370,7 +385,9 @@ export function aggregateCashflow(years: YearResult[], birthYear: number, range:
         assetSaleToNonreg += toCents(capture.assetSaleToNonreg);
         cashContributionsToIdleCash += toCents(capture.cashContributionsToIdleCash);
         employerRrspMatch += toCents(capture.employerRrspMatch);
+        employerRrspContribution += toCents(capture.employerRrspContribution ?? 0);
         items?.matches.forEach((flow) => add("uses", flow, matches));
+        items?.employerContributions.forEach((flow) => add("uses", flow, employerContributions));
         items?.directSales.forEach((flow) => add("sources", flow, directSales));
         items?.saleDeposits.forEach((flow) => add("uses", flow, saleDeposits));
         const previous = entries[index - 1];
@@ -421,9 +438,30 @@ export function aggregateCashflow(years: YearResult[], birthYear: number, range:
       : employerRrspMatch > 0
         ? [{ id: "employer-match", label: "Employer match → RRSP", kind: "transfer", cents: employerRrspMatch }]
         : [];
+  const employerContributionItems: CashflowAmount[] =
+    employerContributions.size > 0
+      ? [...employerContributions.values()]
+      : employerRrspContribution > 0
+        ? [
+            {
+              id: "employer-contribution",
+              label: "Company RRSP contribution → RRSP",
+              kind: "transfer",
+              cents: employerRrspContribution,
+            },
+          ]
+        : [];
   const directSaleItems = [...directSales.values()];
   const saleDepositItems = [...saleDeposits.values()];
-  const allItems = [...sources, ...uses, ...obligationItems, ...matchItems, ...directSaleItems, ...saleDepositItems];
+  const allItems = [
+    ...sources,
+    ...uses,
+    ...obligationItems,
+    ...matchItems,
+    ...employerContributionItems,
+    ...directSaleItems,
+    ...saleDepositItems,
+  ];
   if (named) {
     const labels = disambiguatedLabels(allItems);
     allItems.forEach((item) => {
@@ -440,6 +478,7 @@ export function aggregateCashflow(years: YearResult[], birthYear: number, range:
     hasNamedGaps: allItems.some(({ id }) => id.startsWith("named-gap:")),
     categoryOffsetCents,
     matches: matchItems,
+    employerContributions: employerContributionItems,
     directSales: directSaleItems,
     saleDeposits: saleDepositItems,
     sourceCents: sumItems(sources),

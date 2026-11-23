@@ -5,6 +5,18 @@ import { yearNotices } from "./yearNotices";
 
 const accountLabels = { tfsa: "TFSA", rrsp: "RRSP", nonreg: "Non-registered account", cash: "Cash account" };
 const incomeLabels = { employment: "Employment", cpp: "CPP", oas: "OAS", gis: "GIS", other: "Other income" };
+type EmployerDeposits = Pick<NonNullable<YearResult["cashflow"]>, "employerRrspContribution"> & {
+  employerRrspMatch?: number;
+};
+
+function withoutEmployerDeposits(amount: number, deposits: EmployerDeposits) {
+  return (
+    (Math.round(amount * 100) -
+      Math.round((deposits.employerRrspContribution ?? 0) * 100) -
+      Math.round((deposits.employerRrspMatch ?? 0) * 100)) /
+    100
+  );
+}
 
 function namedItems<T extends { id: string; name?: string; sourceIndex?: number }>(
   section: string,
@@ -42,6 +54,7 @@ function namedItems<T extends { id: string; name?: string; sourceIndex?: number 
 
 function IncomeDetails({ year }: { year: YearResult }) {
   const match = year.cashflow?.employerRrspMatch ?? 0;
+  const companyContribution = year.cashflow?.employerRrspContribution ?? 0;
   const hasGis = year.income.gis !== 0;
   return (
     <section className="detail-section" aria-label="Income">
@@ -51,13 +64,23 @@ function IncomeDetails({ year }: { year: YearResult }) {
           {Object.entries(year.income).map(([kind, amount]) => (
             <Fragment key={kind}>
               <dt>{incomeLabels[kind as keyof typeof incomeLabels]}</dt>
-              <dd>{fmtMoneyDetail(kind === "other" ? amount - match : amount)}</dd>
+              <dd>
+                {fmtMoneyDetail(
+                  kind === "other" && year.cashflow ? withoutEmployerDeposits(amount, year.cashflow) : amount,
+                )}
+              </dd>
             </Fragment>
           ))}
           {match !== 0 && (
             <>
               <dt>Employer RRSP match</dt>
               <dd>{fmtMoneyDetail(match)}</dd>
+            </>
+          )}
+          {companyContribution !== 0 && (
+            <>
+              <dt>Company RRSP contribution</dt>
+              <dd>{fmtMoneyDetail(companyContribution)}</dd>
             </>
           )}
         </dl>
@@ -125,6 +148,19 @@ function ExpenseDetails({ year }: { year: YearResult }) {
   );
 }
 
+function RrspContributionDetails({ total, deposits }: { total: number; deposits: EmployerDeposits }) {
+  return (
+    <>
+      <dt>Personal RRSP deposits within contributions</dt>
+      <dd>{fmtMoneyDetail(withoutEmployerDeposits(total, deposits))}</dd>
+      <dt>Company RRSP contribution within contributions</dt>
+      <dd>{fmtMoneyDetail(deposits.employerRrspContribution ?? 0)}</dd>
+      <dt>Employer match within contributions</dt>
+      <dd>{fmtMoneyDetail(deposits.employerRrspMatch ?? 0)}</dd>
+    </>
+  );
+}
+
 function AccountDetails({ year }: { year: YearResult }) {
   const drawsByType = new Map<keyof typeof accountLabels, number>();
   for (const account of year.accountBreakdown ?? []) {
@@ -143,6 +179,9 @@ function AccountDetails({ year }: { year: YearResult }) {
           <dd>{fmtMoneyDetail(year.savings.tfsa)}</dd>
           <dt>RRSP</dt>
           <dd>{fmtMoneyDetail(year.savings.rrsp)}</dd>
+          {year.cashflow && year.savings.rrsp !== 0 && (
+            <RrspContributionDetails total={year.savings.rrsp} deposits={year.cashflow} />
+          )}
           <dt>Non-registered</dt>
           <dd>{fmtMoneyDetail(year.savings.nonreg)}</dd>
           <dt>Cash accounts</dt>
@@ -174,12 +213,13 @@ function AccountDetails({ year }: { year: YearResult }) {
                       <dd>{fmtMoneyDetail(item.withdrawals)}</dd>
                       <dt>Contributions</dt>
                       <dd>{fmtMoneyDetail(item.contributions)}</dd>
-                      {item.employerRrspMatch !== undefined && (
-                        <>
-                          <dt>Employer match within contributions</dt>
-                          <dd>{fmtMoneyDetail(item.employerRrspMatch)}</dd>
-                        </>
-                      )}
+                      {item.type === "rrsp" &&
+                        item.contributions !== 0 &&
+                        (year.cashflow ||
+                          item.employerRrspContribution !== undefined ||
+                          item.employerRrspMatch !== undefined) && (
+                          <RrspContributionDetails total={item.contributions} deposits={item} />
+                        )}
                       {item.assetSaleDeposit !== undefined && (
                         <>
                           <dt>Asset sale deposits</dt>
@@ -426,7 +466,7 @@ export function YearDetailRow({
                 <p className="hint">No employee payroll deductions were withheld this year.</p>
               ) : (
                 <dl className="detail-values">
-                  <dt>Gross employment</dt>
+                  <dt>Cash employment income</dt>
                   <dd>{fmtMoneyDetail(year.income.employment)}</dd>
                   <dt>CPP base</dt>
                   <dd>{fmtMoneyDetail(year.payroll.cppBase)}</dd>
@@ -448,6 +488,12 @@ export function YearDetailRow({
                   portion ({fmtMoneyDetail(year.payroll.enhancedCppDeduction)}) is deducted from taxable income.
                   Employee, single-employer annual approximation — EI benefits, CPP pension accrual and post-retirement
                   benefit (PRB) increases are not calculated.
+                </p>
+              )}
+              {year.payroll && !!(year.cashflow?.employerRrspContribution || year.cashflow?.employerRrspMatch) && (
+                <p className="hint">
+                  In new projections, company RRSP contributions and employer matches count toward earnings for enabled
+                  CPP and EI calculations. The model assumes the group RRSP permits withdrawals.
                 </p>
               )}
             </section>
