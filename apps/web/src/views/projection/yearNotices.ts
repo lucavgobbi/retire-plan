@@ -9,6 +9,7 @@ export function yearNotices(
   const notices: string[] = [];
   const minimum = year.rrifMinimumWithdrawal;
   const employerContribution = year.cashflow?.employerRrspContribution ?? 0;
+  const employmentPersonal = year.cashflow?.employmentRrspPersonal ?? 0;
   const employerMatch = year.cashflow?.employerRrspMatch ?? 0;
   const blockedEmployerContribution = year.cashflow?.blockedEmployerRrspContribution ?? 0;
 
@@ -28,7 +29,7 @@ export function yearNotices(
       `Planned voluntary RRSP draw under the tax-minimizing strategy: ${fmtMoneyDetail(year.plannedRrspDraw!)}. It is separate from any required RRIF minimum and is included in total RRSP withdrawals.`,
     );
     notices.push(
-      "Ordinary personal RRSP savings steps are skipped in a planned-draw year. Personal deposits can still earn an employer match using after-tax household surplus calculated before the planned draw. Independent company RRSP contributions continue under their usual room and account limits.",
+      "Ordinary personal RRSP savings steps are skipped in a planned-draw year. Employment deposits use net wages calculated before withdrawals. A legacy savings match can use after-tax surplus available before the planned draw when no company deposit from an employment RRSP setup overlaps.",
     );
   }
 
@@ -43,7 +44,8 @@ export function yearNotices(
   }
 
   const contributions = year.contributions;
-  const personalRrsp = Math.round((contributions.rrsp - employerContribution - employerMatch) * 100) / 100;
+  const personalRrsp =
+    Math.round((contributions.rrsp - employmentPersonal - employerContribution - employerMatch) * 100) / 100;
   if (contributions.tfsa > 0 || personalRrsp > 0 || contributions.nonreg > 0 || (contributions.cash ?? 0) > 0) {
     const action = year.income.employment === 0 ? "reinvested" : "allocated to savings";
     notices.push(
@@ -52,9 +54,14 @@ export function yearNotices(
     if (year.income.employment === 0) notices.push("This year had no employment income.");
   }
 
+  if (employmentPersonal > 0) {
+    notices.push(
+      `Your employment RRSP deposit of ${fmtMoneyDetail(employmentPersonal)} came from net wages before household expenses and reduced taxable income.`,
+    );
+  }
   if (employerContribution > 0) {
     notices.push(
-      `The company deposited ${fmtMoneyDetail(employerContribution)} directly into the RRSP based on salary. The amount is included in total RRSP contributions.`,
+      `The company deposited ${fmtMoneyDetail(employerContribution)} directly into the RRSP. The amount is included in total RRSP contributions.`,
     );
   }
   if (employerMatch > 0) {
@@ -64,7 +71,7 @@ export function yearNotices(
   }
   if (blockedEmployerContribution > 0) {
     notices.push(
-      `${fmtMoneyDetail(blockedEmployerContribution)} of the company RRSP contribution could not be deposited. Deposits are subject to RRSP age eligibility, available room and account capacity.`,
+      `${fmtMoneyDetail(blockedEmployerContribution)} of the company RRSP contribution could not be deposited. Deposits are subject to RRSP age eligibility, available room and a valid RRSP destination.`,
     );
   }
 
@@ -98,7 +105,7 @@ export function yearNotices(
 
   if (year.events.includes("retirement")) {
     notices.push(
-      "The plan's configured retirement age is reached this year. Income streams and savings rules continue according to their own settings.",
+      "The plan's configured retirement age is reached this year. Employment RRSP deposits follow the employment schedule. Other income streams and savings rules follow their own schedules.",
     );
   }
   if (year.events.includes("cpp-start")) {

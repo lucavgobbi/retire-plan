@@ -45,6 +45,28 @@ describe("fresh + loaded + safe save", () => {
     expect(input.meta?.updatedAt).toBe(TICKS[0]!); // frozen-safe
   });
 
+  it("loads an older local workspace and writes its migrated employment setup back", async () => {
+    const workspace = ws("Older plan");
+    const job = workspace.plan.incomes.find((income) => income.kind === "employment")!;
+    Object.assign(job, { employerContributionRate: 0.05 });
+    const { provider } = buildHarness({
+      seedWorkspaceRow: { singleton: "singleton", schemaVersion: 1, workspace },
+      seedBackupRows: [{ createdAt: TICKS[0]!, workspace }],
+    });
+    const result = await provider.load();
+    if (result.kind !== "loaded") throw new Error("expected loaded");
+    expect(result.workspace.plan.incomes.find((income) => income.id === job.id)).toMatchObject({
+      employmentContribution: {
+        accountId: workspace.plan.accounts.find((account) => account.type === "rrsp")?.id,
+        personal: { mode: "fixed", value: 0 },
+        company: { mode: "salary-percent", value: 0.05 },
+      },
+    });
+    expect((await provider.restore())?.plan).toEqual(result.workspace.plan);
+    await provider.save(result.workspace);
+    expect(await provider.load()).toMatchObject({ kind: "loaded", workspace: { plan: result.workspace.plan } });
+  });
+
   it("save() with meta null keeps it null (unterminated-workspace contract)", async () => {
     const { provider } = buildHarness();
     const bare: Workspace = { meta: null, plan: makeSampleWorkspace().plan, scenarios: [] };

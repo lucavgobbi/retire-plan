@@ -15,10 +15,6 @@ export interface AccountPlan {
   assetMix?: { equity: number; bond: number; cash: number };
   /** Fixed nominal annual interest for cash accounts only; omitted defaults to 0%. */
   interestRate?: number;
-  /** Same-type savings deposits fill lower priorities first. */
-  depositPriority?: number;
-  /** Gross annual savings deposits, including employer money. Direct asset sales are separate. */
-  annualDepositLimit?: number;
 }
 
 export interface AssetPlan {
@@ -46,6 +42,15 @@ export interface DebtPlan {
   paymentFrequency?: PaymentFrequency;
 }
 
+export interface EmploymentContribution {
+  /** A null destination lets an imported setup be repaired in the Income editor. */
+  accountId: string | null;
+  personal: { mode: "fixed" | "salary-percent"; value: number };
+  company: { mode: "fixed" | "salary-percent" | "match"; value: number };
+  /** Retained only when migrating a previously configured capped salary percentage. */
+  recovery?: { previousSalaryRate: number; previousAnnualCap: number };
+}
+
 export interface IncomePlan {
   id: string;
   kind: "employment" | "cpp" | "oas" | "other";
@@ -63,9 +68,7 @@ export interface IncomePlan {
    * The bonus is paid the same year as the raised base — no separate payout date.
    */
   bonusRate?: number;
-  /** Independent employer RRSP contribution as a fraction of raised base salary. */
-  employerContributionRate?: number;
-  employerContributionAnnualCap?: number;
+  employmentContribution?: EmploymentContribution;
 }
 
 export interface ExpensePlan {
@@ -185,7 +188,9 @@ export interface YearResult {
     contributions: number;
     /** Included in contributions. */
     employerRrspMatch?: number;
-    /** Independent employer amount included in contributions. */
+    /** Personal deposit configured through employment, included in contributions. */
+    employmentRrspPersonal?: number;
+    /** Company fixed or salary-based amount included in contributions. */
     employerRrspContribution?: number;
     cashInterest?: number;
     /** Sale proceeds deposited directly, separate from contributions. */
@@ -218,9 +223,11 @@ export interface YearResult {
     assetSaleToNonreg: number;
     /** Already included in both income.other and contributions.rrsp. */
     employerRrspMatch: number;
-    /** Independent employer amount included in both income.other and contributions.rrsp. */
+    /** Personal deposit configured through employment, included in contributions.rrsp. */
+    employmentRrspPersonal?: number;
+    /** Company fixed or salary-based amount included in both income.other and contributions.rrsp. */
     employerRrspContribution?: number;
-    /** Independent employer amount that could not be deposited this year. */
+    /** Requested fixed or salary-based company amount that could not be deposited this year. */
     blockedEmployerRrspContribution?: number;
     /** Already included in contributions.cash and closingIdleCash. */
     cashContributionsToIdleCash: number;
@@ -334,15 +341,6 @@ export function validatePlan(plan: Plan): string[] {
   }
 
   for (const account of plan.accounts) {
-    if (
-      account.depositPriority !== undefined &&
-      (!Number.isSafeInteger(account.depositPriority) || account.depositPriority < 0)
-    ) {
-      errors.push(`Account "${account.id}" depositPriority must be a non-negative safe integer.`);
-    }
-    if (account.annualDepositLimit !== undefined && !isCentAmount(account.annualDepositLimit)) {
-      errors.push(`Account "${account.id}" annualDepositLimit must be a non-negative dollar amount in whole cents.`);
-    }
     if (account.balance < 0) {
       errors.push(`Account "${account.id}" has a negative balance (${account.balance}); balances cannot be negative.`);
     }
@@ -409,18 +407,37 @@ export function validatePlan(plan: Plan): string[] {
   }
 
   for (const income of plan.incomes) {
-    const employerRate = income.employerContributionRate;
-    const employerCap = income.employerContributionAnnualCap;
-    if (employerRate !== undefined && (!Number.isFinite(employerRate) || employerRate < 0 || employerRate > 1)) {
-      errors.push(`Income "${income.id}" employerContributionRate must be between 0 and 1.`);
-    }
-    if (employerCap !== undefined && (!isCentAmount(employerCap) || employerRate === undefined)) {
-      errors.push(
-        `Income "${income.id}" employerContributionAnnualCap requires a rate and a non-negative dollar amount in whole cents.`,
-      );
-    }
-    if ((employerRate !== undefined || employerCap !== undefined) && income.kind !== "employment") {
-      errors.push(`Income "${income.id}" employer RRSP contributions are supported only for employment income.`);
+    const setup = income.employmentContribution;
+    if (setup !== undefined) {
+      const label = `Income "${income.id}" employment RRSP contribution`;
+      if (income.kind !== "employment") errors.push(`${label} requires employment income.`);
+      if (!setup || (setup.accountId !== null && typeof setup.accountId !== "string")) {
+        errors.push(`${label} requires an RRSP destination identifier or a missing destination.`);
+      } else {
+        const validValue = (value: number, mode: string) =>
+          mode === "fixed" ? isCentAmount(value) : Number.isFinite(value) && value >= 0 && value <= 1;
+        if (
+          !setup.personal ||
+          !["fixed", "salary-percent"].includes(setup.personal.mode) ||
+          !validValue(setup.personal.value, setup.personal.mode)
+        ) {
+          errors.push(`${label} personal amount must be non-negative dollars in cents or a rate from 0% to 100%.`);
+        }
+        if (
+          !setup.company ||
+          !["fixed", "salary-percent", "match"].includes(setup.company.mode) ||
+          !validValue(setup.company.value, setup.company.mode)
+        ) {
+          errors.push(`${label} company amount must be non-negative dollars in cents or a rate from 0% to 100%.`);
+        }
+        if (
+          setup.recovery !== undefined &&
+          (!validValue(setup.recovery?.previousSalaryRate, "salary-percent") ||
+            !isCentAmount(setup.recovery?.previousAnnualCap))
+        ) {
+          errors.push(`${label} has an invalid migrated cap.`);
+        }
+      }
     }
     if (income.startAge <= 0) {
       errors.push(`Income "${income.id}" startAge must be a positive age (got ${income.startAge}).`);

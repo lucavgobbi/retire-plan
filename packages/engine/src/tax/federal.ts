@@ -18,8 +18,8 @@ import type { TaxYearTables } from "./tables";
  */
 export interface IncomeForTax {
   employmentIncome: number;
-  /** Deductible employer-funded group RRSP deposits included in employmentIncome. */
-  employerRrspDeduction?: number;
+  /** Landed employment RRSP deposits from the employee and employer, including any legacy employer match. */
+  employmentRrspDeduction?: number;
   /** Base CPP and EI eligible for non-refundable credits. */
   payrollCreditAmount?: number;
   /** First and second additional employee CPP contributions deductible from income. */
@@ -42,7 +42,7 @@ interface RateBracket {
 
 /**
  * Taxable income includes capital gains at 50% and deducts enhanced employee CPP
- * and eligible employer-funded RRSP deposits.
+ * and eligible employment RRSP deposits.
  * Eligible dividends must be zero.
  * `pensionEligibleIncome` is a subset annotation of other fields and is not added here.
  */
@@ -58,7 +58,7 @@ export function taxableIncome(income: IncomeForTax): number {
     income.rrspWithdrawals +
     Math.max(0, income.capitalGains) * CAPITAL_GAINS_INCLUSION -
     (income.enhancedCppDeduction ?? 0) -
-    (income.employerRrspDeduction ?? 0)
+    (income.employmentRrspDeduction ?? 0)
   );
 }
 

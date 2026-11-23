@@ -65,23 +65,21 @@ describe("parsePlanFile", () => {
     }
   });
 
-  it("round-trips RRSP deposit routing and company contribution fields through IndexedDB and JSON", async () => {
+  it("round-trips a named employment RRSP setup through IndexedDB and JSON", async () => {
     const ws = makeSampleWorkspace();
-    const rrsp = ws.plan.accounts.find((account) => account.type === "rrsp")!;
-    rrsp.depositPriority = 0;
-    rrsp.annualDepositLimit = 12_000.25;
     ws.plan.accounts.push({
       id: "rrsp-2",
       name: "Second RRSP",
       type: "rrsp",
       balance: 50_000,
       assetMix: { equity: 0.6, bond: 0.3, cash: 0.1 },
-      depositPriority: 1,
-      annualDepositLimit: 0,
     });
     const job = ws.plan.incomes.find((income) => income.kind === "employment")!;
-    job.employerContributionRate = 0.04;
-    job.employerContributionAnnualCap = 8_000.75;
+    job.employmentContribution = {
+      accountId: "rrsp-2",
+      personal: { mode: "fixed", value: 4_000.25 },
+      company: { mode: "match", value: 1 },
+    };
 
     const factory = new IDBFactory();
     await createStorageProvider(factory).save(ws);
@@ -96,6 +94,53 @@ describe("parsePlanFile", () => {
       expect(parsed.workspace.plan.incomes).toEqual(ws.plan.incomes);
     }
   });
+
+  it.each(["open", "zero cap", "none"])(
+    "migrates employer rates and retains capped formulas for review (RRSPs: %s)",
+    (rrsps) => {
+      const ws = makeSampleWorkspace();
+      const job = ws.plan.incomes.find((income) => income.kind === "employment")!;
+      Object.assign(job, { employerContributionRate: 0.04 });
+      ws.plan.incomes.push({ ...job, id: "capped" });
+      Object.assign(ws.plan.incomes.at(-1)!, { employerContributionAnnualCap: 8_000.75 });
+      if (rrsps !== "none") {
+        const first = ws.plan.accounts.find((account) => account.type === "rrsp")!;
+        ws.plan.accounts.push({ ...first, id: "eligible" });
+        Object.assign(first, { depositPriority: 1, annualDepositLimit: 0 });
+        Object.assign(ws.plan.accounts.at(-1)!, {
+          depositPriority: 2,
+          annualDepositLimit: rrsps === "zero cap" ? 0 : 5_000,
+        });
+      } else {
+        ws.plan.accounts = ws.plan.accounts.filter((account) => account.type !== "rrsp");
+      }
+      const raw = { ...buildPlanFile(ws), schemaVersion: 1 };
+      const result = parsePlanFile(raw);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.errors.join(" "));
+      const config = {
+        accountId: rrsps === "open" ? "eligible" : null,
+        personal: { mode: "fixed", value: 0 },
+        company: { mode: "salary-percent", value: 0.04 },
+      };
+      expect(result.workspace.plan.incomes.find((income) => income.id === job.id)?.employmentContribution).toEqual(
+        config,
+      );
+      expect(result.workspace.plan.incomes.at(-1)?.employmentContribution).toEqual({
+        ...config,
+        recovery: { previousSalaryRate: 0.04, previousAnnualCap: 8_000.75 },
+      });
+      const exported = workspaceToText(result.workspace);
+      expect(exported).not.toMatch(
+        /depositPriority|annualDepositLimit|employerContributionRate|employerContributionAnnualCap/,
+      );
+      expect(parsePlanFile(JSON.parse(exported))).toMatchObject({ ok: true });
+      expect(raw.plans[0]?.plan.incomes.find((income) => income.id === job.id)).toHaveProperty(
+        "employerContributionRate",
+        0.04,
+      );
+    },
+  );
 
   it("round-trips scenario benefit choices and withdrawal strategy", () => {
     const ws = makeSampleWorkspace();

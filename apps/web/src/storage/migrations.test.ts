@@ -29,10 +29,11 @@ describe("PlanFile migrations", () => {
     }
   });
 
-  it("assigns SCHEMA_VERSION=1; the v0→v1 hook is registered with a table", () => {
-    expect(SCHEMA_VERSION).toBe(1);
+  it("registers both older schema versions", () => {
+    expect(SCHEMA_VERSION).toBe(2);
     expect(MIGRATIONS[0]).toBeDefined();
     expect(MIGRATIONS[0]?.to).toBe(1);
+    expect(MIGRATIONS[1]?.to).toBe(2);
   });
 
   it("hard-blocks files from newer versions instead of best-effort loading", () => {

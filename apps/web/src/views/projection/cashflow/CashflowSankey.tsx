@@ -357,8 +357,8 @@ export function CashflowSankey({
             {data.legacyYears > 0 && (
               <p>
                 Some saved years lack cashflow detail such as scheduled mortgage payments, idle cash and asset-sale
-                routing. Their saved Other income and RRSP deposit totals can include employer match or independent
-                company RRSP contributions. Run the projection again for those details.
+                routing. Their saved Other income and RRSP deposit totals can include employer match or other company
+                RRSP contributions. Run the projection again for those details.
               </p>
             )}
             {data.missingPayrollYears > 0 && <p>Some saved years lack payroll deduction data.</p>}

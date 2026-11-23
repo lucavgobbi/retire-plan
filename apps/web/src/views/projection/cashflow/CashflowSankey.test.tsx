@@ -184,51 +184,71 @@ describe("CashflowSankey", () => {
     expect(screen.queryByRole("button", { name: /employer match/i })).toBeNull();
   });
 
-  it("shows independent company RRSP contributions separately from match and subtracts both from household cash", () => {
-    const base = testRun(true).years[0]!;
-    const account = base.accountBreakdown![0]!;
-    const match = account.employerRrspMatch!;
-    const company = 300;
-    const employee = account.contributions - match;
-    const years = [
+  it("shows named personal employment deposits and direct company transfers from a projection", () => {
+    const plan = createDefaultPlan();
+    plan.profile = { birthYear: 1981, currentAge: 45, endAge: 46, province: "ON" };
+    plan.accounts = ["Broker RRSP", "Group RRSP"].map((name) => ({
+      id: name,
+      name,
+      type: "rrsp",
+      balance: 0,
+      assetMix: { equity: 0, bond: 0, cash: 1 },
+    }));
+    plan.incomes = [
       {
-        ...base,
-        income: { ...base.income, other: base.income.other + company },
-        contributions: { ...base.contributions, rrsp: employee + match + company },
-        accountBreakdown: [
-          {
-            ...account,
-            name: "Work RRSP",
-            contributions: employee + match + company,
-            employerRrspContribution: company,
-          },
-        ],
-        cashflow: { ...base.cashflow!, employerRrspContribution: company },
+        id: "job",
+        kind: "employment",
+        annualAmount: 10_000,
+        startAge: 45,
+        raiseRate: 0,
+        employmentContribution: {
+          accountId: "Group RRSP",
+          personal: { mode: "fixed", value: 500 },
+          company: { mode: "match", value: 1 },
+        },
+      },
+      {
+        id: "other",
+        kind: "employment",
+        annualAmount: 10_000,
+        startAge: 45,
+        raiseRate: 0,
+        employmentContribution: {
+          accountId: "Broker RRSP",
+          personal: { mode: "fixed", value: 0 },
+          company: { mode: "fixed", value: 300 },
+        },
       },
     ];
-    const props = {
-      years,
-      birthYear: 1981,
-      range: { startYear: 2026, endYear: 2026 },
-      onRangeChange: vi.fn(),
-      onShowAccountsChange: vi.fn(),
-    };
-    const { rerender } = render(<CashflowSankey {...props} showAccounts={false} />);
+    plan.expenses = [{ id: "living", annualAmount: 22_000, startAge: 45, inflationRate: 0 }];
+    const { years } = runDeterministic(plan, {
+      ...DEFAULT_SCENARIO_BASE,
+      id: "test",
+      name: "Test",
+      simMode: "deterministic",
+    });
+    render(
+      <CashflowSankey
+        years={years}
+        birthYear={1981}
+        range={{ startYear: 2026, endYear: 2026 }}
+        onRangeChange={vi.fn()}
+        onShowAccountsChange={vi.fn()}
+        showAccounts
+      />,
+    );
     const summary = screen.getByText("Cashflow breakdown");
     fireEvent.click(summary);
     const breakdown = within(summary.closest("details")!);
-    expect(breakdown.getByText("Company RRSP contribution → RRSP").nextElementSibling?.textContent).toBe("$300.00");
-    expect(breakdown.getByText("Employer match → RRSP").nextElementSibling?.textContent).toBe("$250.00");
-    expect(screen.getByRole("button", { name: "Cashflow pool to RRSP contributions, $500.00" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Other income to Cashflow pool/ })).toBeNull();
-
-    rerender(<CashflowSankey {...props} showAccounts />);
-    expect(breakdown.getByText("Company RRSP contribution → Work RRSP").nextElementSibling?.textContent).toBe(
+    expect(breakdown.getByText("Company RRSP contribution → Broker RRSP").nextElementSibling?.textContent).toBe(
       "$300.00",
     );
-    expect(breakdown.getByText("Employer match → Work RRSP").nextElementSibling?.textContent).toBe("$250.00");
-    expect(screen.getByRole("button", { name: "Cashflow pool to Work RRSP contributions, $500.00" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /company RRSP contribution|employer match/i })).toBeNull();
+    expect(breakdown.getByText("Employer match → Group RRSP").nextElementSibling?.textContent).toBe("$500.00");
+    expect(
+      screen.getByRole("button", { name: "Cashflow pool to Personal employment deposit → Group RRSP, $500.00" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Other income to Cashflow pool/ })).toBeNull();
+    expect(screen.queryByText(/Unreconciled differences/)).toBeNull();
   });
 
   it("keeps a match-only breakdown available and names the recipient when checked", () => {

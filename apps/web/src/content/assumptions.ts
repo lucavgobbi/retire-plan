@@ -15,7 +15,7 @@ export interface AssumptionEntry {
 }
 
 export const TAX_MINIMIZING_STRATEGY_HELP =
-  "A bounded planning heuristic requires full funding in every modeled year, then prioritizes total income tax through your end age. In years with a planned RRSP draw, ordinary personal RRSP savings steps are skipped. Personal deposits can still earn an employer match using after-tax household surplus calculated before the planned draw. Independent company RRSP contributions and other savings rules remain available. Stochastic outcomes can differ from the planning comparison.";
+  "A bounded planning heuristic requires full funding in every modeled year, then prioritizes total income tax through your end age. In years with a planned RRSP draw, ordinary personal RRSP savings steps are skipped. Employment RRSP deposits are settled from wages before draw pricing. A legacy savings match can use surplus calculated before the planned draw in years without an overlapping company deposit from an employment RRSP setup. Stochastic outcomes can differ from the planning comparison.";
 
 export const ASSUMPTIONS: AssumptionEntry[] = [
   {
@@ -104,10 +104,10 @@ export const ASSUMPTIONS: AssumptionEntry[] = [
   },
   {
     id: "employer-rrsp-match",
-    title: "Employer RRSP deposits are taxable benefits with an equal deduction",
+    title: "Employment RRSP deposits use wages and shared room",
     category: "approximation",
     since: "v1",
-    body: "Employer matches and independent company RRSP deposits are taxable employment benefits with an equal modeled RRSP income tax deduction. The model assumes a group RRSP that permits withdrawals, so employer deposits are included in earnings for enabled CPP and EI calculations. Personal RRSP income tax deductions are outside the model. A match requires employment pay and personal deposits through the match step. Employer deposits go directly into the RRSP and use shared room and account capacity. The model reports any blocked independent company contribution.",
+    body: "Employment RRSP deposits go directly to the selected account before surplus is allocated and follow the employment schedule. Percentages use raised base salary before bonus. The personal deposit uses net wages before household bills and reduces taxable income by the amount that lands. Company deposits and matches are taxable employment benefits with an equal RRSP deduction, and count for enabled CPP and EI under the withdrawable group RRSP assumption. All deposits use shared RRSP room. Ordinary surplus RRSP deposits carry no modeled deduction.",
   },
   {
     id: "gis-sequencing",

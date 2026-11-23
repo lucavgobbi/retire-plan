@@ -34,148 +34,284 @@ function run(input: Plan, overrides?: Partial<Scenario>) {
   return simulate(input, { ...scenario, ...overrides }, buildDeterministicReturns(returns, currentAge, endAge)).years;
 }
 
-describe("employer RRSP contributions", () => {
-  it("lands independent money in a deficit without making it spendable or drawable this year", () => {
+const fixed = (value: number) => ({ mode: "fixed", value }) as const;
+const percent = (value: number) => ({ mode: "salary-percent", value }) as const;
+const matched = (value = 1) => ({ mode: "match", value }) as const;
+
+describe("employment RRSP contributions", () => {
+  it("deposits into the selected RRSP in a deficit and holds only pre-deposit balances available for withdrawals", () => {
     const input = plan(10_000, 10_800);
-    input.incomes[0]!.employerContributionRate = 0.1;
-    input.savingsPolicy = [match];
-
-    const first = run(input)[0]!;
-    expect(first.cashflow).toMatchObject({ employerRrspContribution: 1_000, employerRrspMatch: 0, closingIdleCash: 0 });
-    expect(first.income).toMatchObject({ employment: 10_000, other: 1_000 });
-    expect(first.contributions.rrsp).toBe(1_000);
-    expect(first.withdrawals.rrsp).toBe(0);
-    expect(first.shortfall).toBe(800);
-    expect(first.taxableIncome).toBe(10_000);
-    expect(first.rrspRoom).toBe(980);
-    expect(first.netWorth).toBe(1_000);
-  });
-
-  it("fills two capped RRSPs with gross deposits and preserves overflow through the next step and idle cash", () => {
-    const input = plan(10_000, 8_500);
-    input.accounts = [
-      { ...rrsp("second"), depositPriority: 2, annualDepositLimit: 602 },
-      { ...rrsp("first"), depositPriority: 1, annualDepositLimit: 600 },
-      { id: "fallback", type: "nonreg", balance: 0, assetMix: mix, annualDepositLimit: 100 },
-    ];
-    input.incomes[0]!.employerContributionRate = 0.08;
-    input.savingsPolicy = [match, { id: "nonreg", target: "nonreg", priority: 2 }];
-
-    const years = run(input);
-    for (const year of years) {
-      expect(year.accountBreakdown).toMatchObject([
-        { id: "second", contributions: 602, employerRrspContribution: 200, employerRrspMatch: 134 },
-        { id: "first", contributions: 600, employerRrspContribution: 600 },
-        { id: "fallback", contributions: 100 },
-      ]);
-      expect(year.accountBreakdown![1]!.employerRrspMatch).toBeUndefined();
-      expect(year.cashflow).toMatchObject({ employerRrspContribution: 800, employerRrspMatch: 134 });
-      expect(year.income.other).toBe(934);
-      expect(year.contributions).toEqual({ rrsp: 1_202, tfsa: 0, nonreg: 100 });
-      const startingCash = year.cashflow!.openingIdleCash;
-      expect(year.cashflow!.closingIdleCash - startingCash).toBe(1_132);
-    }
-  });
-
-  it("warns on zero-capacity and missing RRSP accounts and preserves all personal cash", () => {
-    const input = plan();
-    input.incomes[0]!.employerContributionRate = 0.1;
-    input.savingsPolicy = [match];
-    for (const accounts of [[], [{ ...rrsp("closed"), annualDepositLimit: 0 }]]) {
-      input.accounts = accounts;
-      expect(validatePlan(input)).toEqual([]);
-      const year = run(input)[0]!;
-      expect(year.cashflow).toMatchObject({ blockedEmployerRrspContribution: 1_000, closingIdleCash: 10_000 });
-      expect(year.cashflow?.employerRrspContribution).toBeUndefined();
-      expect(year.warnings).toContainEqual(expect.stringContaining("$1000.00"));
-      expect(year.taxableIncome).toBe(10_000);
-      expect(year.contributions.rrsp).toBe(0);
-      expect(year.rrspRoom).toBe(1_800);
-    }
-  });
-
-  it("caps independent money at pre-benefit room and carries its extra earned room forward", () => {
-    const input = plan();
-    input.incomes[0]!.employerContributionRate = 1;
-    input.savingsPolicy = [match];
-    const [first, second] = run(input);
-    expect(first?.cashflow).toMatchObject({ employerRrspContribution: 1_800, blockedEmployerRrspContribution: 8_200 });
-    expect(first?.cashflow?.employerRrspMatch).toBe(0);
-    expect(first?.rrspRoom).toBe(324);
-    expect(second?.cashflow?.employerRrspContribution).toBe(2_124);
-  });
-
-  it("reserves tight room for the full match and carries personal residue to the next step", () => {
-    const input = plan();
-    input.savingsPolicy = [match, { id: "cash", target: "cash", priority: 2 }];
+    input.accounts = [rrsp("work"), { ...rrsp("group"), balance: 50, name: "Group RRSP" }];
+    input.incomes[0]!.employmentContribution = { accountId: "group", personal: fixed(500), company: fixed(1_000) };
     const year = run(input)[0]!;
-    expect(year.cashflow?.employerRrspMatch).toBe(600);
-    expect(year.contributions).toEqual({ rrsp: 1_800, tfsa: 0, nonreg: 0, cash: 8_800 });
-    expect(year.rrspRoom).toBe(108);
-    expect(year.taxableIncome).toBe(10_000);
+    expect(year.accountBreakdown).toMatchObject([
+      { id: "work", contributions: 0, withdrawals: 0 },
+      {
+        id: "group",
+        contributions: 1_500,
+        withdrawals: 50,
+        employmentRrspPersonal: 500,
+        employerRrspContribution: 1_000,
+      },
+    ]);
+    expect(year.cashflow).toMatchObject({
+      employerRrspContribution: 1_000,
+      employmentRrspPersonal: 500,
+      closingIdleCash: 0,
+    });
+    expect(year.income).toMatchObject({ employment: 10_000, other: 1_000 });
+    expect(year.shortfall).toBe(1_250);
+    expect(year.taxableIncome).toBe(9_550);
+    expect(year.rrspRoom).toBe(480);
+    expect(year.netWorth).toBe(1_500);
   });
 
-  it("models the landed employer benefit using shared CPP and EI ceilings", () => {
+  it.each([null, "deleted", "cash"])("warns and books no deposit for unavailable destination %s", (accountId) => {
     const input = plan(65_000);
-    input.incomes[0]!.employerContributionRate = 0.1;
+    input.accounts.push({ id: "cash", type: "cash", balance: 0 });
     const payroll = { cpp: true, ei: true, cppOptOut65to69: false };
     const baseline = run(input, { payroll })[0]!;
-    input.expenses[0]!.annualAmount = baseline.balances.cash - 1_000;
-    input.savingsPolicy = [{ ...match, matchRate: 1 }];
+    input.incomes[0]!.employmentContribution = { accountId, personal: percent(0.04), company: percent(0.05) };
     const year = run(input, { payroll })[0]!;
-    const employer = year.cashflow!.employerRrspContribution! + year.cashflow!.employerRrspMatch;
-    const expectedPayroll = annualPayroll(65_000 + employer, 0, 40, payroll, loadTables(tablesJson).payroll, []);
-    expect(year.cashflow!.employerRrspMatch).toBeGreaterThan(0);
-    expect(year.cashflow!.employerRrspMatch).toBeLessThan(1_000);
-    expect(year.payroll).toEqual(expectedPayroll);
-    expect(year.taxableIncome).toBeCloseTo(65_000 - expectedPayroll.enhancedCppDeduction, 2);
-    expect(year.contributions.rrsp - employer + year.balances.cash).toBeCloseTo(
-      65_000 - year.expenses - expectedPayroll.total - year.tax.total,
+    expect(year.contributions.rrsp).toBe(0);
+    expect(year.income).toEqual(baseline.income);
+    expect(year.taxableIncome).toBe(baseline.taxableIncome);
+    expect(year.payroll).toEqual(baseline.payroll);
+    expect(year.cashflow?.closingIdleCash).toBe(baseline.cashflow?.closingIdleCash);
+    expect(year.warnings).toContainEqual(expect.stringContaining("choose an existing RRSP destination"));
+  });
+
+  it("keeps ambiguous saved account IDs usable for general savings and blocks direct deposits to them", () => {
+    const input = plan();
+    input.accounts.push({ ...rrsp("work"), balance: 100 });
+    input.incomes[0]!.employmentContribution = { accountId: "work", personal: fixed(500), company: matched() };
+    input.savingsPolicy = [{ id: "general", target: "rrsp", priority: 1, perYearCap: 150 }];
+    const year = run(input)[0]!;
+    expect(year.accountBreakdown).toMatchObject([{ contributions: 0 }, { contributions: 150 }]);
+    expect(year.cashflow?.employmentRrspPersonal).toBeUndefined();
+    expect(year.cashflow?.employerRrspMatch).toBe(0);
+    expect(year.warnings).toContainEqual(expect.stringContaining("unique account identifier"));
+  });
+
+  it("pauses a migrated capped formula with a review warning and no blocked amount", () => {
+    const input = plan(100_000);
+    input.incomes[0]!.employmentContribution = {
+      accountId: "work",
+      personal: fixed(0),
+      company: percent(0.1),
+      recovery: { previousSalaryRate: 0.1, previousAnnualCap: 1_000 },
+    };
+    const year = run(input)[0]!;
+    expect(year.contributions.rrsp).toBe(0);
+    expect(year.income.other).toBe(0);
+    expect(year.taxableIncome).toBe(100_000);
+    expect(year.cashflow?.blockedEmployerRrspContribution).toBeUndefined();
+    expect(year.warnings).toContainEqual(expect.stringContaining("review the previous capped company contribution"));
+  });
+
+  it("settles a dollar-for-dollar match against partial room then allocates general surplus", () => {
+    const input = plan();
+    input.accounts.unshift({ ...rrsp("other"), balance: 100 });
+    input.incomes[0]!.employmentContribution = { accountId: "work", personal: fixed(1_000), company: matched() };
+    input.savingsPolicy = [{ id: "cash", target: "cash", priority: 1 }];
+    const year = run(input)[0]!;
+    expect(year.cashflow).toMatchObject({
+      employmentRrspPersonal: 900,
+      employerRrspMatch: 900,
+    });
+    expect(year.accountBreakdown).toMatchObject([
+      { id: "other", contributions: 0 },
+      { id: "work", contributions: 1_800, employmentRrspPersonal: 900, employerRrspMatch: 900 },
+    ]);
+    expect(year.contributions).toEqual({ rrsp: 1_800, tfsa: 0, nonreg: 0, cash: 9_100 });
+    expect(year.rrspRoom).toBe(162);
+    expect(year.taxableIncome).toBe(9_100);
+  });
+
+  it("prioritizes fixed company deposits across streams and does not use company benefits to fund their room", () => {
+    const input = plan();
+    input.accounts.push(rrsp("second"));
+    input.incomes[0]!.employmentContribution = { accountId: "work", personal: fixed(100), company: matched() };
+    input.incomes.push({
+      id: "otherJob",
+      kind: "employment",
+      annualAmount: 10_000,
+      startAge: 40,
+      raiseRate: 0,
+      employmentContribution: { accountId: "second", personal: fixed(0), company: fixed(10_000) },
+    });
+    const [first, second] = run(input);
+    expect(first?.accountBreakdown).toMatchObject([
+      { id: "work", contributions: 0 },
+      { id: "second", contributions: 3_600 },
+    ]);
+    expect(first?.cashflow).toMatchObject({
+      employerRrspContribution: 3_600,
+      blockedEmployerRrspContribution: 6_400,
+      employerRrspMatch: 0,
+    });
+    expect(first?.rrspRoom).toBe(648);
+    expect(second?.cashflow?.employerRrspContribution).toBe(4_248);
+  });
+
+  it("uses raised base pay for both percentages and follows linked and ongoing pay schedules", () => {
+    const input = plan();
+    input.profile.endAge = 42;
+    const job = input.incomes[0]!;
+    Object.assign(job, {
+      bonusRate: 0.5,
+      raiseRate: 0.2,
+      endAtRetirement: true,
+      employmentContribution: { accountId: "work", personal: percent(0.04), company: percent(0.05) },
+    });
+    const [first, second, retired] = run(input, { retirementAge: 42 });
+    expect(first?.income.employment).toBe(15_000);
+    expect(second?.income.employment).toBe(18_000);
+    expect(first?.cashflow).toMatchObject({ employmentRrspPersonal: 400, employerRrspContribution: 500 });
+    expect(second?.cashflow).toMatchObject({ employmentRrspPersonal: 480, employerRrspContribution: 600 });
+    expect(retired?.contributions.rrsp).toBe(0);
+    job.endAtRetirement = false;
+    expect(run(input, { retirementAge: 42 })[2]?.cashflow).toMatchObject({
+      employmentRrspPersonal: 576,
+      employerRrspContribution: 720,
+    });
+    job.endAge = 41;
+    expect(run(input, { retirementAge: 42 })[2]?.contributions.rrsp).toBe(0);
+  });
+
+  it("stops at zero room or RRSP age ineligibility even with employment", () => {
+    const input = plan(0);
+    input.incomes[0]!.employmentContribution = { accountId: "work", personal: fixed(100), company: fixed(100) };
+    expect(run(input)[0]?.contributions.rrsp).toBe(0);
+    input.profile = { ...input.profile, birthYear: 1954, currentAge: 72, endAge: 73 };
+    input.incomes[0]!.annualAmount = 20_000;
+    const year = run(input)[0]!;
+    expect(year.contributions.rrsp).toBe(0);
+    expect(year.warnings).toContainEqual(expect.stringContaining("RRSP age eligibility"));
+  });
+
+  it("counts actual company deposits for CPP and EI and deducts only landed personal contributions", () => {
+    const input = plan(65_000, 25_000);
+    input.incomes[0]!.employmentContribution = { accountId: "work", personal: fixed(5_000), company: matched() };
+    const payroll = { cpp: true, ei: true, cppOptOut65to69: false };
+    const year = run(input, { payroll })[0]!;
+    const expected = annualPayroll(70_000, 0, 40, payroll, loadTables(tablesJson).payroll, []);
+    expect(year.payroll).toEqual(expected);
+    expect(year.cashflow).toMatchObject({ employmentRrspPersonal: 5_000, employerRrspMatch: 5_000 });
+    expect(year.taxableIncome).toBeCloseTo(60_000 - expected.enhancedCppDeduction, 2);
+    expect(year.cashflow!.closingIdleCash).toBeCloseTo(
+      65_000 - 5_000 - year.expenses - expected.total - year.tax.total,
       2,
     );
   });
 
-  it("reconciles match across the discontinuous EI refund cutoff", () => {
-    const input = plan(1_900, 1_880);
-    input.incomes[0]!.employerContributionRate = 0.05;
-    input.savingsPolicy = [{ ...match, matchRate: 1 }];
-    const year = run(input, { payroll: { cpp: false, ei: true, cppOptOut65to69: false } })[0]!;
-    expect(year.cashflow).toMatchObject({ employerRrspContribution: 95, employerRrspMatch: 5, closingIdleCash: 15 });
-    expect(year.payroll!.eiRefund).toBe(year.payroll!.ei);
-    expect(year.shortfall).toBe(0);
-    expect(year.contributions.rrsp).toBe(105);
-  });
-
-  it("uses raised base salary before bonus and stops with linked retirement", () => {
-    const input = plan();
-    input.profile.endAge = 42;
-    Object.assign(input.incomes[0]!, {
-      bonusRate: 0.5,
-      raiseRate: 0.2,
-      endAtRetirement: true,
-      employerContributionRate: 0.1,
-      employerContributionAnnualCap: 1_150,
+  it("limits personal deposits to own-stream pay and the shared net wage budget without recycling planned draws", () => {
+    const input = plan(9_000);
+    input.accounts[0]!.balance = 100_000;
+    input.incomes.push({
+      id: "partTime",
+      kind: "employment",
+      annualAmount: 1_000,
+      startAge: 40,
+      raiseRate: 0,
+      employmentContribution: { accountId: "work", personal: fixed(10_000), company: matched(0.5) },
     });
-    input.savingsPolicy = [{ ...match, perYearCap: 100 }];
-    const [first, second, retired] = run(input, { retirementAge: 42 });
-    expect(first?.income.employment).toBe(15_000);
-    expect(second?.income.employment).toBe(18_000);
-    expect(first?.cashflow?.employerRrspContribution).toBe(1_000);
-    expect(second?.cashflow?.employerRrspContribution).toBe(1_150);
-    expect(second?.cashflow?.employerRrspMatch).toBe(50);
-    expect(retired?.cashflow?.employerRrspContribution).toBeUndefined();
-    expect(retired?.cashflow?.employerRrspMatch).toBe(0);
+    const configured = run(input)[0]!;
+    expect(configured.cashflow).toMatchObject({ employmentRrspPersonal: 1_000, employerRrspMatch: 500 });
+    const planned = simulate(
+      input,
+      { ...scenario, withdrawalStrategy: "tax-minimizing" },
+      buildDeterministicReturns(returns, 40, 41),
+      undefined,
+      { strategy: "tax-minimizing", byAge: [], fillTargetTaxable: 20_000 },
+    ).years[0]!;
+    expect(planned.plannedRrspDraw).toBe(11_000);
+    expect(planned.contributions.rrsp).toBe(1_500);
+    expect(planned.taxableIncome).toBe(20_000);
   });
 
-  it("warns when active employment offers an RRSP deposit after age 71", () => {
+  it("caps aggregate personal deposits by net wages even when room has accumulated and withdrawals cover expenses", () => {
+    const input = plan(100_000);
+    input.profile.endAge = 42;
+    input.incomes[0]!.endAge = 40;
+    input.accounts[0]!.balance = 50_000;
+    input.expenses[0]!.annualAmount = 10_000;
+    input.incomes.push({
+      id: "partTime",
+      kind: "employment",
+      annualAmount: 5_000,
+      startAge: 41,
+      raiseRate: 0,
+      employmentContribution: { accountId: "work", personal: fixed(10_000), company: matched() },
+    });
+    const payroll = { cpp: true, ei: true, cppOptOut65to69: false };
+    const baseline = run(input, { payroll })[1]!;
+    const landed = baseline.cashflow!.employmentRrspPersonal!;
+    expect(landed).toBeGreaterThan(4_000);
+    expect(landed).toBeLessThan(5_000);
+    expect(baseline.cashflow!.employerRrspMatch).toBe(landed);
+    expect(landed).toBeCloseTo(5_000 - baseline.payroll!.total + baseline.payroll!.eiRefund, 2);
+    input.expenses[0]!.annualAmount = 100_000;
+    const deficit = run(input, { payroll })[1]!;
+    expect(deficit.withdrawals.rrsp).toBeGreaterThan(0);
+    expect(deficit.cashflow?.employmentRrspPersonal).toBe(landed);
+    expect(deficit.cashflow?.employerRrspMatch).toBe(landed);
+  });
+
+  it("keeps legacy matches without employment setups and warns on an active overlap", () => {
     const input = plan();
-    input.profile = { ...input.profile, birthYear: 1954, currentAge: 72, endAge: 73 };
-    input.incomes[0]!.employerContributionRate = 0.1;
-    input.savingsPolicy = [match];
-    const year = run(input)[0]!;
-    expect(year.cashflow).toMatchObject({ blockedEmployerRrspContribution: 1_000, employerRrspMatch: 0 });
-    expect(year.contributions.rrsp).toBe(0);
-    expect(year.balances.cash).toBe(10_000);
+    input.accounts = [
+      { ...rrsp("work"), balance: 100 },
+      { ...rrsp("other"), balance: 300 },
+    ];
+    input.savingsPolicy = [{ ...match, perYearCap: 100 }];
+    const legacy = run(input)[0]!;
+    expect(legacy.contributions.rrsp).toBe(150);
+    expect(legacy.taxableIncome).toBe(10_000);
+    expect(legacy.accountBreakdown).toMatchObject([
+      { contributions: 37.5, employerRrspMatch: 12.5 },
+      { contributions: 112.5, employerRrspMatch: 37.5 },
+    ]);
+    input.incomes[0]!.employmentContribution = { accountId: "work", personal: fixed(100), company: matched() };
+    const current = run(input)[0]!;
+    expect(current.contributions.rrsp).toBe(300);
+    expect(current.cashflow?.employerRrspMatch).toBe(100);
+    expect(current.warnings).toContainEqual(expect.stringContaining("legacy RRSP savings match overlaps"));
+    input.incomes[0]!.endAtRetirement = true;
+    input.incomes.push({ id: "nextJob", kind: "employment", annualAmount: 10_000, startAge: 41, raiseRate: 0 });
+    const next = run(input, { retirementAge: 41 })[1]!;
+    expect(next.cashflow?.employerRrspMatch).toBe(50);
+    expect(next.warnings).not.toContainEqual(expect.stringContaining("legacy RRSP savings match overlaps"));
+  });
+
+  it.each(["recovery", "missing", "zero", "personal only"])(
+    "retains a legacy match when the employment setup is %s",
+    (state) => {
+      const input = plan();
+      input.savingsPolicy = [{ ...match, perYearCap: 100 }];
+      input.incomes[0]!.employmentContribution = {
+        accountId: state === "missing" ? "missing" : "work",
+        personal: fixed(state === "zero" ? 0 : 100),
+        company: state === "personal only" ? fixed(0) : matched(),
+        ...(state === "recovery" ? { recovery: { previousSalaryRate: 0.1, previousAnnualCap: 800 } } : {}),
+      };
+      const year = run(input)[0]!;
+      expect(year.cashflow?.employerRrspMatch).toBe(50);
+      expect(year.warnings).not.toContainEqual(expect.stringContaining("legacy RRSP savings match overlaps"));
+    },
+  );
+
+  it("validates nonfinite, out-of-range, fractional-cent rules and employment-only placement", () => {
+    const input = plan();
+    const job = input.incomes[0]!;
+    job.employmentContribution = { accountId: "work", personal: fixed(1.001), company: matched(Infinity) };
+    expect(validatePlan(input)).toEqual([
+      expect.stringContaining("personal amount"),
+      expect.stringContaining("company amount"),
+    ]);
+    job.kind = "other";
+    job.employmentContribution = { accountId: "work", personal: fixed(0), company: percent(0.05) };
+    expect(validatePlan(input)).toEqual([expect.stringContaining("requires employment income")]);
   });
 
   it.each([
@@ -202,122 +338,4 @@ describe("employer RRSP contributions", () => {
       expect(year.contributions.rrsp).toBe(landedMatch * 2);
     },
   );
-});
-
-describe("savings deposit routing", () => {
-  it("carries a cent past a fractional-cent TFSA step cap without duplicating it", () => {
-    const input = plan(100.01, 100);
-    input.accounts = [
-      { id: "tfsa", type: "tfsa", balance: 0, assetMix: mix, annualDepositLimit: 0.01 },
-      { id: "fallback", type: "nonreg", balance: 0, assetMix: mix, annualDepositLimit: 0.01 },
-    ];
-    input.savingsPolicy = [{ id: "tfsa", target: "tfsa", priority: 0, perYearCap: 0.005 }];
-    const year = run(input)[0]!;
-    expect(year.contributions).toEqual({ tfsa: 0, rrsp: 0, nonreg: 0.01 });
-    expect(year.accountBreakdown?.map((item) => item.contributions)).toEqual([0, 0.01]);
-    expect(year.cashflow?.closingIdleCash).toBe(0);
-    expect(year.netWorth).toBe(0.01);
-  });
-
-  it("uses explicit priorities first, plan order for ties, and omitted priorities last", () => {
-    const input = plan(100);
-    input.accounts = [
-      { id: "omitted", type: "cash", balance: 5 },
-      { id: "lower", type: "cash", balance: 0, depositPriority: 9, annualDepositLimit: 20 },
-      { id: "first", type: "cash", balance: 0, depositPriority: 0, annualDepositLimit: 25 },
-      { id: "tie", type: "cash", balance: 0, depositPriority: 0, annualDepositLimit: 30 },
-    ];
-    input.savingsPolicy = [{ id: "cash", target: "cash", priority: 1 }];
-    expect(run(input)[0]?.accountBreakdown?.map((item) => item.contributions)).toEqual([25, 20, 25, 30]);
-  });
-
-  it("keeps legacy proportional routing and reconciles employer sources to named deposits in cents", () => {
-    const input = plan(10_000, 9_800);
-    input.accounts = [
-      { ...rrsp("small"), balance: 1 },
-      { ...rrsp("large"), balance: 2 },
-    ];
-    input.incomes[0]!.employerContributionRate = 0.001;
-    input.incomes[0]!.employerContributionAnnualCap = 0.01;
-    input.savingsPolicy = [{ ...match, perYearCap: 100.01 }];
-    const year = run(input)[0]!;
-    expect(year.accountBreakdown?.map((row) => row.contributions)).toEqual([50.01, 100.02]);
-    expect(year.cashflow).toMatchObject({ employerRrspContribution: 0.01, employerRrspMatch: 50.01 });
-    const cents = (amount: number) => Math.round(amount * 100);
-    const accounts = year.accountBreakdown!;
-    expect(accounts.reduce((sum, row) => sum + cents(row.employerRrspContribution ?? 0), 0)).toBe(1);
-    expect(accounts.reduce((sum, row) => sum + cents(row.employerRrspMatch ?? 0), 0)).toBe(5_001);
-    for (const row of accounts) {
-      expect(cents(row.employerRrspContribution ?? 0) + cents(row.employerRrspMatch ?? 0)).toBeLessThanOrEqual(
-        cents(row.contributions),
-      );
-    }
-  });
-
-  it("excludes direct asset-sale deposits from both priority and annual capacity", () => {
-    const input = plan(100);
-    input.accounts = [
-      { id: "first", type: "nonreg", balance: 100, assetMix: mix, annualDepositLimit: 0 },
-      { id: "second", type: "nonreg", balance: 300, assetMix: mix, depositPriority: 0, annualDepositLimit: 20 },
-    ];
-    input.assets = [
-      { id: "sale", kind: "other", value: 100, appreciationRate: 0, sellEvent: { age: 40, costsPct: 0 } },
-    ];
-    const year = run(input)[0]!;
-    expect(year.accountBreakdown).toMatchObject([
-      { assetSaleDeposit: 25, contributions: 0 },
-      { assetSaleDeposit: 75, contributions: 20 },
-    ]);
-    expect(year.cashflow?.closingIdleCash).toBe(80);
-  });
-
-  it("captures match on the accounts where the matched deposit lands after earlier personal deposits", () => {
-    const input = plan();
-    input.accounts = [{ ...rrsp("first"), depositPriority: 0, annualDepositLimit: 100 }, rrsp("second")];
-    input.incomes[0]!.employerContributionRate = 0.005;
-    input.savingsPolicy = [
-      { id: "personal", target: "rrsp", priority: 0, perYearCap: 50 },
-      { ...match, perYearCap: 50 },
-    ];
-    const [first, second] = run(input)[0]!.accountBreakdown!;
-    expect(first).toMatchObject({ contributions: 100, employerRrspContribution: 50 });
-    expect(first?.employerRrspMatch).toBeUndefined();
-    expect(second).toMatchObject({ contributions: 75, employerRrspMatch: 25 });
-    expect(second?.employerRrspContribution).toBeUndefined();
-  });
-});
-
-describe("employer and deposit field validation", () => {
-  it("rejects nonfinite, out-of-range and fractional-cent inputs", () => {
-    for (const value of [-1, 0.5, Infinity, NaN, Number.MAX_SAFE_INTEGER + 1]) {
-      const input = plan();
-      input.accounts[0]!.depositPriority = value;
-      expect(validatePlan(input)).toContainEqual(expect.stringContaining("depositPriority"));
-    }
-    for (const value of [-1, 1.001, Infinity, NaN]) {
-      const input = plan();
-      input.accounts[0]!.annualDepositLimit = value;
-      input.incomes[0]!.employerContributionAnnualCap = value;
-      input.incomes[0]!.employerContributionRate = 0.5;
-      expect(validatePlan(input)).toEqual([
-        expect.stringContaining("annualDepositLimit"),
-        expect.stringContaining("employerContributionAnnualCap"),
-      ]);
-    }
-    for (const value of [-0.1, 1.01, Infinity, NaN]) {
-      const input = plan();
-      input.incomes[0]!.employerContributionRate = value;
-      expect(validatePlan(input)).toContainEqual(expect.stringContaining("employerContributionRate"));
-    }
-  });
-
-  it("requires a rate for the annual employer cap and confines both fields to employment", () => {
-    const input = plan();
-    input.incomes[0]!.employerContributionAnnualCap = 0;
-    expect(validatePlan(input)).toContainEqual(expect.stringContaining("requires a rate"));
-    input.incomes[0]!.employerContributionRate = 0;
-    expect(validatePlan(input)).toEqual([]);
-    input.incomes[0]!.kind = "other";
-    expect(validatePlan(input)).toContainEqual(expect.stringContaining("only for employment"));
-  });
 });

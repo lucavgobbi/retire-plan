@@ -14,7 +14,7 @@ import type { Plan, PlanMeta, PlanFile, ScenarioDelta, Workspace } from "../doma
 import { HISTORICAL_DATASET, validatePlan } from "@retire-plan/engine";
 
 /** Current PlanFile JSON payload version (NOT the IndexedDB layout version; see db.ts). */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 // --- tiny shape helpers (no deps; keep in sync with domain/types.ts by review) ---
 
@@ -207,6 +207,9 @@ export function validatePlanShape(value: unknown): string[] {
           if (item.bookValue !== undefined && (!isFiniteNumber(item.bookValue) || item.bookValue < 0)) {
             errors.push(`${label} bookValue must be a non-negative finite number.`);
           }
+          if (item.depositPriority !== undefined || item.annualDepositLimit !== undefined) {
+            errors.push(`${label} uses retired savings deposit settings. Import it as a schema v1 plan to migrate it.`);
+          }
           break;
         }
         case "assets": {
@@ -293,6 +296,25 @@ export function validatePlanShape(value: unknown): string[] {
           }
           if (item.raiseRate !== undefined && !isFiniteNumber(item.raiseRate)) {
             errors.push(`${label} raiseRate must be a finite number.`);
+          }
+          if (item.employerContributionRate !== undefined || item.employerContributionAnnualCap !== undefined) {
+            errors.push(`${label} uses previous employer RRSP settings. Import it as a schema v1 plan to migrate it.`);
+          }
+          const setup = item.employmentContribution;
+          if (
+            setup !== undefined &&
+            (!isRecord(setup) ||
+              !(setup.accountId === null || isNonEmptyString(setup.accountId)) ||
+              !isRecord(setup.personal) ||
+              !isFiniteNumber(setup.personal.value) ||
+              !isRecord(setup.company) ||
+              !isFiniteNumber(setup.company.value) ||
+              (setup.recovery !== undefined &&
+                (!isRecord(setup.recovery) ||
+                  !isFiniteNumber(setup.recovery.previousSalaryRate) ||
+                  !isFiniteNumber(setup.recovery.previousAnnualCap))))
+          ) {
+            errors.push(`${label} has an invalid employment RRSP contribution setup.`);
           }
           break;
         }

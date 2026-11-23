@@ -156,10 +156,29 @@ function namedFlows(row: NamedYear) {
               item,
               `${accountName(item)} contributions`,
               "transfer",
-              item.contributions - (item.employerRrspMatch ?? 0) - (item.employerRrspContribution ?? 0),
+              item.contributions -
+                (item.employerRrspMatch ?? 0) -
+                (item.employerRrspContribution ?? 0) -
+                (item.employmentRrspPersonal ?? 0),
             ),
           ),
       ]),
+      [
+        "employment-rrsp-personal",
+        accounts.flatMap((item) =>
+          item.employmentRrspPersonal
+            ? [
+                itemFlow(
+                  "employment-rrsp-personal",
+                  item,
+                  `Personal employment deposit → ${accountName(item)}`,
+                  "transfer",
+                  item.employmentRrspPersonal,
+                ),
+              ]
+            : [],
+        ),
+      ],
       [
         "mortgage-prepay",
         mortgage
@@ -294,7 +313,13 @@ export function aggregateCashflow(years: YearResult[], birthYear: number, range:
         capture ? "rrsp-contribution" : "legacy-rrsp-contribution",
         capture ? "RRSP contributions" : "RRSP deposits (saved total)",
         "transfer",
-        contributions.rrsp - employerDeposits,
+        contributions.rrsp - employerDeposits - (captured.employmentRrspPersonal ?? 0),
+      ],
+      [
+        "employment-rrsp-personal",
+        "Personal employment RRSP deposits",
+        "transfer",
+        captured.employmentRrspPersonal ?? 0,
       ],
       ["nonreg-contribution", "Non-registered contributions", "transfer", contributions.nonreg],
       [

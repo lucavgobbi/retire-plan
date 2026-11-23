@@ -54,19 +54,29 @@ stream pays nothing. Salary and bonus use the same active years. Fixed end ages
 are inclusive, and older streams without an end age or a retirement link stay
 ongoing. CPP, OAS, expenses and savings steps use their own ages.
 
-Employer RRSP matching requires positive employment pay in the year. Fixed,
-ongoing and retirement-linked employment can qualify. In a year without
-employment pay, a match step becomes an ordinary employee RRSP contribution.
+### Employment RRSP contributions
 
-An employment stream can also specify an independent employer RRSP contribution
-as a percentage of its raised base salary before any bonus and an optional
-annual dollar cap. It follows the stream's active years and is deposited
-before savings-policy contributions, including in a deficit year. Deposits
-draw on shared RRSP room and account capacity. Any blocked employer amount,
-including when there is no RRSP account, is reported for that year and creates
-no cash, balance, taxable benefit or deduction. A match step's policy cap
-applies to the employee deposit. The employee deposit and its full match must
-fit together in remaining RRSP room and account capacity.
+Each employment income can target one named RRSP. Choose annual dollars or a
+percentage of raised base salary for personal deposits. The company can use
+either method or match a percentage of the personal deposit that lands.
+A 100% match adds one company dollar per personal dollar. Salary percentages
+exclude bonuses. Deposits follow the employment schedule, including retirement cutoff when enabled.
+
+Fixed and salary-based company amounts use shared RRSP room first, in income
+stream order. Personal and matching amounts then use the remaining room in
+the same order. The personal amount is limited by pay from that job and
+available household wages after payroll and income tax, with the personal
+deduction included in the calculation. The engine reserves this amount
+before expenses, mortgage payments and general savings. It fixes the amounts
+before pricing withdrawals and books them after withdrawals, so new deposits
+are unavailable to fund this year's shortfall. Missing or ambiguous destinations and previous capped formulas awaiting
+review produce warnings and book no deposit.
+
+A legacy surplus-match step remains available for saved plans and requires
+employment pay. When an employment setup books a company deposit, the surplus step makes
+personal deposits only and the projection warns about the overlap.
+Review the legacy step and configure the intended company match on the
+corresponding employment income.
 
 ## Employee payroll deductions
 
@@ -170,17 +180,17 @@ schedule is pinned in `packages/engine/tests/benefits/rrif.test.ts` and sourced 
 - **Final mortgage year:** annual mortgage cash is capped at (opening balance +
   interest) — a partial final year does not bill payments that were never due.
 - **Savings overflow:** contributions that cannot land continue to the next
-  savings-policy step. The default sweep uses available non-registered account
-  capacity, then retains any excess as idle cash. Savings steps accept whole
-  cents and round down when a step cap or the remaining capacity binds.
+  savings-policy step. The default sweep uses a non-registered account when available
+  and otherwise retains the surplus as idle cash. Savings steps accept whole
+  cents and round down when a step cap or shared contribution room binds.
   Without a named cash account an explicit cash step can deposit into idle cash.
-- **Employer RRSP tax and cash flow:** landed employer deposits are taxable
-  employment benefits with an equal modeled RRSP deduction. Employee-funded
-  RRSP deductions are outside this model. Employer deposits appear as direct
-  RRSP transfers, outside household spendable cash. Employee payroll cost,
-  tax credits and enhanced CPP deductions can change with the benefit.
-  The model reconciles contingent match against the surplus available after
-  payroll and income tax, including when a match changes EI refund eligibility.
+- **Employment RRSP tax and cash flow:** landed employer deposits are taxable
+  employment benefits with an equal modeled RRSP deduction and flow directly
+  into the RRSP. Landed personal employment deposits also qualify for a modeled
+  deduction. Ordinary surplus RRSP deposits carry no modeled deduction.
+  Employee payroll costs, credits and enhanced CPP deductions can change with
+  the employer benefit. Legacy surplus matching is reconciled after payroll
+  and income tax, including changes to EI refund eligibility.
   CRA permits an employer to omit income-tax withholding on the benefit
   when it reasonably expects the employee to deduct it that year.
   [CRA taxable benefits and payroll guide](https://www.canada.ca/en/revenue-agency/services/forms-publications/publications/t4130/employers-guide-taxable-benefits-allowances.html)
@@ -252,14 +262,10 @@ series, including its cash-class rate, is applied only to invested accounts.
 - **GIS:** the prior year's cash interest counts in the GIS income test
   (`prevCashInterest`), mirroring prior-year realized gains; principal
   withdrawals do not.
-- **Savings deposit order:** within each account type, explicit lower
-  priorities fill first, then accounts with no priority. Ties follow plan
-  order. Setting a priority or an annual deposit limit on any account of a
-  type activates this order for the type. Without either setting, deposits
-  are proportional to current balances or go to the first account if all
-  are empty. Annual limits cover gross savings deposits from all sources,
-  reset each projection year and exclude direct asset-sale transfers.
-  Withdrawals and direct asset-sale transfers remain proportional by balance.
+- **Savings deposit order:** general savings deposits are proportional to
+  balances after withdrawals, with the first account used when all are empty.
+  Employment deposits go to their selected accounts. Withdrawals and direct
+  asset-sale transfers remain proportional by balance.
 - **Withdrawal order:** a plan's `withdrawalOrder` contains tfsa/nonreg/rrsp
   exactly once each, plus optional cash once. When named cash accounts exist and
   the stored order predates cash, the engine draws cash first (most-liquid
@@ -327,9 +333,9 @@ Absent (or `"manual"`) means the configured `withdrawalOrder` runs exactly as be
   comparison fields disclose that. No arbitrary wealth floor; final net worth is
   disclosed, not optimized.
 - **Circular-redeposit guard:** in a year with a planned proactive draw,
-  ordinary employee RRSP savings steps are suppressed. A match step can still
-  use after-tax surplus available without the proactive draw, up to what
-  remains after earlier policy steps. Independent employer deposits and TFSA,
-  non-registered, cash and mortgage steps continue on their schedules.
+  ordinary employee RRSP savings steps are suppressed. An eligible legacy match
+  can use after-tax surplus available without the proactive draw, up to what
+  remains after earlier policy steps. Employment RRSP deposits use wages before
+  withdrawals. TFSA, non-registered, cash and mortgage steps continue on their schedules.
 - Planned draws are taxed like any RRSP withdrawal and count as GIS income the
   following year via the standard prior-year withdrawal channel.

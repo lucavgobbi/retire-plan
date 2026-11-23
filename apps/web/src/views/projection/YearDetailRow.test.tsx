@@ -75,10 +75,8 @@ describe("YearDetailRow legacy RRIF results", () => {
     expect(notices).toContain("Planned voluntary RRSP draw under the tax-minimizing strategy: $15,000.00");
     expect(notices).toContain("included in total RRSP withdrawals");
     expect(notices).toContain("Ordinary personal RRSP savings steps are skipped");
-    expect(notices).toContain(
-      "earn an employer match using after-tax household surplus calculated before the planned draw",
-    );
-    expect(notices).toContain("Independent company RRSP contributions continue");
+    expect(notices).toContain("Employment deposits use net wages calculated before withdrawals");
+    expect(notices).toContain("A legacy savings match can use after-tax surplus available before the planned draw");
   });
 
   it("explains surplus allocation without attributing all deposits to RRIF withdrawals", () => {
@@ -105,6 +103,7 @@ describe("YearDetailRow legacy RRIF results", () => {
       closingIdleCash: 0,
       assetSaleToIdleCash: 0,
       assetSaleToNonreg: 0,
+      employmentRrspPersonal: 150,
       employerRrspMatch: 100,
       employerRrspContribution: 700,
       blockedEmployerRrspContribution: 50,
@@ -120,6 +119,7 @@ describe("YearDetailRow legacy RRIF results", () => {
         withdrawals: 0,
         contributions: 1_000,
         employerRrspContribution: 700,
+        employmentRrspPersonal: 150,
         employerRrspMatch: 100,
       },
     ];
@@ -140,13 +140,15 @@ describe("YearDetailRow legacy RRIF results", () => {
       "$700.00",
     );
     expect(account.getByText("Employer match within contributions").nextElementSibling?.textContent).toBe("$100.00");
+    expect(account.getByText("Personal employment RRSP deposit").nextElementSibling?.textContent).toBe("$150.00");
     const income = within(screen.getByRole("region", { name: "Income" }));
     expect(income.getByText("Other income").nextElementSibling?.textContent).toBe("$230.00");
     const payroll = within(screen.getByRole("region", { name: "Payroll deductions" }));
     expect(payroll.getByText("Cash employment income").nextElementSibling?.textContent).toBe("$45,000.00");
     expect(payroll.getByText(/In new projections, company RRSP contributions and employer matches count/)).toBeTruthy();
     const notices = screen.getByRole("note", { name: "Year cashflow explanations" });
-    expect(notices.textContent).toContain("personal RRSP $200.00");
+    expect(notices.textContent).toContain("personal RRSP $50.00");
+    expect(notices.textContent).toContain("Your employment RRSP deposit of $150.00 came from net wages");
     expect(notices.textContent).toContain("$50.00 of the company RRSP contribution could not be deposited");
 
     year.contributions.rrsp = 800;

@@ -96,7 +96,9 @@ export function createRowBackedStorageProvider(backend: RowDb, options: { now?: 
     const rows = await backend.getBackupRows();
     const newestFirst = [...rows].sort(newestBackupFirst);
     for (const row of newestFirst) {
-      if (validateWorkspace(row.workspace).length === 0) return row.workspace as Workspace;
+      // Backups saved before schema v2 carry no version. The v1 migration also accepts current shapes.
+      const migrated = migrateWorkspaceRow({ schemaVersion: 1, workspace: row.workspace });
+      if (migrated.ok && validateWorkspace(migrated.workspace).length === 0) return migrated.workspace as Workspace;
     }
     return null;
   }

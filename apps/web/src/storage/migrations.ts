@@ -6,13 +6,8 @@
 //   * DB_VERSION          — the IndexedDB object-store layout version (db.ts only)
 // A payload bump does not require a DB bump and vice versa.
 //
-// MIGRATIONS is the forward-looking hook table: entry N migrates a payload from
-// schema vN to the next defined version. v0 ("pre-versioning" payloads missing
-// schemaVersion) migrates identically to v1, which is its own first real version.
-// When Task 2's schema ever revs to v2, add a `1: { to: 2, step: ... }` entry —
-// unknown and gapped versions are hard errors, never silent best-effort loads.
 import type { PlanFile } from "../domain/types";
-import { SCHEMA_VERSION, isFiniteNumber, isRecord, validatePlanFile } from "./schema";
+import { SCHEMA_VERSION, isFiniteNumber, isNonEmptyString, isRecord, validatePlanFile } from "./schema";
 
 interface MigrationOk {
   ok: true;
@@ -30,10 +25,79 @@ interface MigrationFailure {
 
 export type MigrationStep = (value: Record<string, unknown>) => Record<string, unknown>;
 
+function migrateEmploymentPlan(value: unknown): unknown {
+  if (!isRecord(value) || !Array.isArray(value.accounts) || !Array.isArray(value.incomes)) return value;
+  const priority = (account: Record<string, unknown>) =>
+    isFiniteNumber(account.depositPriority) ? account.depositPriority : Infinity;
+  const accounts = value.accounts.filter(isRecord);
+  const ids = accounts.map((account) => account.id);
+  const rrsp = accounts
+    .filter(
+      (account, index) =>
+        account.type === "rrsp" &&
+        isNonEmptyString(account.id) &&
+        account.annualDepositLimit !== 0 &&
+        ids.indexOf(account.id) === index &&
+        ids.lastIndexOf(account.id) === index,
+    )
+    .sort((a, b) => priority(a) - priority(b))[0];
+  const accountId = rrsp?.id ?? null;
+  return {
+    ...value,
+    accounts: value.accounts.map((account: unknown) => {
+      if (!isRecord(account)) return account;
+      const current = { ...account };
+      delete current.depositPriority;
+      delete current.annualDepositLimit;
+      return current;
+    }),
+    incomes: value.incomes.map((income: unknown) => {
+      if (!isRecord(income)) return income;
+      const { employerContributionRate: rate, employerContributionAnnualCap: cap, ...current } = income;
+      if (rate === undefined && cap === undefined) return current;
+      if (
+        income.kind !== "employment" ||
+        !isFiniteNumber(rate) ||
+        rate < 0 ||
+        rate > 1 ||
+        (cap !== undefined && (!isFiniteNumber(cap) || cap < 0 || Math.round(cap * 100) / 100 !== cap))
+      ) {
+        throw new Error("The previous employer RRSP contribution has an invalid rate or cap");
+      }
+      if (current.employmentContribution !== undefined) {
+        throw new Error("An income contains both previous and current employment RRSP settings");
+      }
+      return {
+        ...current,
+        employmentContribution: {
+          accountId,
+          personal: { mode: "fixed", value: 0 },
+          company: { mode: "salary-percent", value: rate },
+          ...(cap !== undefined ? { recovery: { previousSalaryRate: rate, previousAnnualCap: cap } } : {}),
+        },
+      };
+    }),
+  };
+}
+
+function migrateEmploymentPayload(value: Record<string, unknown>): Record<string, unknown> {
+  if (Array.isArray(value.plans)) {
+    return {
+      ...value,
+      schemaVersion: 2,
+      plans: value.plans.map((entry: unknown) =>
+        isRecord(entry) ? { ...entry, plan: migrateEmploymentPlan(entry.plan) } : entry,
+      ),
+    };
+  }
+  return "plan" in value ? { ...value, plan: migrateEmploymentPlan(value.plan) } : value;
+}
+
 /** Hook table: key = payload version being migrated FROM. */
 export const MIGRATIONS: Record<number, { to: number; step: MigrationStep }> = {
   // v0 → v1: the first versioning pass renamed nothing; only stamp the version.
-  0: { to: 1, step: (value) => ({ ...value, schemaVersion: SCHEMA_VERSION }) },
+  0: { to: 1, step: (value) => ({ ...value, schemaVersion: 1 }) },
+  1: { to: 2, step: migrateEmploymentPayload },
 };
 
 /** Human-facing reason a payload could not be interpreted at all. */
@@ -163,7 +227,11 @@ export function migrateWorkspaceRow(raw: unknown): RowMigrationOk | RowMigration
       return { ok: false, errors: [`No migration path from persisted schema v${current}.`], newerVersion: null };
     }
     if (current > 0) {
-      workspace = isRecord(workspace) ? entry.step(workspace) : entry.step({});
+      try {
+        workspace = isRecord(workspace) ? entry.step(workspace) : workspace;
+      } catch (error) {
+        return { ok: false, errors: [`Workspace migration failed: ${String(error)}.`], newerVersion: null };
+      }
     }
     current = entry.to;
   }

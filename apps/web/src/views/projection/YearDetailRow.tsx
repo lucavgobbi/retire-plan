@@ -5,7 +5,10 @@ import { yearNotices } from "./yearNotices";
 
 const accountLabels = { tfsa: "TFSA", rrsp: "RRSP", nonreg: "Non-registered account", cash: "Cash account" };
 const incomeLabels = { employment: "Employment", cpp: "CPP", oas: "OAS", gis: "GIS", other: "Other income" };
-type EmployerDeposits = Pick<NonNullable<YearResult["cashflow"]>, "employerRrspContribution"> & {
+type EmployerDeposits = Pick<
+  NonNullable<YearResult["cashflow"]>,
+  "employerRrspContribution" | "employmentRrspPersonal"
+> & {
   employerRrspMatch?: number;
 };
 
@@ -153,6 +156,12 @@ function RrspContributionDetails({ total, deposits }: { total: number; deposits:
     <>
       <dt>Personal RRSP deposits within contributions</dt>
       <dd>{fmtMoneyDetail(withoutEmployerDeposits(total, deposits))}</dd>
+      {(deposits.employmentRrspPersonal ?? 0) > 0 && (
+        <>
+          <dt>Personal employment RRSP deposit</dt>
+          <dd>{fmtMoneyDetail(deposits.employmentRrspPersonal!)}</dd>
+        </>
+      )}
       <dt>Company RRSP contribution within contributions</dt>
       <dd>{fmtMoneyDetail(deposits.employerRrspContribution ?? 0)}</dd>
       <dt>Employer match within contributions</dt>

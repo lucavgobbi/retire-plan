@@ -5,6 +5,7 @@ import {
   validateScenarioSettings,
   type AccountPlan,
   type AccountType,
+  type EmploymentContribution,
   type Plan,
   type PlannedWithdrawals,
   type ReturnSeries,
@@ -22,7 +23,7 @@ import { gisAnnual } from "./benefits/gis";
 import { rrifMinimum } from "./benefits/rrif";
 import { tfsaRoomNextYear, rrspRoomEarn } from "./accounts/rooms";
 import { mortgageYear } from "./mortgage";
-import { allocateSurplus, type AllocateSurplusResult } from "./accounts/flows";
+import { allocateSurplus, matchedDeposit } from "./accounts/flows";
 
 /** Storage-boundary rounding: money leaves the engine as whole cents. */
 function roundCent(x: number): number {
@@ -67,8 +68,6 @@ interface AccountState {
   balance: number;
   mix: AccountPlan["assetMix"];
   interestRate?: number; // cash accounts only
-  depositPriority?: number;
-  annualDepositLimit?: number;
 }
 
 interface AssetState {
@@ -162,7 +161,7 @@ function taxOf(
  *     (Review Focus #3): never NaN, never negative balances.
  *
  * Employer-funded RRSP amounts are direct deposits and taxable employment
- * benefits offset by a deduction, subject to available room and capacity.
+ * benefits offset by a deduction. Configured personal deposits use net wages and also earn a deduction.
  */
 export function simulate(
   plan: Plan,
@@ -234,28 +233,7 @@ export function simulate(
     balance: a.balance,
     mix: a.assetMix,
     ...(a.interestRate === undefined ? {} : { interestRate: a.interestRate }),
-    depositPriority: a.depositPriority,
-    annualDepositLimit: a.annualDepositLimit,
   }));
-  const omittedPriority = Number.MAX_SAFE_INTEGER + 1;
-  const depositOrders = new Map(
-    accountTypes.flatMap((type) => {
-      const group = accounts.filter((account) => account.type === type);
-      if (!group.some((account) => account.depositPriority !== undefined || account.annualDepositLimit !== undefined)) {
-        return [];
-      }
-      return [
-        [
-          type,
-          group.sort((a, b) => (a.depositPriority ?? omittedPriority) - (b.depositPriority ?? omittedPriority)),
-        ] as const,
-      ];
-    }),
-  );
-  const capacity: Partial<Record<AccountType, number>> = {};
-  for (const [type, group] of depositOrders) {
-    capacity[type] = roundCent(group.reduce((sum, account) => sum + (account.annualDepositLimit ?? Infinity), 0));
-  }
   const availableSavingsAccounts = {
     tfsa: accounts.some((account) => account.type === "tfsa"),
     rrsp: accounts.some((account) => account.type === "rrsp"),
@@ -363,7 +341,7 @@ export function simulate(
       roundCent(s.annualAmount * Math.pow(1 + s.raiseRate, age - s.startAge));
 
     let employment = 0;
-    let requestedEmployerContribution = 0;
+    const contributionRequests: EmploymentDepositRequest[] = [];
     let cpp = 0;
     let oas = 0;
     let otherPlan = 0;
@@ -383,10 +361,8 @@ export function simulate(
         const bonus = bonusRate > 0 ? roundCent(amount * bonusRate) : 0;
         received = amount + bonus;
         employment += received;
-        requestedEmployerContribution += Math.min(
-          roundCent(Math.max(0, amount) * (s.employerContributionRate ?? 0)),
-          s.employerContributionAnnualCap ?? Infinity,
-        );
+        const setup = s.employmentContribution;
+        if (setup) contributionRequests.push({ setup, baseSalary: amount, grossPay: received, name: s.name ?? s.id });
       } else if (s.kind === "cpp" && benefits.cpp) cpp += amount;
       else if (s.kind === "oas" && benefits.oas) oas += amount;
       else if (s.kind === "other") otherPlan += amount;
@@ -407,7 +383,6 @@ export function simulate(
 
     // Normalize the sum before applying payroll cutoffs or using it in cash flow.
     employment = roundCent(employment);
-    requestedEmployerContribution = roundCent(requestedEmployerContribution);
     const taxForYear = (income: IncomeForTax) => taxOf(income, yearTables, oas);
 
     let expenses = 0;
@@ -482,21 +457,7 @@ export function simulate(
           Math.min(mres.paymentsMade * debt.monthlyPayment, mortgageStart + mres.interest)
         : 0;
 
-    // Employer money uses pre-benefit RRSP room and cannot create room for itself.
     const roomRr = age <= 71 ? rrspRoomEarn(age, employment, rrspRoom, tables) : 0;
-    const rrspCapacity = availableSavingsAccounts.rrsp ? (capacity.rrsp ?? Infinity) : 0;
-    const employerContribution = Math.min(
-      requestedEmployerContribution,
-      Math.floor(Math.min(roomRr, rrspCapacity) * 100 + 1e-8) / 100,
-    );
-    const blockedEmployerContribution = roundCent(requestedEmployerContribution - employerContribution);
-    if (blockedEmployerContribution > 0) {
-      warnings.push(
-        `$${blockedEmployerContribution.toFixed(2)} of the independent employer RRSP contribution could not be deposited at age ${age} because eligible RRSP room or account capacity was unavailable.`,
-      );
-    }
-    const remainingCapacity = { ...capacity, rrsp: rrspCapacity - employerContribution };
-    const remainingRooms = { tfsa: tfsaRoom, rrsp: roomRr - employerContribution };
 
     // Mandatory RRIF and proactive draws use only the balance available before savings.
     const rrspAtStart = sumType(accounts, "rrsp");
@@ -511,14 +472,71 @@ export function simulate(
       nonreg: sumType(accounts, "nonreg"),
       debt: mres.endBalance,
     };
-    const savingsPolicy = employment > 0 ? plan.savingsPolicy : savingsWithoutEmployerMatch;
-
-    const quote = (match: number, matchLimit?: number) => {
+    const employmentTax = (employerBenefit: number, personal: number) => {
       const payrollWarnings: string[] = [];
-      const employerBenefit = roundCent(employerContribution + match);
       const grossEmployment = roundCent(employment + employerBenefit);
       const payroll = annualPayroll(grossEmployment, cpp, age, scenario.payroll, yearTables.payroll, payrollWarnings);
       const netPayrollCost = roundCent(payroll.total - payroll.eiRefund);
+      const incomeAfterWithdrawals = (rrspDraw: number, nonregGain: number): IncomeForTax => ({
+        employmentIncome: grossEmployment,
+        employmentRrspDeduction: roundCent(employerBenefit + personal),
+        payrollCreditAmount: roundCent(payroll.cppBase + payroll.ei - payroll.eiRefund),
+        enhancedCppDeduction: payroll.enhancedCppDeduction,
+        otherTaxableIncome: cpp + oas + otherPlan + cashInterest,
+        rrspWithdrawals: rrspDraw,
+        pensionEligibleIncome: age >= 65 ? rrspDraw : 0,
+        capitalGains: capitalGains + nonregGain,
+        dividendsEligible: 0,
+        age,
+      });
+      return { payroll, payrollWarnings, netPayrollCost, incomeAfterWithdrawals };
+    };
+    const employmentDeposits = settleEmploymentDeposits(
+      contributionRequests,
+      accounts,
+      roomRr,
+      (personal, company) => {
+        const { netPayrollCost, incomeAfterWithdrawals } = employmentTax(company, personal);
+        const income = incomeAfterWithdrawals(0, 0);
+        const taxWithoutWages = taxForYear({
+          ...income,
+          employmentIncome: 0,
+          employmentRrspDeduction: 0,
+          payrollCreditAmount: 0,
+          enhancedCppDeduction: 0,
+        }).total;
+        const wageTax = Math.max(0, taxForYear(income).total - taxWithoutWages);
+        return employment - netPayrollCost - wageTax;
+      },
+      warnings,
+    );
+    const { personal, company: employerContribution, match: employmentMatch, blockedCompany } = employmentDeposits;
+    const directRrsp = roundCent(personal + employerContribution + employmentMatch);
+    const remainingRooms = { tfsa: tfsaRoom, rrsp: roomRr - directRrsp };
+
+    const hasEmploymentEmployerDeposit = employerContribution > 0 || employmentMatch > 0;
+    if (
+      hasEmploymentEmployerDeposit &&
+      employment > 0 &&
+      plan.savingsPolicy.some(
+        (step) =>
+          step.target === "rrsp-match" &&
+          (step.matchRate ?? 0) > 0 &&
+          (step.untilAge === undefined || age <= step.untilAge),
+      )
+    ) {
+      warnings.push(
+        "A legacy RRSP savings match overlaps with a company deposit from an employment RRSP setup. Savings steps deposit personal funds only this year. Review the legacy match in Savings and assign company contributions to the appropriate employment income.",
+      );
+    }
+    const savingsPolicy =
+      employment > 0 && !hasEmploymentEmployerDeposit ? plan.savingsPolicy : savingsWithoutEmployerMatch;
+
+    const quote = (legacyMatch: number, matchLimit?: number) => {
+      const { payroll, payrollWarnings, netPayrollCost, incomeAfterWithdrawals } = employmentTax(
+        roundCent(employerContribution + employmentMatch + legacyMatch),
+        personal,
+      );
       const gis =
         age >= 65 && benefits.gis && benefits.oas
           ? gisAnnual(
@@ -533,18 +551,6 @@ export function simulate(
               yearTables,
             )
           : 0;
-      const incomeAfterWithdrawals = (rrspDraw: number, nonregGain: number): IncomeForTax => ({
-        employmentIncome: grossEmployment,
-        employerRrspDeduction: employerBenefit,
-        payrollCreditAmount: roundCent(payroll.cppBase + payroll.ei - payroll.eiRefund),
-        enhancedCppDeduction: payroll.enhancedCppDeduction,
-        otherTaxableIncome: cpp + oas + otherPlan + cashInterest,
-        rrspWithdrawals: rrspDraw,
-        pensionEligibleIncome: age >= 65 ? rrspDraw : 0,
-        capitalGains: capitalGains + nonregGain,
-        dividendsEligible: 0,
-        age,
-      });
       const plannedRrspDraw =
         policy && policy.fillTargetTaxable > 0
           ? roundCent(
@@ -557,7 +563,7 @@ export function simulate(
       const fundedRrspDraw = rrifDue + plannedRrspDraw;
       // Include the draws' own tax before choosing between savings and deficit funding.
       const taxWithDue = taxForYear(incomeAfterWithdrawals(fundedRrspDraw, 0));
-      const cash = employment + cpp + oas + otherPlan + gis + fundedRrspDraw + cashBalance - netPayrollCost;
+      const cash = employment + cpp + oas + otherPlan + gis + fundedRrspDraw + cashBalance - netPayrollCost - personal;
       const obligation = expenses + taxWithDue.total + mortgageCash;
       const surplusWithoutProactiveDraw =
         plannedRrspDraw > 0
@@ -574,7 +580,6 @@ export function simulate(
               age,
               availableSavingsAccounts,
               plannedRrspDraw > 0,
-              remainingCapacity,
               matchLimit,
               surplusWithoutProactiveDraw,
             )
@@ -603,7 +608,7 @@ export function simulate(
         // Find the largest match whose own payroll cost the allocation can fund.
         // A match cannot exceed half the gross deposit, since the rate is at most 1.
         let low = 0;
-        let high = Math.floor(Math.min(remainingRooms.rrsp, remainingCapacity.rrsp) * 50 + 1e-8);
+        let high = Math.floor(remainingRooms.rrsp * 50 + 1e-8);
         if (observedMatch < initialMatch) high = Math.round(initialMatch * 100) - 1;
         while (low < high) {
           const middle = low + Math.ceil((high - low) / 2);
@@ -629,9 +634,10 @@ export function simulate(
     warnings.push(...payrollWarnings);
 
     const withdrawals: YearResult["withdrawals"] = { tfsa: 0, rrsp: fundedRrspDraw, nonreg: 0 };
-    const contributions: YearResult["contributions"] = { tfsa: 0, rrsp: employerContribution, nonreg: 0 };
+    const contributions: YearResult["contributions"] = { tfsa: 0, rrsp: directRrsp, nonreg: 0 };
     let contributionsCash = 0;
-    const employerMatch = roundCent(allocation?.employerMatch ?? 0);
+    const legacyMatch = roundCent(allocation?.employerMatch ?? 0);
+    const employerMatch = roundCent(employmentMatch + legacyMatch);
     let mortgagePrepay = 0;
     let shortfall = 0;
     let finalTax = taxWithDue;
@@ -639,7 +645,7 @@ export function simulate(
 
     if (allocation) {
       contributions.tfsa = roundCent(allocation.contributions.tfsa);
-      contributions.rrsp = roundCent(employerContribution + allocation.contributions.rrsp);
+      contributions.rrsp = roundCent(directRrsp + allocation.contributions.rrsp);
       contributions.nonreg = roundCent(allocation.contributions.nonreg);
       contributionsCash = roundCent(allocation.contributions.cash ?? 0);
       mortgagePrepay = roundCent(allocation.amounts.mortgage);
@@ -718,11 +724,25 @@ export function simulate(
     if (contributionsCash > 0) contributions.cash = contributionsCash;
 
     // ---- 5b. Apply withdrawals, then the accepted savings deposits.
-    applyFlows(accounts, withdrawals, contributions, accountDetails, depositOrders, {
-      independent: employerContribution,
-      match: employerMatch,
-      deposits: allocation?.rrspDeposits ?? [],
-    });
+    applyFlows(
+      accounts,
+      withdrawals,
+      {
+        ...contributions,
+        rrsp: roundCent(contributions.rrsp - directRrsp),
+      },
+      accountDetails,
+      legacyMatch,
+    );
+    for (const { account, personal, company, match } of employmentDeposits.deposits) {
+      const detail = accountDetails.get(account)!;
+      const amount = roundCent(personal + company + match);
+      account.balance = roundCent(account.balance + amount);
+      detail.contributions = roundCent(detail.contributions + amount);
+      if (personal > 0) detail.employmentRrspPersonal = roundCent((detail.employmentRrspPersonal ?? 0) + personal);
+      if (company > 0) detail.employerRrspContribution = roundCent((detail.employerRrspContribution ?? 0) + company);
+      if (match > 0) detail.employerRrspMatch = roundCent((detail.employerRrspMatch ?? 0) + match);
+    }
 
     // ---- 6. Growth on post-flow balances, each account at its own mix.
     // Non-reg basis grows with the market (Task 14 convention: ACB absorbs the
@@ -874,7 +894,8 @@ export function simulate(
         assetSaleToNonreg: roundCent(assetSaleToNonreg),
         employerRrspMatch: employerMatch,
         ...(employerContribution > 0 ? { employerRrspContribution: employerContribution } : {}),
-        ...(blockedEmployerContribution > 0 ? { blockedEmployerRrspContribution: blockedEmployerContribution } : {}),
+        ...(personal > 0 ? { employmentRrspPersonal: personal } : {}),
+        ...(blockedCompany > 0 ? { blockedEmployerRrspContribution: blockedCompany } : {}),
         cashContributionsToIdleCash: hasNamedCash ? 0 : contributionsCash,
       },
       shortfall: roundCent(shortfall),
@@ -960,8 +981,7 @@ function applyFlows(
   withdrawals: YearResult["withdrawals"],
   contributions: YearResult["contributions"],
   details: Map<AccountState, AccountDetail>,
-  depositOrders: ReadonlyMap<AccountType, AccountState[]>,
-  employer: { independent: number; match: number; deposits: AllocateSurplusResult["rrspDeposits"] },
+  employerMatch: number,
 ): void {
   for (const type of accountTypes) {
     const withdrawal = withdrawals[type] ?? 0;
@@ -977,85 +997,106 @@ function applyFlows(
     });
 
     const contribution = contributions[type] ?? 0;
-    const ordered = depositOrders.get(type);
-    if (ordered) {
-      if (type === "rrsp") {
-        applyOrderedDeposit(ordered, details, employer.independent, 0, true);
-        for (const deposit of employer.deposits) {
-          applyOrderedDeposit(ordered, details, deposit.amount, deposit.match);
-        }
-      } else {
-        applyOrderedDeposit(ordered, details, contribution);
-      }
-      continue;
-    }
-
     const deposits = distributeAccountFlow(accounts, type, contribution, false);
-    const independent = type === "rrsp" ? employer.independent : 0;
-    const match = type === "rrsp" ? employer.match : 0;
+    const match = type === "rrsp" ? employerMatch : 0;
     const gross = reportCents(
       deposits.map(({ amount }) => amount),
       contribution,
     );
-    const independentShares =
-      independent === 0
-        ? []
-        : reportCents(
-            deposits.map(({ weight }) => weight * independent),
-            independent,
-            gross,
-          );
-    // Both rounded employer shares together must fit the account's deposit.
     const matches =
       match === 0
         ? []
         : reportCents(
             deposits.map(({ weight }) => weight * match),
             match,
-            gross.map((amount, index) => amount - (independentShares[index] ?? 0)),
+            gross,
           );
     deposits.forEach(({ account }, index) => {
       const detail = details.get(account)!;
       const accountMatch = matches[index] ?? 0;
-      const accountIndependent = independentShares[index] ?? 0;
       detail.contributions = gross[index]!;
       if (accountMatch !== 0) detail.employerRrspMatch = accountMatch;
-      if (accountIndependent !== 0) detail.employerRrspContribution = accountIndependent;
     });
   }
 }
 
-function applyOrderedDeposit(
+interface EmploymentDepositRequest {
+  setup: EmploymentContribution;
+  baseSalary: number;
+  grossPay: number;
+  name: string;
+}
+
+function settleEmploymentDeposits(
+  requests: EmploymentDepositRequest[],
   accounts: AccountState[],
-  details: Map<AccountState, AccountDetail>,
-  amount: number,
-  match = 0,
-  independent = false,
-): void {
-  let remaining = roundCent(amount);
-  const shares: { detail: AccountDetail; amount: number }[] = [];
-  for (const account of accounts) {
-    if (remaining === 0) break;
-    const detail = details.get(account)!;
-    const capacity = (account.annualDepositLimit ?? Infinity) - detail.contributions;
-    const take = roundCent(Math.min(remaining, capacity));
-    if (take <= 0) continue;
-    account.balance += take;
-    detail.contributions = roundCent(detail.contributions + take);
-    if (independent) detail.employerRrspContribution = take;
-    shares.push({ detail, amount: take });
-    remaining = roundCent(remaining - take);
+  room: number,
+  netWages: (personal: number, company: number) => number,
+  warnings: string[],
+) {
+  const amountFor = (rule: { mode: string; value: number }, base: number) =>
+    rule.mode === "fixed" ? rule.value : roundCent(Math.max(0, base) * rule.value);
+  const deposits: { account: AccountState; personal: number; company: number; match: number }[] = [];
+  let personal = 0;
+  let company = 0;
+  let match = 0;
+  let blockedCompany = 0;
+
+  const eligible = requests.flatMap(({ setup, baseSalary, grossPay, name }) => {
+    const requestedPersonal = amountFor(setup.personal, baseSalary);
+    const rate = setup.company.mode === "match" ? setup.company.value : 0;
+    const requestedCompany = setup.company.mode === "match" ? 0 : amountFor(setup.company, baseSalary);
+    const destinations = accounts.filter((account) => account.id === setup.accountId);
+    const account = destinations.length === 1 && destinations[0]?.type === "rrsp" ? destinations[0] : undefined;
+    if (!account)
+      warnings.push(
+        `${name}: choose an existing RRSP destination with a unique account identifier for employment contributions.`,
+      );
+    if (setup.recovery)
+      warnings.push(`${name}: review the previous capped company contribution in Income before deposits can resume.`);
+    if (setup.recovery) return [];
+    if (!account) {
+      blockedCompany += requestedCompany;
+      return [];
+    }
+
+    const landed = Math.min(requestedCompany, Math.max(0, Math.floor(room * 100 + 1e-8) / 100));
+    room -= landed;
+    company = roundCent(company + landed);
+    const deposit = { account, personal: 0, company: landed, match: 0 };
+    deposits.push(deposit);
+    return [
+      { deposit, name, rate, requestedPersonal, grossPay, unlandedCompany: roundCent(requestedCompany - landed) },
+    ];
+  });
+
+  for (const { deposit, name, rate, requestedPersonal, grossPay, unlandedCompany } of eligible) {
+    const limit = matchedDeposit(Math.min(requestedPersonal, Math.max(0, grossPay)), room, rate, Infinity);
+    const fits = (cents: number) => {
+      const totalPersonal = roundCent(personal + cents / 100);
+      const trialMatch = Math.round(cents * rate) / 100;
+      return totalPersonal <= netWages(totalPersonal, roundCent(company + match + trialMatch)) + 1e-8;
+    };
+    let high = Math.round(limit.employee * 100);
+    let low = high === 0 || fits(high) ? high : 0;
+    while (low < high) {
+      const middle = low + Math.ceil((high - low) / 2);
+      if (fits(middle)) low = middle;
+      else high = middle - 1;
+    }
+    deposit.personal = low / 100;
+    deposit.match = Math.round(low * rate) / 100;
+    personal = roundCent(personal + deposit.personal);
+    match = roundCent(match + deposit.match);
+    room -= deposit.personal + deposit.match;
+    const unlandedPersonal = roundCent(requestedPersonal - deposit.personal);
+    blockedCompany += unlandedCompany;
+    if (unlandedPersonal > 0 || unlandedCompany > 0) {
+      warnings.push(
+        `${name}: employment RRSP deposits were limited by RRSP age eligibility, available room or net wages (personal $${unlandedPersonal.toFixed(2)}, company $${unlandedCompany.toFixed(2)} unfilled).`,
+      );
+    }
   }
-  if (match > 0) {
-    const gross = shares.map((share) => share.amount);
-    const matches = reportCents(
-      gross.map((share) => (share / amount) * match),
-      match,
-      gross,
-    );
-    shares.forEach(({ detail }, index) => {
-      const share = matches[index]!;
-      if (share > 0) detail.employerRrspMatch = roundCent((detail.employerRrspMatch ?? 0) + share);
-    });
-  }
+
+  return { deposits, personal, company, match, blockedCompany: roundCent(blockedCompany) };
 }
