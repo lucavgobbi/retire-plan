@@ -7,6 +7,11 @@ import { CashflowSankey } from "./CashflowSankey";
 
 const groupedView = { showAccounts: false, onShowAccountsChange: vi.fn() };
 
+function breakdownTotal(heading: string) {
+  const section = screen.getByRole("heading", { name: heading }).parentElement!;
+  return within(section).getByText("Total").nextElementSibling?.textContent;
+}
+
 function testRun(withMatch = false) {
   const plan = createDefaultPlan();
   plan.profile = { birthYear: 1981, currentAge: 45, endAge: 47, province: "ON" };
@@ -27,7 +32,16 @@ describe("CashflowSankey", () => {
     plan.incomes = [
       { id: "job", name: "Library", kind: "employment", annualAmount: 1_000, startAge: 45, raiseRate: 0 },
     ];
-    const expenseNames = ["Rent", "Groceries", "Internet", "Power", "Phone", "Transit", "Books", "Insurance"];
+    const expenseNames = [
+      "Rent",
+      "Groceries",
+      "Internet",
+      "Power",
+      "Phone",
+      "Transit",
+      "Books",
+      "Supplemental health insurance and long-term disability premiums",
+    ];
     plan.expenses = [...expenseNames, "Zero planned expense"].map((name, index) => ({
       id: `expense-${index}`,
       name,
@@ -62,15 +76,17 @@ describe("CashflowSankey", () => {
     const categoryDiagram = screen.getByRole("group", { name: "Cashflow Sankey diagram" });
     fireEvent.click(screen.getByText("Cashflow breakdown"));
     expect(checkbox.checked).toBe(false);
-    expect(within(categoryDiagram).getByRole("button", { name: /to Modeled expenses/ })).toBeTruthy();
+    const modeledExpenses = within(categoryDiagram).getByRole("button", { name: /to Modeled expenses/ });
+    expect(within(modeledExpenses).getByText("$36.00")).toBeTruthy();
     expect(within(breakdown).getByText("Modeled expenses")).toBeTruthy();
     const periodTotal = screen.getByRole("status").textContent;
 
     fireEvent.click(checkbox);
     const namedDiagram = screen.getByRole("group", { name: "Cashflow Sankey diagram" });
     expect(breakdown.open).toBe(true);
-    for (const name of expenseNames) {
-      expect(within(namedDiagram).getByRole("button", { name: new RegExp(`to ${name},`) })).toBeTruthy();
+    for (const [index, name] of expenseNames.entries()) {
+      const flow = within(namedDiagram).getByRole("button", { name: new RegExp(`to ${name},`) });
+      expect(within(flow).getByText(`$${index + 1}.00`)).toBeTruthy();
       expect(within(breakdown).getByText(name)).toBeTruthy();
     }
     expect(within(namedDiagram).getByRole("button", { name: /Library to/ })).toBeTruthy();
@@ -100,7 +116,8 @@ describe("CashflowSankey", () => {
     );
     expect(screen.getByRole<HTMLInputElement>("checkbox", { name: "Show accounts" }).checked).toBe(true);
     expect(screen.getByText(/Run the projection again to show named flows/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Employment to Cashflow pool/ })).toBeTruthy();
+    const employment = screen.getByRole("button", { name: /Employment to Cashflow pool/ });
+    expect(within(employment).getByText("$10,000.00")).toBeTruthy();
   });
 
   it("offers inclusive calendar years, prevents crossed ranges and reports the valid changes", () => {
@@ -116,6 +133,9 @@ describe("CashflowSankey", () => {
       />,
     );
     expect(screen.getByText("2026–2028 · CAD")).toBeTruthy();
+    fireEvent.click(screen.getByText("Cashflow breakdown"));
+    expect(breakdownTotal("Sources")).toBe("$30,000.00");
+    expect(within(screen.getByRole("button", { name: /^Employment to/ })).getByText("$30,000.00")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("End year"), { target: { value: "2027" } });
     expect(onRangeChange).toHaveBeenCalledWith({ startYear: 2026, endYear: 2027 });
     rerender(
@@ -128,6 +148,7 @@ describe("CashflowSankey", () => {
       />,
     );
     expect(screen.getByText("2027 · CAD")).toBeTruthy();
+    expect(within(screen.getByRole("button", { name: /^Employment to/ })).getByText("$10,000.00")).toBeTruthy();
     expect(
       (within(screen.getByLabelText("Start year")).getByRole("option", { name: "2028" }) as HTMLOptionElement).disabled,
     ).toBe(true);
@@ -203,7 +224,7 @@ describe("CashflowSankey", () => {
         raiseRate: 0,
         employmentContribution: {
           accountId: "Group RRSP",
-          personal: { mode: "fixed", value: 500 },
+          personal: { mode: "fixed", value: 500.09 },
           company: { mode: "match", value: 1 },
         },
       },
@@ -215,8 +236,8 @@ describe("CashflowSankey", () => {
         raiseRate: 0,
         employmentContribution: {
           accountId: "Broker RRSP",
-          personal: { mode: "fixed", value: 0 },
-          company: { mode: "fixed", value: 300 },
+          personal: { mode: "fixed", value: 125.17 },
+          company: { mode: "fixed", value: 300.11 },
         },
       },
     ];
@@ -241,14 +262,61 @@ describe("CashflowSankey", () => {
     fireEvent.click(summary);
     const breakdown = within(summary.closest("details")!);
     expect(breakdown.getByText("Company RRSP contribution → Broker RRSP").nextElementSibling?.textContent).toBe(
-      "$300.00",
+      "$300.11",
     );
-    expect(breakdown.getByText("Employer match → Group RRSP").nextElementSibling?.textContent).toBe("$500.00");
-    expect(
-      screen.getByRole("button", { name: "Cashflow pool to Personal employment deposit → Group RRSP, $500.00" }),
-    ).toBeTruthy();
+    expect(breakdown.getByText("Employer match → Group RRSP").nextElementSibling?.textContent).toBe("$500.09");
+    for (const [account, amount] of [
+      ["Group RRSP", "$500.09"],
+      ["Broker RRSP", "$125.17"],
+    ] as const) {
+      const deposit = screen.getByRole("button", {
+        name: `Cashflow pool to Personal employment deposit → ${account}, ${amount}`,
+      });
+      expect(within(deposit).getByText(amount)).toBeTruthy();
+    }
+    expect(breakdownTotal("Direct transfers outside the cashflow pool")).toBe("$800.20");
+    expect(breakdownTotal("Sources")).toBe("$20,000.00");
+    expect(breakdownTotal("Uses")).toBe("$20,000.00");
     expect(screen.queryByRole("button", { name: /Other income to Cashflow pool/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Employer match|Company RRSP contribution/ })).toBeNull();
     expect(screen.queryByText(/Unreconciled differences/)).toBeNull();
+  });
+
+  it("totals direct asset sales and the receiving accounts in their own sections", () => {
+    const plan = createDefaultPlan();
+    plan.profile = { birthYear: 1981, currentAge: 45, endAge: 46, province: "ON" };
+    plan.accounts = [
+      { id: "nonreg", name: "Brokerage", type: "nonreg", balance: 0, assetMix: { equity: 0, bond: 0, cash: 1 } },
+    ];
+    plan.assets = [100.13, 200.25].map((value, index) => ({
+      id: `asset-${index}`,
+      name: `Asset ${index + 1}`,
+      kind: "other",
+      value,
+      appreciationRate: 0,
+      sellEvent: { age: 45, costsPct: 0 },
+    }));
+    const { years } = runDeterministic(plan, {
+      ...DEFAULT_SCENARIO_BASE,
+      id: "test",
+      name: "Test",
+      simMode: "deterministic",
+    });
+    render(
+      <CashflowSankey
+        years={years}
+        birthYear={1981}
+        range={{ startYear: 2026, endYear: 2026 }}
+        onRangeChange={vi.fn()}
+        showAccounts
+        onShowAccountsChange={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByText("Cashflow breakdown"));
+    expect(breakdownTotal("Asset sales routed outside the pool")).toBe("$300.38");
+    expect(breakdownTotal("Accounts credited with asset sales")).toBe("$300.38");
+    expect(screen.getByText("Brokerage").nextElementSibling?.textContent).toBe("$300.38");
+    expect(screen.queryByRole("group", { name: "Cashflow Sankey diagram" })).toBeNull();
   });
 
   it("keeps a match-only breakdown available and names the recipient when checked", () => {

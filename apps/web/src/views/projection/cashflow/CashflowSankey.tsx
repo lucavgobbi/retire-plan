@@ -24,7 +24,8 @@ interface CashflowSankeyProps {
 
 const nodeWidth = 14;
 const bandHeight = 208;
-const labelGap = 27;
+const labelGap = 38;
+const labelLineOffset = 9;
 const pool = "Cashflow pool";
 const colors: Record<FlowKind, string> = {
   income: PALETTE.color1,
@@ -54,7 +55,10 @@ function groupSmall(items: CashflowAmount[], total: number, side: "sources" | "u
 
 function labelColumnWidth(items: CashflowAmount[]) {
   // Allow room for wide glyphs, bold focus labels, and the node gap.
-  return items.reduce((width, item) => Math.max(width, Array.from(item.label).length * 17 + 20), 242);
+  return items.reduce((width, item) => {
+    const characters = Math.max(Array.from(item.label).length, money(item.cents).length);
+    return Math.max(width, characters * 17 + 20);
+  }, 242);
 }
 
 function ribbon(x1: number, y1: number, x2: number, y2: number, height: number) {
@@ -75,10 +79,10 @@ function FlowDiagram({ sources, uses, sourceCents, useCents, named, categoryOffs
   const total = Math.max(sourceCents, useCents);
   const left = named ? sources.filter(({ cents }) => cents > 0) : groupSmall(sources, total, "sources");
   const right = named ? uses.filter(({ cents }) => cents > 0) : groupSmall(uses, total, "uses");
-  const leftX = named ? labelColumnWidth(left) : 242;
+  const leftX = labelColumnWidth(left);
   const centerX = leftX + 241;
   const rightX = centerX + 241;
-  const chartWidth = rightX + nodeWidth + (named ? labelColumnWidth(right) : 242);
+  const chartWidth = rightX + nodeWidth + labelColumnWidth(right);
   const plotHeight = bandHeight + labelGap * (Math.max(left.length, right.length) - 1);
   const chartHeight = plotHeight + 92;
   const poolY = 48 + (plotHeight - bandHeight) / 2;
@@ -137,12 +141,7 @@ function FlowDiagram({ sources, uses, sourceCents, useCents, named, categoryOffs
         )}
       </figcaption>
       <div className={`cashflow-plot${named ? " cashflow-plot-named" : ""}`}>
-        <svg
-          viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-          width={named ? chartWidth : undefined}
-          role="group"
-          aria-labelledby={titleId}
-        >
+        <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} width={chartWidth} role="group" aria-labelledby={titleId}>
           <title id={titleId}>Cashflow Sankey diagram</title>
           <g className="cashflow-svg-heading" aria-hidden="true">
             <text x={leftX} y="24" textAnchor="end">
@@ -171,13 +170,14 @@ function FlowDiagram({ sources, uses, sourceCents, useCents, named, categoryOffs
               ? ribbon(x + nodeWidth, flow.outerY, centerX, flow.innerY, flow.thickness)
               : ribbon(centerX + nodeWidth, flow.innerY, x, flow.outerY, flow.thickness);
             const labelY = flow.outerY + flow.thickness / 2;
-            const label = `${flow.from} to ${flow.to}, ${money(flow.cents)}`;
+            const labelX = source ? x - 10 : x + nodeWidth + 10;
+            const amount = money(flow.cents);
             return (
               <g
                 key={flow.key}
                 role="button"
                 tabIndex={0}
-                aria-label={label}
+                aria-label={`${flow.from} to ${flow.to}, ${amount}`}
                 aria-pressed={pinned === flow.key}
                 className="cashflow-flow"
                 data-active={active?.key === flow.key}
@@ -202,13 +202,13 @@ function FlowDiagram({ sources, uses, sourceCents, useCents, named, categoryOffs
               >
                 <path className="cashflow-ribbon" d={path} />
                 <rect x={x} y={flow.outerY} width={nodeWidth} height={flow.thickness} fill="currentColor" rx="2" />
-                <text
-                  x={source ? x - 10 : x + nodeWidth + 10}
-                  y={labelY}
-                  textAnchor={source ? "end" : "start"}
-                  dominantBaseline="central"
-                >
-                  {flow.label}
+                <text textAnchor={source ? "end" : "start"} dominantBaseline="central" aria-hidden="true">
+                  <tspan x={labelX} y={labelY - labelLineOffset}>
+                    {flow.label}
+                  </tspan>
+                  <tspan className="cashflow-flow-amount" x={labelX} y={labelY + labelLineOffset}>
+                    {amount}
+                  </tspan>
                 </text>
               </g>
             );
@@ -231,6 +231,10 @@ function BreakdownList({ heading, items }: { heading: string; items: CashflowAmo
             <dd>{money(item.cents)}</dd>
           </div>
         ))}
+        <div className="cashflow-breakdown-total">
+          <dt>Total</dt>
+          <dd>{money(items.reduce((total, item) => total + item.cents, 0))}</dd>
+        </div>
       </dl>
     </div>
   );
