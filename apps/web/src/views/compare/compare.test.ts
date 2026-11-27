@@ -1,105 +1,76 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_SCENARIO_BASE } from "../../domain/defaults";
+import { runScenario } from "../../domain/run";
+import { resolveScenario } from "../../domain/scenario";
 import type { RunRecord } from "../../domain/types";
-import type { Scenario, SimulationResult } from "@retire-plan/engine";
+import { makeSamplePlan } from "../projection/testFixtures";
 import { computeComparison } from "./compare";
 
-const result = (
-  finalNetWorth: number,
-  success = true,
-  failureAge?: number,
-  worstShortfallAge?: number,
-): SimulationResult => ({
-  years: [
-    {
-      age: 45,
-      income: { employment: 95_000, cpp: 0, oas: 0, gis: 0, other: 0 },
-      taxableIncome: 95_000,
-      tax: { federal: 13_157.59, provincial: 5_827.02, surtax: 0, oasClawback: 0, total: 18_984.61, marginalRate: 0 },
-      withdrawals: { tfsa: 0, rrsp: 0, nonreg: 0 },
-      contributions: { tfsa: 0, rrsp: 0, nonreg: 0 },
-      savings: { tfsa: 0, rrsp: 0, nonreg: 0, mortgage: 0 },
-      expenses: 50_000,
-      shortfall: 0,
-      balances: { tfsa: 60_000, rrsp: 240_000, nonreg: 90_000, cash: 0, home: 0, debt: 0 },
-      netWorth: 390_000,
-      tfsaRoom: 7_000,
-      rrspRoom: 0,
-      events: [],
-      warnings: [],
-    },
-  ],
-  summary: { success, failureAge, finalNetWorth, worstShortfallAge },
-});
+function fixture(): RunRecord {
+  const plan = makeSamplePlan();
+  plan.profile.endAge = 67;
+  const scenario = resolveScenario(null, DEFAULT_SCENARIO_BASE);
+  return {
+    id: "base-run",
+    planId: "plan-test",
+    scenarioId: null,
+    scenario,
+    result: runScenario(plan, scenario).result,
+    birthYear: plan.profile.birthYear,
+    createdAt: "2026-01-01T00:00:00Z",
+  };
+}
 
-const scenario = (id: string, overrides: Partial<Scenario> = {}): Scenario => ({
-  id,
-  name: id,
-  simMode: "deterministic",
-  retirementAge: 65,
-  returnAssumptions: { equity: 0.05, bond: 0.02, cash: 0 },
-  withdrawalOrder: ["tfsa", "nonreg", "rrsp"],
-  ...overrides,
-});
-
-const run = (
-  id: string,
-  scenarioId: string | null,
-  summary: SimulationResult,
-  scenarioName = "Base scenario",
-): RunRecord => ({
-  id,
-  planId: "plan-test",
-  scenarioId,
-  scenario: scenario("base", { name: scenarioName }),
-  result: summary,
-  createdAt: "2026-01-01T00:00:00.000Z",
-});
-
-export const baseRun = run("run-1", null, result(660_000));
-export const deltaRun = run("run-2", "delta-1", result(590_000, false, 78, 78), "Retire 3 years earlier");
-
-describe("computeComparison", () => {
-  it("returns per-run rows with resolved settings and summary", () => {
-    const rows = computeComparison([baseRun, deltaRun], null);
-    expect(rows).toHaveLength(2);
-    expect(rows[0]?.finalNetWorth).toBe(660_000);
-    expect(rows[1]?.success).toBe(false);
-    expect(rows[1]?.retirementAge).toBe(65); // resolved scenario default
+describe("comparison metrics", () => {
+  it("aligns lifetime taxes, withdrawals and end net worth by the shared years", () => {
+    const base = fixture();
+    const other = structuredClone(base);
+    other.result.years = other.result.years.filter((row) => row.age >= 50 && row.age <= 66);
+    other.result.summary.finalNetWorth = other.result.years.at(-1)!.netWorth;
+    other.scenario.retirementAge = 66;
+    const result = computeComparison([base, other], 1981);
+    const [a, b] = result.columns;
+    expect([result.start, result.retirementStart, result.end]).toEqual([2031, 2047, 2047]);
+    expect(a!.actualEnd).toBe(2048);
+    expect(a!.finalNetWorth).toBe(other.result.summary.finalNetWorth);
+    expect(a!.points).toEqual(b!.points);
+    expect(a!.points[0]?.x).toBe(2031);
+    expect(a!.lifetimeTax).toBeCloseTo(other.result.years.reduce((total, year) => total + year.tax.total, 0));
+    const { tfsa, rrsp, nonreg, cash = 0 } = other.result.years.at(-1)!.withdrawals;
+    expect(a!.retirementWithdrawals).toBeCloseTo(tfsa + rrsp + nonreg + cash);
   });
 
-  it("with a baseline, delta columns are absolute and percentage (— for the baseline row)", () => {
-    const [b, d] = computeComparison([baseRun, deltaRun], "run-1");
-    expect(b?.absDelta).toBeNull(); // baseline vs itself renders —
-    expect(d?.absDelta).toBeCloseTo(-70_000, 6);
-    expect(d?.pctDelta).toBeCloseTo(100 * (-70_000 / 660_000), 6);
+  it("uses cash income streams, excluding employer deposits, account interest and transfers", () => {
+    const record = fixture();
+    const row = record.result.years.at(-1)!;
+    record.result.years = [row];
+    row.income = { employment: 10, cpp: 20, oas: 30, gis: 40, other: 100 };
+    row.cashflow!.employerRrspMatch = 10;
+    row.cashflow!.employerRrspContribution = 20;
+    row.cashInterest = 1000;
+    row.expenses = 1000;
+    row.withdrawals = { tfsa: 300, rrsp: 400, nonreg: 500, cash: 600 };
+    const compare = () => computeComparison([record], 1981).columns[0]!;
+    expect(compare().retirementIncome).toBe(170);
+    expect(compare().retirementWithdrawals).toBe(1800);
+    delete row.cashflow;
+    row.incomeBreakdown = [{ id: "stream", kind: "other", amount: 60 }];
+    expect(compare().retirementIncome).toBe(100);
+    delete row.incomeBreakdown;
+    expect(compare().retirementIncome).toBeNull();
   });
 
-  it("baseline not in selection → no delta value columns (plain table only)", () => {
-    const rows = computeComparison([baseRun], "missing");
-    expect(rows[0]?.absDelta).toBeNull();
-  });
-
-  it("net worth series preserved per row for the overlay chart", () => {
-    const rows = computeComparison([baseRun], null);
-    expect(rows[0]?.netWorthAtAges).toEqual([{ x: 45, y: 390_000 }]);
-  });
-
-  it("keeps ensemble metrics distinct from the representative result path", () => {
-    const monteCarlo: RunRecord = {
-      ...baseRun,
-      scenario: scenario("mc", {
-        simMode: "montecarlo",
-        mcConfig: { runs: 1_000, seed: 1, stdDev: { equity: 0.18, bond: 0.06, cash: 0.02 } },
-      }),
-      analysis: {
-        mode: "montecarlo",
-        successRate: 0.72,
-        percentileNetWorth: { p10: 10, p50: 20, p90: 30 },
-        representativeRun: 500,
-      },
-    };
-    const row = computeComparison([monteCarlo], null)[0]!;
-    expect(row.finalNetWorth).toBe(660_000); // the coherent representative path's result
-    expect(row.monteCarlo).toEqual(monteCarlo.analysis); // ensemble summaries remain separate
+  it("starts depletion at retirement and tracks shortfalls separately, including when retirement is beyond the horizon", () => {
+    const record = fixture();
+    const empty = { cash: 0, tfsa: 0, rrsp: 0, nonreg: 0, home: 100_000, debt: 2000 };
+    record.result.years[0]!.balances = empty;
+    record.result.years[0]!.shortfall = 1;
+    record.result.years.at(-1)!.balances = empty;
+    const compare = () => computeComparison([record], 1981).columns[0]!;
+    expect(compare().depletion?.age).toBe(67);
+    expect(compare().shortfall?.age).toBe(45);
+    record.scenario.retirementAge = 68;
+    expect(compare()).toMatchObject({ hasRetirementYear: false, retirementIncome: null, retirementWithdrawals: null });
+    expect(compare().depletion).toBeUndefined();
   });
 });

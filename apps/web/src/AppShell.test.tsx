@@ -170,14 +170,20 @@ describe("local workspace integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Run Retire three years earlier" }));
     await waitFor(() => expect(JSON.parse(screen.getByTestId("run-records").textContent ?? "[]")).toHaveLength(2));
     fireEvent.click(screen.getByRole("button", { name: "Compare" }));
-    const choices = screen.getAllByRole("checkbox");
-    expect(choices).toHaveLength(2);
-    choices.forEach((choice) => fireEvent.click(choice));
-    const baseline = screen.getByLabelText(/baseline/i);
-    fireEvent.change(baseline, { target: { value: (baseline as HTMLSelectElement).options[1]!.value } });
-    expect(screen.getByRole("table").textContent).toContain("Final net worth");
-    expect(screen.getByRole("table").textContent).toContain("62");
-    expect(screen.getByRole("table").textContent).toContain("Δ");
+    expect(screen.getByRole("tab", { name: "Compare", selected: true })).toBeTruthy();
+    fireEvent.change(screen.getByRole("combobox", { name: "Alternative 1" }), {
+      target: {
+        value: [...screen.getByRole<HTMLSelectElement>("combobox", { name: "Alternative 1" }).options].find(
+          (option) => option.text === "Retire three years earlier",
+        )!.value,
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Run comparison" }));
+    expect((await screen.findByRole("region", { name: "Side-by-side scenario outcomes" })).textContent).toContain(
+      "Net worth at shared end",
+    );
+    expect(screen.getByRole("region", { name: "Resolved scenario assumptions" }).textContent).toContain("Age 62");
+    expect(JSON.parse(screen.getByTestId("run-records").textContent ?? "[]")).toHaveLength(2);
   });
 
   it("opens and focuses Projection with Charts selected after running directly from Plan", async () => {

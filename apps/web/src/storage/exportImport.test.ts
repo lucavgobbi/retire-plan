@@ -433,7 +433,29 @@ describe("parsePlanFile", () => {
     });
     const parsed = parsePlanFile(JSON.parse(JSON.stringify(file)));
     expect(parsed.ok).toBe(true);
-    if (parsed.ok) expect(parsed.workspace.scenarios).toHaveLength(2);
+    if (parsed.ok) expect(parsed.workspace.scenarios).toEqual(file.scenarios);
+  });
+
+  it("prunes foreign comparison selections in current JSON while preserving the scenario record", () => {
+    const file = buildPlanFile(makeSampleWorkspace());
+    const local = file.scenarios[0]!;
+    const foreign = { ...local, id: "foreign", basePlanId: "other-plan" };
+    const parsed = parsePlanFile(
+      JSON.parse(
+        JSON.stringify({
+          ...file,
+          scenarios: [local, foreign],
+          projectionComparison: { baselineId: "", alternativeIds: [foreign.id, local.id] },
+        }),
+      ),
+    );
+    expect(parsed).toMatchObject({
+      ok: true,
+      workspace: {
+        scenarios: [local, foreign],
+        projectionComparison: { baselineId: "", alternativeIds: [local.id] },
+      },
+    });
   });
 });
 

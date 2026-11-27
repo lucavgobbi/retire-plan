@@ -8,12 +8,14 @@ export function ChartCard({
   ariaLabel,
   children,
   legend = [],
+  axisLabel = "Age",
   help,
 }: {
   title: string;
   subtitle?: string;
   ariaLabel: string;
   children: ReactNode;
+  axisLabel?: string;
   legend?: { label: string; color: string }[];
   /** Shared explanatory copy ("what it shows / how to read it"); renders the accessible ⓘ help. */
   help?: string;
@@ -26,7 +28,7 @@ export function ChartCard({
         {help && <ChartHelp>{help}</ChartHelp>}
       </figcaption>
       <div className="chart-plot">{children}</div>
-      <p className="chart-axis-label">Age</p>
+      <p className="chart-axis-label">{axisLabel}</p>
       {legend.length > 0 && (
         <ul className="chart-legend" aria-label={`${title} series`}>
           {legend.map((item) => (

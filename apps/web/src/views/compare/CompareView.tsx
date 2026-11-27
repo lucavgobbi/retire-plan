@@ -1,100 +1,159 @@
-import { useMemo, useState } from "react";
-import type { RunRecord } from "../../domain/types";
-import { useRuns } from "../../store/api";
-import { fmtMoney } from "../projection/fmt";
+import { useLayoutEffect } from "react";
+import { comparisonScenarios, comparisonSelection } from "../../domain/comparisonSelection";
+import { useStore } from "../../store/api";
 import { CompareChart } from "./CompareChart";
-import { CompareTable } from "./CompareTable";
+import { CompareAssumptions, CompareTable } from "./CompareTable";
 import { computeComparison } from "./compare";
 import "./compare.css";
 
-/**
- * Default (zero-prop) compare view: checkbox-select stored runs (base + deltas),
- * pick a baseline, side-by-side summary table with Δ columns + overlaid net worth chart.
- * Deltas are computed client-side and purely (computeComparison).
- */
-export function CompareView() {
-  const runs = useRuns();
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [baselineId, setBaselineId] = useState<string | null>(null);
+const OPTION_PREFIX = "scenario:";
 
-  const selected = useMemo<RunRecord[]>(() => runs.filter((run) => selectedIds.includes(run.id)), [runs, selectedIds]);
-  const rows = useMemo(
-    () => (selected.length === 0 ? [] : computeComparison(selected, baselineId)),
-    [selected, baselineId],
-  );
-
-  if (runs.length === 0) {
-    return (
-      <section aria-label="Compare" className="compare-view">
-        <h2>Compare</h2>
-        <p className="hint empty-state">
-          No runs stored yet. Run the base projection or a scenario, then compare here.
-        </p>
-      </section>
-    );
-  }
-
-  const toggle = (id: string) => {
-    setSelectedIds((current) => {
-      const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
-      if (baselineId !== null && !next.includes(baselineId)) setBaselineId(null);
-      return next;
-    });
-  };
-
-  return (
-    <section aria-label="Compare" className="compare-view">
-      <h2>Compare</h2>
-      <p className="hint">Select stored runs (snapshots — later plan edits do not change them).</p>
-      <ul className="compare-run-list">
-        {runs.map((run) => (
-          <li key={run.id}>
-            <label>
-              <input
-                type="checkbox"
-                checked={selectedIds.includes(run.id)}
-                onChange={() => toggle(run.id)}
-                aria-label={`Select run ${labelFor(run)}`}
-              />
-              {labelFor(run)}
-              <span className="hint">
-                {" "}
-                {new Date(run.createdAt).toLocaleString()} · {run.scenario.simMode}
-              </span>
-            </label>
-          </li>
-        ))}
-      </ul>
-
-      {rows.length > 0 && (
-        <>
-          <label className="compare-baseline">
-            <span>Baseline for Δ columns</span>
-            <select
-              aria-label="Baseline"
-              value={baselineId ?? ""}
-              onChange={(event) => setBaselineId(event.target.value === "" ? null : event.target.value)}
-            >
-              <option value="">— none —</option>
-              {selected.map((run) => (
-                <option key={run.id} value={run.id}>
-                  {labelFor(run)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <CompareTable rows={rows} />
-          {selected.length >= 2 && <CompareChart rows={rows} />}
-        </>
-      )}
-      {rows.length === 0 && (
-        <p className="hint empty-state">Check at least one run to build the side-by-side comparison.</p>
-      )}
-    </section>
-  );
+function comparisonChoices(scenarios: ReturnType<typeof comparisonScenarios>) {
+  const choices = [
+    { id: "", label: "Base scenario" },
+    ...scenarios.map((scenario) => ({ id: scenario.id, label: scenario.name.trim() || scenario.id })),
+  ];
+  const names = new Set(choices.map(({ label }) => label));
+  const seen = new Set<string>();
+  return choices.map(({ id, label }) => {
+    if (!seen.has(label)) {
+      seen.add(label);
+      return { id, label };
+    }
+    let index = 2;
+    while (names.has(`${label} (${index})`)) index++;
+    const uniqueLabel = `${label} (${index})`;
+    names.add(uniqueLabel);
+    return { id, label: uniqueLabel };
+  });
 }
 
-function labelFor(run: RunRecord): string {
-  const name = run.scenario.name || (run.scenarioId === null ? "Base scenario" : run.scenarioId);
-  return `${name} (${fmtMoney(run.result.summary.finalNetWorth)})`;
+export function CompareView() {
+  const {
+    workspace,
+    dispatch,
+    runs,
+    runComparison,
+    comparisonRun,
+    cancelComparison,
+    isRunning,
+    resetRuns,
+    validationErrors,
+  } = useStore();
+  useLayoutEffect(() => cancelComparison, [cancelComparison]);
+
+  const scenarios = comparisonScenarios(workspace);
+  const { baselineId, alternativeIds } = comparisonSelection(workspace, scenarios);
+  const choices = comparisonChoices(scenarios);
+  const busy = comparisonRun?.status === "running";
+  const changeBaseline = (id: string) =>
+    dispatch({
+      type: "projection/setComparison",
+      selection: { baselineId: id, alternativeIds: alternativeIds.map((alt) => (alt === id ? baselineId : alt)) },
+    });
+  const changeAlternative = (index: number, value: string) => {
+    const next = [...alternativeIds];
+    if (value === "") next.splice(index, 1);
+    else next[index] = value.slice(OPTION_PREFIX.length);
+    dispatch({ type: "projection/setComparison", selection: { baselineId, alternativeIds: next } });
+  };
+
+  const { birthYear } = workspace.plan.profile;
+  const comparison =
+    comparisonRun?.status === "ready"
+      ? computeComparison(comparisonRun.records, birthYear, new Map(choices.map(({ id, label }) => [id, label])))
+      : null;
+  return (
+    <div className="compare-view">
+      <div className="compare-controls no-print">
+        {scenarios.length === 0 ? (
+          <p className="hint empty-state">
+            Save a scenario on the Scenarios tab to compare it with your base scenario.
+          </p>
+        ) : (
+          <>
+            <div className="compare-selects">
+              <label className="field">
+                Baseline
+                <select
+                  value={baselineId}
+                  disabled={busy}
+                  onChange={(event) => changeBaseline(event.currentTarget.value)}
+                >
+                  {choices.map(({ id, label }) => (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {Array.from({ length: choices.length >= 3 && alternativeIds.length > 0 ? 2 : 1 }, (_, index) => (
+                <label className="field" key={index}>
+                  Alternative {index + 1}
+                  {index === 1 ? " (optional)" : ""}
+                  <select
+                    value={alternativeIds[index] === undefined ? "" : OPTION_PREFIX + alternativeIds[index]}
+                    disabled={busy}
+                    onChange={(event) => changeAlternative(index, event.currentTarget.value)}
+                  >
+                    <option value="">Choose a scenario</option>
+                    {choices
+                      .filter(
+                        ({ id }) => id !== baselineId && !alternativeIds.some((alt, i) => alt === id && i !== index),
+                      )
+                      .map(({ id, label }) => (
+                        <option key={id} value={OPTION_PREFIX + id}>
+                          {label}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+            <div className="compare-actions">
+              <button
+                type="button"
+                onClick={() => void runComparison()}
+                disabled={busy || isRunning || !alternativeIds.length || validationErrors.length > 0}
+              >
+                Run comparison
+              </button>
+              {busy && (
+                <button type="button" onClick={cancelComparison}>
+                  Cancel comparison
+                </button>
+              )}
+              {(comparisonRun || runs.length > 0 || isRunning) && (
+                <button type="button" onClick={resetRuns}>
+                  Reset runs
+                </button>
+              )}
+            </div>
+          </>
+        )}
+        {busy && (
+          <p role="status">
+            Running scenario {comparisonRun.current} of {comparisonRun.total} · {comparisonRun.label}…
+          </p>
+        )}
+        {isRunning && <p role="status">A projection is running. The comparison can start when it finishes.</p>}
+        {comparisonRun?.status === "error" && (
+          <p role="alert" className="run-error">
+            {comparisonRun.message}
+          </p>
+        )}
+        {comparisonRun?.status === "cancelled" && <p role="status">Comparison cancelled.</p>}
+        {comparisonRun?.status === "changed" && (
+          <p role="status">Inputs or selections changed. Run the comparison to update the results.</p>
+        )}
+      </div>
+      {comparison && (
+        <div className="compare-results">
+          <CompareTable comparison={comparison} birthYear={birthYear} />
+          <CompareChart comparison={comparison} birthYear={birthYear} />
+          <CompareAssumptions columns={comparison.columns} plan={workspace.plan} />
+        </div>
+      )}
+    </div>
+  );
 }

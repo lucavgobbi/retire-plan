@@ -447,15 +447,18 @@ describe("Projection subtabs", () => {
     renderView();
     const charts = screen.getByRole("tab", { name: "Charts" });
     const cashflow = screen.getByRole("tab", { name: "Cashflow" });
+    const compare = screen.getByRole("tab", { name: "Compare" });
     expect(screen.getByRole("tabpanel", { name: "Charts" }).id).toBe(charts.getAttribute("aria-controls"));
     expect(screen.queryByRole("tabpanel", { name: "Cashflow" })).toBeNull();
     expect(cashflow.tabIndex).toBe(-1);
     charts.focus();
     for (const [from, key, to] of [
-      [charts, "ArrowLeft", cashflow],
-      [cashflow, "ArrowRight", charts],
-      [charts, "End", cashflow],
-      [cashflow, "Home", charts],
+      [charts, "ArrowLeft", compare],
+      [compare, "ArrowLeft", cashflow],
+      [cashflow, "ArrowRight", compare],
+      [compare, "ArrowRight", charts],
+      [charts, "End", compare],
+      [compare, "Home", charts],
     ] as const) {
       fireEvent.keyDown(from, { key });
       expect(document.activeElement).toBe(to);

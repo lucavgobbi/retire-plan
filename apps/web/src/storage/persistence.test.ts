@@ -204,3 +204,64 @@ it("restores the latest insertion and evicts the oldest when backup timestamps t
   const retained = await rowDb.getBackupRows();
   expect(retained.map((row) => (row.workspace as Workspace).meta?.name)).toEqual(["Two", "Three", "Four"]);
 });
+
+describe("comparison preferences", () => {
+  it("round-trips Compare tab and a pruned selection in both local storage and plan files", async () => {
+    const workspace = ws("Compare plan");
+    const first = workspace.scenarios[0]!;
+    workspace.scenarios.push(
+      { ...first, id: "another-scenario" },
+      { ...first, id: "third-scenario" },
+      { ...first, id: "foreign", basePlanId: "somewhere-else" },
+    );
+    workspace.projectionActiveTab = "compare";
+    workspace.projectionComparison = {
+      baselineId: first.id,
+      alternativeIds: [first.id, "", "", "dangling", "foreign", "another-scenario", "third-scenario"],
+    };
+    const expected = {
+      projectionActiveTab: "compare",
+      projectionComparison: { baselineId: first.id, alternativeIds: ["", "another-scenario"] },
+    };
+    const { provider } = buildHarness();
+    await provider.save(workspace);
+    expect(await provider.load()).toMatchObject({ kind: "loaded", workspace: expected });
+    const file = buildPlanFile(workspace);
+    expect(file).toMatchObject(expected);
+    expect(file).not.toHaveProperty("runs");
+    expect(file).not.toHaveProperty("comparisonRun");
+    expect(parsePlanFile(file)).toMatchObject({ ok: true, workspace: expected });
+    expect(
+      parsePlanFile({
+        ...file,
+        projectionComparison: { baselineId: "missing", alternativeIds: ["", first.id, "dangling", first.id] },
+      }),
+    ).toMatchObject({
+      ok: true,
+      workspace: {
+        projectionComparison: { baselineId: "", alternativeIds: [first.id] },
+      },
+    });
+  });
+
+  it("keeps legacy Compare preferences optional and keeps unsaved scenario IDs usable after export", () => {
+    const workspace = ws("Compare plan");
+    const legacy = parsePlanFile(buildPlanFile(workspace));
+    expect(legacy.ok && legacy.workspace.projectionComparison).toBeUndefined();
+
+    workspace.meta = null;
+    workspace.scenarios = [{ ...workspace.scenarios[0]!, basePlanId: "unsaved" }];
+    workspace.projectionComparison = { baselineId: "", alternativeIds: [workspace.scenarios[0]!.id] };
+    const file = buildPlanFile(workspace, { makeId: () => "new-plan", now: nowAt(0) });
+    expect(file.scenarios[0]?.basePlanId).toBe("new-plan");
+    const oldExport = { ...file, scenarios: [{ ...file.scenarios[0]!, basePlanId: "unsaved" }] };
+    expect(parsePlanFile(oldExport)).toMatchObject({
+      ok: true,
+      workspace: {
+        scenarios: [{ basePlanId: "new-plan" }],
+        projectionComparison: workspace.projectionComparison,
+      },
+    });
+    expect(workspace.scenarios[0]?.basePlanId).toBe("unsaved");
+  });
+});

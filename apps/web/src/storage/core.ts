@@ -20,6 +20,7 @@
 // serialized through one shared chain, and destructive multi-step flows run via
 // runExclusive() so no interleaved save can land between their steps.
 import type { Workspace } from "../domain/types";
+import { normalizeComparisonPreference } from "../domain/comparisonSelection";
 import { createEmptyWorkspace } from "../domain/defaults";
 import { SCHEMA_VERSION, validateWorkspace } from "./schema";
 import { migrateWorkspaceRow } from "./migrations";
@@ -98,7 +99,8 @@ export function createRowBackedStorageProvider(backend: RowDb, options: { now?: 
     for (const row of newestFirst) {
       // Backups saved before schema v2 carry no version. The v1 migration also accepts current shapes.
       const migrated = migrateWorkspaceRow({ schemaVersion: 1, workspace: row.workspace });
-      if (migrated.ok && validateWorkspace(migrated.workspace).length === 0) return migrated.workspace as Workspace;
+      if (migrated.ok && validateWorkspace(migrated.workspace).length === 0)
+        return normalizeComparisonPreference(migrated.workspace as Workspace);
     }
     return null;
   }
@@ -130,7 +132,7 @@ export function createRowBackedStorageProvider(backend: RowDb, options: { now?: 
       if (!migrated.ok || validateWorkspace(workspace).length > 0) {
         return { kind: "recoverable", offered: await newestValidBackup() } as const;
       }
-      return { kind: "loaded", workspace: workspace as Workspace } as const;
+      return { kind: "loaded", workspace: normalizeComparisonPreference(workspace as Workspace) } as const;
     })();
   }
 
@@ -150,7 +152,8 @@ export function createRowBackedStorageProvider(backend: RowDb, options: { now?: 
           "Snapshot it and update the app first.",
       );
     }
-    const stamped: Workspace = w.meta ? { ...w, meta: { ...w.meta, updatedAt: now() } } : w;
+    const normalized = normalizeComparisonPreference(w);
+    const stamped = normalized.meta ? { ...normalized, meta: { ...normalized.meta, updatedAt: now() } } : normalized;
     await backend.putWorkspaceRow({
       singleton: "singleton",
       schemaVersion: SCHEMA_VERSION,

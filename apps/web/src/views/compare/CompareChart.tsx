@@ -1,88 +1,96 @@
-import { H, PAD, polylinePoints, ticks, fmtTick, W, xScale, yScale } from "../projection/charts/svg";
-import { PALETTE } from "../projection/charts/palette";
-import type { ComparisonRow } from "./compare";
+import { ChartCard } from "../projection/charts/ChartCard";
+import { ChartCrosshair, ChartMarkers, ChartTooltip, useChartInteraction } from "../projection/charts/chartInteraction";
+import { domainOf, fmtTick, H, PAD, polylinePoints, ticks, W, xScale, yScale } from "../projection/charts/svg";
+import type { Comparison } from "./compare";
 
-const LINE_COLORS = ["#2563eb", "#0f766e", "#b45309", "#7c3aed", "#dc2626", "#0369a1", "#4d7c0f", "#65a30d"];
+const COLORS = ["#2563eb", "#0f766e", "#b45309"] as const;
 
-/** Overlaid net-worth lines over age (multi-series) for the selected runs. */
-export function CompareChart({ rows }: { rows: ComparisonRow[] }) {
-  const xs = rows.flatMap((row) => row.netWorthAtAges.map((point) => point.x));
-  if (xs.length < 2)
-    return (
-      <svg
-        className="financial-chart"
-        width="100%"
-        viewBox={`0 0 ${W} ${H}`}
-        aria-label="No comparison data"
-        role="img"
-      />
-    );
-  const xDomain: [number, number] = [Math.min(...xs), Math.max(...xs)];
-  const yDomainOf = (() => {
-    const values = rows.flatMap((row) => row.netWorthAtAges.map((p) => p.y ?? NaN)).filter(Number.isFinite);
-    const lo = Math.min(0, ...values);
-    const hi = Math.max(1, ...values);
-    return [lo, hi] as [number, number];
-  })();
-  const yTicks = ticks(yDomainOf[0], yDomainOf[1]);
+export function CompareChart({ comparison, birthYear }: { comparison: Comparison; birthYear: number }) {
+  const { columns, years, start, end } = comparison;
+  const xDomain: [number, number] = [start ?? 0, end ?? 0];
+  const interaction = useChartInteraction(years, xDomain);
+  if (start === undefined || end === undefined) return null;
+  const yDomain = domainOf(columns.flatMap(({ points }) => points.map(({ y }) => y)));
+  const activeIndex = interaction.active;
+  const activeYear = activeIndex === null ? undefined : years[activeIndex];
+  const activePoints = activeIndex === null ? [] : columns.map(({ points }) => points[activeIndex]!);
+  const activeX = activeYear === undefined ? 0 : xScale(activeYear, xDomain);
 
   return (
-    <figure className="compare-chart-card">
-      <figcaption>
-        <h3>Net worth comparison</h3>
-      </figcaption>
+    <ChartCard
+      title="Net worth comparison"
+      ariaLabel="Net worth comparison"
+      subtitle={
+        columns.some(({ run }) => run.analysis)
+          ? "One representative path per ensemble, aligned by household projection year."
+          : "Year-end net worth aligned by household projection year."
+      }
+      axisLabel="Household projection year"
+      legend={columns.map(({ label }, index) => ({ label, color: COLORS[index]! }))}
+    >
       <svg
-        className="financial-chart"
+        className="financial-chart chart-interactive"
         width="100%"
         viewBox={`0 0 ${W} ${H}`}
-        aria-label="Net worth comparison of the selected runs"
+        aria-label="Net worth by household projection year. Use arrow keys to explore values."
         role="img"
+        {...interaction.svgProps}
       >
-        <title>Net worth comparison over age</title>
-        <desc>One net worth line per selected run, over age, for the side-by-side comparison.</desc>
-        {yTicks.map((t) => (
-          <g key={t}>
+        {ticks(...yDomain).map((tick) => (
+          <g key={tick}>
             <line
               x1={PAD.left}
               x2={W - PAD.right}
-              y1={yScale(t, yDomainOf)}
-              y2={yScale(t, yDomainOf)}
+              y1={yScale(tick, yDomain)}
+              y2={yScale(tick, yDomain)}
               className="chart-gridline"
             />
-            <text x={PAD.left - 6} y={yScale(t, yDomainOf) + 3} textAnchor="end" className="chart-tick">
-              {fmtTick(t)}
+            <text x={PAD.left - 6} y={yScale(tick, yDomain) + 3} textAnchor="end" className="chart-tick">
+              {fmtTick(tick)}
             </text>
           </g>
         ))}
-        {ticks(xDomain[0], xDomain[1]).map((t) => (
-          <text key={t} x={xScale(t, xDomain)} y={H - 6} textAnchor="middle" className="chart-tick">
-            {Math.round(t)}
+        {[...new Set(ticks(start, end).map(Math.round))].map((year) => (
+          <text key={year} x={xScale(year, xDomain)} y={H - 6} textAnchor="middle" className="chart-tick">
+            {year}
           </text>
         ))}
-        {rows.map((row, index) => (
-          <g key={row.runId}>
+        {columns.map(({ run, points }, index) => (
+          <g key={run.scenarioId ?? ""}>
             <polyline
-              points={polylinePoints(row.netWorthAtAges, xDomain, yDomainOf)}
+              points={polylinePoints(points, xDomain, yDomain)}
               fill="none"
-              stroke={LINE_COLORS[index % LINE_COLORS.length] ?? PALETTE.color5}
-              strokeWidth="2"
+              stroke={COLORS[index]}
+              strokeWidth="2.5"
+              strokeDasharray={index === 1 ? "6 3" : index === 2 ? "2 3" : undefined}
             />
+            {points.length === 1 && Number.isFinite(points[0]!.y) && (
+              <circle cx={xScale(start, xDomain)} cy={yScale(points[0]!.y, yDomain)} r="3.5" fill={COLORS[index]} />
+            )}
           </g>
         ))}
-      </svg>
-      <p className="chart-axis-label">Age</p>
-      <ul className="chart-legend" aria-label="Compared runs">
-        {rows.map((row, index) => (
-          <li key={row.runId}>
-            <span
-              className="legend-swatch"
-              aria-hidden="true"
-              style={{ backgroundColor: LINE_COLORS[index % LINE_COLORS.length] ?? PALETTE.color5 }}
+        {activeYear !== undefined && (
+          <>
+            <ChartCrosshair x={activeX} />
+            <ChartMarkers
+              coords={activePoints.map(({ y }, index) => ({
+                cx: activeX,
+                cy: yScale(y, yDomain),
+                color: COLORS[index]!,
+              }))}
             />
-            <span>{row.label}</span>
-          </li>
-        ))}
-      </ul>
-    </figure>
+          </>
+        )}
+      </svg>
+      {activeYear !== undefined && (
+        <ChartTooltip
+          age={activeYear - birthYear}
+          calendarYear={activeYear}
+          fraction={activeX / W}
+          keyboard={interaction.keyboard}
+          rows={columns.map(({ label }, index) => ({ label, value: activePoints[index]!.y }))}
+        />
+      )}
+    </ChartCard>
   );
 }

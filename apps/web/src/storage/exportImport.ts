@@ -10,6 +10,7 @@
 //   5. swap + save                                ← shell/watcher
 import type { PlanFile, PlanMeta, Workspace } from "../domain/types";
 import { SCHEMA_VERSION, validateWorkspace } from "./schema";
+import { normalizeComparisonPreference } from "../domain/comparisonSelection";
 import { migratePlanFile } from "./migrations";
 
 export interface BuildPlanFileOptions {
@@ -25,15 +26,17 @@ export interface BuildPlanFileOptions {
  * mutating the workspace — the live state keeps `meta: null` (lead's contract).
  */
 export function buildPlanFile(w: Workspace, options: BuildPlanFileOptions = {}): PlanFile {
-  const meta: PlanMeta | null = w.meta
+  const meta: PlanMeta = w.meta
     ? { ...w.meta }
     : {
         id: options.makeId?.() ?? synthesizedId(),
         name: "Untitled plan",
         updatedAt: (options.now ?? defaultNow)(),
       };
+  const selection = normalizeComparisonPreference(w).projectionComparison;
   return {
     schemaVersion: SCHEMA_VERSION,
+    ...(selection ? { projectionComparison: selection } : {}),
     ...(w.baseScenario ? { baseScenario: structuredCopy(w.baseScenario) } : {}),
     ...(w.hiddenProjectionColumns !== undefined ? { hiddenProjectionColumns: [...w.hiddenProjectionColumns] } : {}),
     ...(w.hiddenProjectionCharts !== undefined ? { hiddenProjectionCharts: [...w.hiddenProjectionCharts] } : {}),
@@ -47,7 +50,9 @@ export function buildPlanFile(w: Workspace, options: BuildPlanFileOptions = {}):
       ? { projectionSankeyShowAccounts: w.projectionSankeyShowAccounts }
       : {}),
     plans: [{ meta, plan: structuredCopy(w.plan) }],
-    scenarios: w.scenarios.map((s) => structuredCopy(s)),
+    scenarios: w.scenarios.map((scenario) =>
+      structuredCopy(!w.meta && scenario.basePlanId === "unsaved" ? { ...scenario, basePlanId: meta.id } : scenario),
+    ),
   };
 }
 
@@ -103,7 +108,7 @@ export function parsePlanFile(json: unknown): ParseOk | ParseFailure {
   }
   // Single-plan workspaces are the current model.
   const entry = planFile.plans[0]!;
-  const workspace: Workspace = {
+  const workspace = normalizeComparisonPreference({
     meta: { ...entry.meta },
     ...(planFile.baseScenario ? { baseScenario: structuredCopy(planFile.baseScenario) } : {}),
     ...(planFile.hiddenProjectionColumns !== undefined
@@ -131,16 +136,13 @@ export function parsePlanFile(json: unknown): ParseOk | ParseFailure {
     ...(planFile.projectionSankeyShowAccounts !== undefined
       ? { projectionSankeyShowAccounts: planFile.projectionSankeyShowAccounts }
       : {}),
+    ...(planFile.projectionComparison ? { projectionComparison: planFile.projectionComparison } : {}),
     plan: entry.plan,
-    scenarios: planFile.scenarios.filter(
-      (scenario) =>
-        scenario.basePlanId === entry.meta.id ||
-        // Tolerance: hand-made or pre-schema files may reference a plan id that
-        // no longer matches (or none at all). With one plan in the file there is
-        // nothing else they can point to, so they load instead of vanishing.
-        planCount === 1,
+    // Legacy exports could assign metadata to the plan while leaving its scenarios marked "unsaved".
+    scenarios: planFile.scenarios.map((scenario) =>
+      scenario.basePlanId === "unsaved" ? { ...scenario, basePlanId: entry.meta.id } : scenario,
     ),
-  };
+  });
 
   const errors = validateWorkspace(workspace);
   if (errors.length > 0) return { ok: false, errors };

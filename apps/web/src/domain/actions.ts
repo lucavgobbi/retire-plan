@@ -1,6 +1,7 @@
 import type { Plan } from "@retire-plan/engine";
 import type {
   ProjectionActiveTab,
+  ProjectionComparison,
   ProjectionSankeyRange,
   RunRecord,
   ScenarioBase,
@@ -50,4 +51,5 @@ export type Action =
       type: "projection/setSankeyRange";
       /** null clears the preference to the full current run. */ range: ProjectionSankeyRange | null;
     }
+  | { type: "projection/setComparison"; selection: ProjectionComparison }
   | { type: "projection/setSankeyShowAccounts"; showAccounts: boolean };

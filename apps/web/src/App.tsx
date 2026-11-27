@@ -168,9 +168,21 @@ function SettingsDialog({ provider, onClose }: { provider?: StorageProvider; onC
 }
 
 export function AppShell({ provider, sample = false }: { provider?: StorageProvider; sample?: boolean }) {
-  const { workspace, activeRunId } = useWorkspace();
-  const [route, setRoute] = useState<Route>("Plan");
+  const { workspace, activeRunId, dispatch } = useWorkspace();
+  const [route, setRoute] = useState<Exclude<Route, "Compare">>("Plan");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const activeRoute = route === "Projection" && workspace.projectionActiveTab === "compare" ? "Compare" : route;
+  const navigate = (next: Route) => {
+    if (next === "Compare") {
+      dispatch({ type: "projection/setActiveTab", tab: "compare" });
+      setRoute("Projection");
+      return;
+    }
+    if (next === "Projection" && activeRoute === "Compare") {
+      dispatch({ type: "projection/setActiveTab", tab: "charts" });
+    }
+    setRoute(next);
+  };
   useEffect(() => {
     if (activeRunId !== null) setRoute("Projection");
   }, [activeRunId]);
@@ -222,8 +234,8 @@ export function AppShell({ provider, sample = false }: { provider?: StorageProvi
           <button
             key={name}
             type="button"
-            aria-current={name === route ? "page" : undefined}
-            onClick={() => setRoute(name)}
+            aria-current={name === activeRoute ? "page" : undefined}
+            onClick={() => navigate(name)}
           >
             {name}
           </button>

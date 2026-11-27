@@ -52,7 +52,7 @@ export const SAVINGS_TARGETS = ["rrsp-match", "rrsp", "tfsa", "nonreg", "cash", 
 /** The tax tables ship Ontario-only today; the engine profile type is literally "ON". */
 export const SUPPORTED_PROVINCES = ["ON"] as const;
 export const WITHDRAWAL_STRATEGIES = ["manual", "tax-minimizing"] as const;
-export const PROJECTION_TABS = ["charts", "cashflow"] as const;
+export const PROJECTION_TABS = ["charts", "cashflow", "compare"] as const;
 
 function validateProjectionPreferences(value: Record<string, unknown>, label: string): string[] {
   const errors: string[] = [];
@@ -60,7 +60,17 @@ function validateProjectionPreferences(value: Record<string, unknown>, label: st
     errors.push(`${label} projectionSankeyShowAccounts must be a boolean when present.`);
   }
   if (value.projectionActiveTab !== undefined && !isEnum(value.projectionActiveTab, PROJECTION_TABS)) {
-    errors.push(`${label} projectionActiveTab must be "charts" or "cashflow" when present.`);
+    errors.push(`${label} projectionActiveTab must be "charts", "cashflow", or "compare" when present.`);
+  }
+  const selection = value.projectionComparison;
+  if (
+    selection !== undefined &&
+    (!isRecord(selection) ||
+      !isString(selection.baselineId) ||
+      !Array.isArray(selection.alternativeIds) ||
+      !selection.alternativeIds.every(isString))
+  ) {
+    errors.push(`${label} projectionComparison requires a baseline ID and a list of alternative IDs.`);
   }
   if (value.projectionSankeyRange !== undefined) {
     const range = value.projectionSankeyRange;

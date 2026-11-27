@@ -199,19 +199,21 @@ export function ChartMarkers({ coords }: { coords: { cx: number; cy: number; col
  */
 export function ChartTooltip({
   age,
+  calendarYear,
   rows,
   fraction,
   keyboard,
 }: {
   /** Active age (points carry age only — never an invented calendar year). */
   age: number;
+  calendarYear?: number;
   rows: TooltipRow[];
   /** Horizontal anchor as a fraction of the plot box width (0..1). */
   fraction: number;
   keyboard: boolean;
 }) {
   const tipRef = useRef<HTMLDivElement | null>(null);
-  const title = `Age ${age}`;
+  const title = calendarYear === undefined ? `Age ${age}` : `${calendarYear} (age ${age})`;
   const text = (row: TooltipRow) =>
     row.format === "percent"
       ? fmtPercent(row.value)

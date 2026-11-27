@@ -11,14 +11,37 @@ import {
 } from "react";
 import { validatePlan, type AccountType } from "@retire-plan/engine";
 import type { Action } from "../domain/actions";
+import { comparisonScenarios, comparisonSelection, normalizeComparisonPreference } from "../domain/comparisonSelection";
 import { createEmptyWorkspace, DEFAULT_SCENARIO_BASE } from "../domain/defaults";
 import { runFingerprint } from "../domain/run";
 import { resolveScenario } from "../domain/scenario";
-import type { RunRecord, ScenarioBase, ScenarioDelta, Workspace } from "../domain/types";
+import type { RunRecord, Scenario, ScenarioBase, ScenarioDelta, Workspace } from "../domain/types";
 import { deepFreeze, reducer } from "./reducer";
 import { withCurrentAge } from "../domain/age";
 import { runScenarioInWorker } from "./runInWorker";
 import type { SimulationRunner } from "./simulationWorkerProtocol";
+
+type ComparisonRun =
+  | { status: "running"; current: number; total: number; label: string }
+  | { status: "ready"; records: RunRecord[] }
+  | { status: "error"; message: string }
+  | { status: "cancelled" | "changed" };
+
+function validateScenarioForRun(scenario: Scenario) {
+  if (!Number.isInteger(scenario.retirementAge) || scenario.retirementAge <= 0)
+    throw new Error("Retirement age must be a positive whole number.");
+  const { equity, bond, cash } = scenario.returnAssumptions;
+  if (![equity, bond, cash].every(Number.isFinite))
+    throw new Error("Return assumptions require finite equity, bond, and cash numbers.");
+  if (
+    (scenario.withdrawalOrder.length !== 3 && scenario.withdrawalOrder.length !== 4) ||
+    new Set(scenario.withdrawalOrder).size !== scenario.withdrawalOrder.length ||
+    !["tfsa", "nonreg", "rrsp"].every((type) => scenario.withdrawalOrder.includes(type as AccountType)) ||
+    !scenario.withdrawalOrder.every((type) => ["tfsa", "nonreg", "rrsp", "cash"].includes(type))
+  ) {
+    throw new Error("Choose each investment withdrawal account exactly once, with optional cash.");
+  }
+}
 
 export interface WorkspaceApi {
   workspace: Workspace;
@@ -27,6 +50,9 @@ export interface WorkspaceApi {
   setBaseScenario: (patch: Partial<ScenarioBase>) => void;
   validationErrors: string[];
   runProjection: (delta?: ScenarioDelta | null) => Promise<RunRecord | null>;
+  runComparison: () => Promise<void>;
+  comparisonRun: ComparisonRun | null;
+  cancelComparison: () => void;
   isRunning: boolean;
   runCancelled: boolean;
   cancelRun: () => void;
@@ -59,22 +85,27 @@ export function StoreProvider({
   const [state, rawDispatch] = useReducer(reducer, undefined, () => {
     const workspace = withCurrentAge(structuredClone(initialWorkspace ?? createEmptyWorkspace()), calendarYear);
     workspace.baseScenario = structuredClone(initialBaseScenario ?? workspace.baseScenario ?? DEFAULT_SCENARIO_BASE);
-    return { workspace, runs: [] };
+    return { workspace: normalizeComparisonPreference(workspace), runs: [] };
   });
   const baseScenario = state.workspace.baseScenario ?? DEFAULT_SCENARIO_BASE;
   const [runError, setRunError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [runCancelled, setRunCancelled] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
-  const sequence = useRef(0);
-  const currentRun = useRef<{ sequence: number; controller: AbortController } | null>(null);
+  const [comparisonRun, setComparisonRun] = useState<ComparisonRun | null>(null);
+  const currentRun = useRef<{ kind: "projection" | "comparison"; controller: AbortController } | null>(null);
   const cancelCurrentRun = useCallback(() => {
-    sequence.current += 1;
-    currentRun.current?.controller.abort();
+    const run = currentRun.current;
     currentRun.current = null;
+    run?.controller.abort();
   }, []);
+  const cancelComparison = useCallback(() => {
+    if (currentRun.current?.kind !== "comparison") return;
+    cancelCurrentRun();
+    setComparisonRun({ status: "cancelled" });
+  }, [cancelCurrentRun]);
   const cancelRun = useCallback(() => {
-    if (!currentRun.current) return;
+    if (currentRun.current?.kind !== "projection") return;
     cancelCurrentRun();
     setIsRunning(false);
     setRunCancelled(true);
@@ -89,11 +120,24 @@ export function StoreProvider({
   const dispatch = useCallback<Dispatch<Action>>(
     (action) => {
       setRunCancelled(false);
-      if (action.type === "workspace/loaded") {
+      if (
+        action.type.startsWith("plan/") ||
+        action.type.startsWith("scenario/") ||
+        action.type === "projection/setComparison"
+      ) {
+        if (currentRun.current?.kind === "comparison") cancelCurrentRun();
+        setComparisonRun((previous) => (previous ? { status: "changed" } : null));
+      }
+      if (action.type === "projection/setActiveTab" && action.tab !== "compare") cancelComparison();
+      if (action.type === "workspace/loaded" || action.type === "run/reset") {
+        setComparisonRun(null);
         cancelCurrentRun();
         setIsRunning(false);
-        setRunCancelled(false);
-        rawDispatch({ ...action, workspace: withCurrentAge(action.workspace, calendarYear) });
+        rawDispatch(
+          action.type === "workspace/loaded"
+            ? { ...action, workspace: withCurrentAge(action.workspace, calendarYear) }
+            : action,
+        );
         setActiveRunId(null);
         setRunError(null);
         return;
@@ -102,7 +146,7 @@ export function StoreProvider({
         rawDispatch({ ...action, calendarYear });
       } else rawDispatch(action);
     },
-    [calendarYear, cancelCurrentRun],
+    [calendarYear, cancelCurrentRun, cancelComparison],
   );
   const validationErrors = useMemo(() => {
     const plan = state.workspace.plan;
@@ -129,90 +173,113 @@ export function StoreProvider({
     (patch: Partial<ScenarioBase>) => dispatch({ type: "scenario/setBase", patch }),
     [dispatch],
   );
-  const resetRuns = useCallback(() => {
-    // Invalidate first: incrementing the sequence makes every in-flight completion
-    // stale, and aborting terminates the worker computation. The reducer only
-    // drops run history, so workspace state (plan, scenarios, base settings and
-    // preferences) is preserved byte-for-byte.
-    cancelCurrentRun();
-    setIsRunning(false);
-    setRunCancelled(false);
-    setRunError(null);
-    setActiveRunId(null);
-    dispatch({ type: "run/reset" });
-  }, [cancelCurrentRun, dispatch]);
+  const resetRuns = useCallback(() => dispatch({ type: "run/reset" }), [dispatch]);
+  const executeScenario = useCallback(
+    async (
+      plan: Workspace["plan"],
+      planId: string,
+      scenarioId: string | null,
+      scenario: Scenario,
+      signal: AbortSignal,
+    ) => {
+      const outcome = await simulationRunner(plan, scenario, signal);
+      if (signal.aborted) return null;
+      return deepFreeze({
+        id: makeId(),
+        planId,
+        scenarioId,
+        scenario,
+        result: outcome.result,
+        ...(outcome.analysis ? { analysis: outcome.analysis } : {}),
+        createdAt: now(),
+        birthYear: plan.profile.birthYear,
+        inputFingerprint: runFingerprint(plan, scenario),
+      } satisfies RunRecord);
+    },
+    [makeId, now, simulationRunner],
+  );
   const runProjection = useCallback(
     async (delta: ScenarioDelta | null = null): Promise<RunRecord | null> => {
       if (currentRun.current) return null;
-      const runSequence = ++sequence.current;
+      const controller = new AbortController();
+      const planId = state.workspace.meta?.id ?? "unsaved";
       try {
         if (validationErrors.length) throw new Error(validationErrors.join(" "));
+        if (delta && delta.basePlanId !== planId) throw new Error("This scenario belongs to a different plan.");
         const scenario = resolveScenario(delta, baseScenario);
-        if (delta && delta.basePlanId !== (state.workspace.meta?.id ?? "unsaved"))
-          throw new Error("This scenario belongs to a different plan.");
-        if (!Number.isInteger(scenario.retirementAge) || scenario.retirementAge <= 0)
-          throw new Error("Retirement age must be a positive whole number.");
-        if (
-          !["equity", "bond", "cash"].every((key) =>
-            Number.isFinite(scenario.returnAssumptions[key as keyof typeof scenario.returnAssumptions]),
-          )
-        )
-          throw new Error("Return assumptions require finite equity, bond, and cash numbers.");
-        if (
-          (scenario.withdrawalOrder.length !== 3 && scenario.withdrawalOrder.length !== 4) ||
-          new Set(scenario.withdrawalOrder).size !== scenario.withdrawalOrder.length ||
-          !["tfsa", "nonreg", "rrsp"].every((type) => scenario.withdrawalOrder.includes(type as AccountType)) ||
-          !scenario.withdrawalOrder.every((type) => ["tfsa", "nonreg", "rrsp", "cash"].includes(type))
-        ) {
-          throw new Error("Choose each investment withdrawal account exactly once, with optional cash.");
-        }
-        // The valid requested target is now known. Persist it before starting work so
-        // Run buttons elsewhere (including saved-scenario cards) update the same
-        // workspace preference as the Projection selector.
+        validateScenarioForRun(scenario);
         dispatch({ type: "projection/setScenarioId", scenarioId: delta?.id ?? "" });
-        const plan = structuredClone(state.workspace.plan);
-        const controller = new AbortController();
-        currentRun.current = { sequence: runSequence, controller };
+        if (state.workspace.projectionActiveTab === "compare")
+          dispatch({ type: "projection/setActiveTab", tab: "charts" });
+        currentRun.current = { kind: "projection", controller };
         setIsRunning(true);
         setRunCancelled(false);
         setRunError(null);
-        const outcome = await simulationRunner(plan, scenario, controller.signal);
-        if (
-          controller.signal.aborted ||
-          currentRun.current?.sequence !== runSequence ||
-          sequence.current !== runSequence
-        )
-          return null;
-        const record: RunRecord = deepFreeze({
-          id: makeId(),
-          planId: state.workspace.meta?.id ?? "unsaved",
-          scenarioId: delta?.id ?? null,
+        const record = await executeScenario(
+          structuredClone(state.workspace.plan),
+          planId,
+          delta?.id ?? null,
           scenario,
-          result: outcome.result,
-          ...(outcome.analysis ? { analysis: outcome.analysis } : {}),
-          createdAt: now(),
-          birthYear: plan.profile.birthYear,
-          inputFingerprint: runFingerprint(plan, scenario),
-        });
+          controller.signal,
+        );
+        if (!record || controller.signal.aborted) return null;
         dispatch({ type: "run/store", record });
         setActiveRunId(record.id);
-        setRunError(null);
-        setRunCancelled(false);
-        currentRun.current = null;
-        setIsRunning(false);
         return record;
       } catch (error) {
-        const isAbort = error instanceof Error && error.name === "AbortError";
-        if (sequence.current === runSequence) {
-          if (currentRun.current?.sequence === runSequence) currentRun.current = null;
-          setIsRunning(false);
-          if (!isAbort) setRunError(error instanceof Error ? error.message : "The projection could not run.");
-        }
+        if (!controller.signal.aborted && !(error instanceof Error && error.name === "AbortError"))
+          setRunError(error instanceof Error ? error.message : "The projection could not run.");
         return null;
+      } finally {
+        if (currentRun.current?.controller === controller) {
+          currentRun.current = null;
+          setIsRunning(false);
+        }
       }
     },
-    [state.workspace, baseScenario, validationErrors, makeId, now, dispatch, simulationRunner],
+    [state.workspace, baseScenario, validationErrors, dispatch, executeScenario],
   );
+  const runComparison = useCallback(async () => {
+    if (currentRun.current || validationErrors.length) return;
+    const workspace = state.workspace;
+    const scenarios = comparisonScenarios(workspace);
+    const { baselineId, alternativeIds } = comparisonSelection(workspace, scenarios);
+    if (!alternativeIds.length) return;
+
+    const ids = [baselineId, ...alternativeIds];
+    const planId = workspace.meta?.id ?? "unsaved";
+    const plan = structuredClone(workspace.plan);
+    const controller = new AbortController();
+    currentRun.current = { kind: "comparison", controller };
+    const records: RunRecord[] = [];
+    const recentRuns = [...state.runs].reverse();
+    let label = "";
+    try {
+      for (const [index, id] of ids.entries()) {
+        const delta = scenarios.find((item) => item.id === id) ?? null;
+        const scenario = resolveScenario(delta, baseScenario);
+        label = scenario.name || id;
+        setComparisonRun({ status: "running", current: index + 1, total: ids.length, label });
+        validateScenarioForRun(scenario);
+
+        const fingerprint = runFingerprint(plan, scenario);
+        const cached = recentRuns.find(
+          (run) => run.planId === planId && run.scenarioId === (id || null) && run.inputFingerprint === fingerprint,
+        );
+        const record = cached ?? (await executeScenario(plan, planId, id || null, scenario, controller.signal));
+        if (!record || controller.signal.aborted) return;
+        records.push(record);
+      }
+      setComparisonRun({ status: "ready", records });
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        const detail = error instanceof Error ? error.message : "The simulation failed.";
+        setComparisonRun({ status: "error", message: `${label} — ${detail}` });
+      }
+    } finally {
+      if (currentRun.current?.controller === controller) currentRun.current = null;
+    }
+  }, [state.workspace, state.runs, baseScenario, validationErrors, executeScenario]);
   const value = useMemo(
     () => ({
       ...state,
@@ -221,6 +288,9 @@ export function StoreProvider({
       setBaseScenario,
       validationErrors,
       runProjection,
+      runComparison,
+      comparisonRun,
+      cancelComparison,
       isRunning,
       runCancelled,
       cancelRun,
@@ -236,6 +306,9 @@ export function StoreProvider({
       setBaseScenario,
       validationErrors,
       runProjection,
+      runComparison,
+      comparisonRun,
+      cancelComparison,
       isRunning,
       runCancelled,
       cancelRun,

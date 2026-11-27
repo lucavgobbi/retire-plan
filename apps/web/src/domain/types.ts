@@ -15,7 +15,12 @@ export interface PlanMeta {
   name: string;
   updatedAt: string;
 }
-export type ProjectionActiveTab = "charts" | "cashflow";
+export type ProjectionActiveTab = "charts" | "cashflow" | "compare";
+export interface ProjectionComparison {
+  /** The empty ID denotes the plan's base scenario. */
+  baselineId: string;
+  alternativeIds: string[];
+}
 export interface ProjectionSankeyRange {
   startYear: number;
   endYear: number;
@@ -59,6 +64,7 @@ export interface Workspace {
   projectionRunSummaryCollapsed?: boolean;
   /** Active Projection subtab; absent means Charts. */
   projectionActiveTab?: ProjectionActiveTab;
+  projectionComparison?: ProjectionComparison;
   /** Saved Sankey calendar-year range; absent means the full current run. */
   projectionSankeyRange?: ProjectionSankeyRange;
   projectionSankeyShowAccounts?: boolean;
@@ -73,6 +79,7 @@ export interface PlanFile {
   projectionScenarioId?: string;
   projectionRunSummaryCollapsed?: boolean;
   projectionActiveTab?: ProjectionActiveTab;
+  projectionComparison?: ProjectionComparison;
   projectionSankeyRange?: ProjectionSankeyRange;
   projectionSankeyShowAccounts?: boolean;
 }

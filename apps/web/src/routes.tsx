@@ -1,7 +1,7 @@
 export const ROUTES = ["Plan", "Projection", "Scenarios", "Compare", "Assumptions"] as const;
 export type Route = (typeof ROUTES)[number];
 
-export function RouteContent({ route }: { route: Route }) {
+export function RouteContent({ route }: { route: Exclude<Route, "Compare"> }) {
   switch (route) {
     case "Plan":
       return <PlanView />;
@@ -9,8 +9,6 @@ export function RouteContent({ route }: { route: Route }) {
       return <ProjectionView />;
     case "Scenarios":
       return <ScenariosView />;
-    case "Compare":
-      return <CompareView />;
     case "Assumptions":
       return <AssumptionsView />;
   }
@@ -18,5 +16,4 @@ export function RouteContent({ route }: { route: Route }) {
 import { PlanView } from "./views/plan/PlanView";
 import { ProjectionView } from "./views/projection/ProjectionView";
 import { ScenariosView } from "./views/scenarios/ScenariosView";
-import { CompareView } from "./views/compare/CompareView";
 import { AssumptionsView } from "./views/assumptions/AssumptionsView";

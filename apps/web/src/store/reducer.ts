@@ -1,3 +1,4 @@
+import { normalizeComparisonPreference } from "../domain/comparisonSelection";
 import type { Action } from "../domain/actions";
 import type { RunRecord, SectionKey, Workspace } from "../domain/types";
 import { DEFAULT_SCENARIO_BASE } from "../domain/defaults";
@@ -73,19 +74,23 @@ export function reducer(state: StoreState, action: Action): StoreState {
     case "scenario/update":
       return {
         ...state,
-        workspace: {
+        workspace: normalizeComparisonPreference({
           ...workspace,
           scenarios: workspace.scenarios.map((delta) =>
             delta.id === action.delta.id ? structuredClone(action.delta) : delta,
           ),
-        },
+        }),
       };
     case "scenario/remove": {
       const scenarios = workspace.scenarios.filter((delta) => delta.id !== action.delta.id);
-      if (workspace.projectionScenarioId === action.delta.id) {
-        return { ...state, workspace: { ...workspace, projectionScenarioId: "", scenarios } };
-      }
-      return { ...state, workspace: { ...workspace, scenarios } };
+      return {
+        ...state,
+        workspace: normalizeComparisonPreference({
+          ...workspace,
+          scenarios,
+          ...(workspace.projectionScenarioId === action.delta.id ? { projectionScenarioId: "" } : {}),
+        }),
+      };
     }
     case "scenario/setBase":
       return {
@@ -96,7 +101,7 @@ export function reducer(state: StoreState, action: Action): StoreState {
         },
       };
     case "workspace/loaded":
-      return { workspace: structuredClone(action.workspace), runs: [] };
+      return { workspace: normalizeComparisonPreference(structuredClone(action.workspace)), runs: [] };
     case "projection/setHiddenColumns": {
       if (action.hiddenColumnIds === null) {
         // Default = the field's absence; strip the key so autosave/export stop carrying it.
@@ -133,6 +138,11 @@ export function reducer(state: StoreState, action: Action): StoreState {
       }
       return { ...state, workspace: { ...workspace, projectionActiveTab: action.tab } };
     }
+    case "projection/setComparison":
+      return {
+        ...state,
+        workspace: normalizeComparisonPreference({ ...workspace, projectionComparison: action.selection }),
+      };
     case "projection/setSankeyRange": {
       if (action.range === null) {
         const { projectionSankeyRange: _removed, ...rest } = workspace;

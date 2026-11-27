@@ -1,77 +1,96 @@
-import type { RunRecord } from "../../domain/types";
-import { netWorthSeries, type XyPoint } from "../projection/charts/adapters";
+import type { RunRecord, YearResult } from "../../domain/types";
+import { yearForAge } from "../projection/fmt";
 
-/** One side-by-side row: resolved settings, summary, and Δ vs the picked baseline. */
-export interface ComparisonRow {
-  runId: string;
-  scenarioId: string | null;
+export interface ComparisonColumn {
+  run: RunRecord;
   label: string;
-  success: boolean;
-  failureAge: number | null;
-  worstShortfallAge: number | null;
+  points: { x: number; y: number }[];
+  retirementIncome: number | null;
+  retirementWithdrawals: number | null;
+  lifetimeTax: number | null;
   finalNetWorth: number | null;
-  retirementAge: number | null;
-  returnAssumptions: { equity: number; bond: number; cash: number } | null;
-  withdrawalOrder: string[] | null;
-  withdrawalStrategy: string;
-  benefits: string;
-  netWorthAtAges: XyPoint[];
-  monteCarlo: RunRecord["analysis"];
-  absDelta: number | null;
-  pctDelta: number | null;
+  actualEnd: number | undefined;
+  depletion: YearResult | undefined;
+  hasRetirementYear: boolean;
+  shortfall: YearResult | undefined;
 }
 
-/**
- * Pure client-side comparison (plan Task 8): rows per selected run plus Δ columns
- * (absolute + %) against the baseline run, when the baseline is among the selection.
- * Percent only "where meaningful": only computed on final net worth.
- */
-export function computeComparison(runs: RunRecord[], baselineId: string | null): ComparisonRow[] {
-  const baseline = baselineId === null ? undefined : runs.find((run) => run.id === baselineId);
+function cashIncome(row: YearResult): number {
+  const { employment, cpp, oas, gis, other } = row.income;
+  if (row.cashflow) {
+    return (
+      employment +
+      cpp +
+      oas +
+      gis +
+      other -
+      row.cashflow.employerRrspMatch -
+      (row.cashflow.employerRrspContribution ?? 0)
+    );
+  }
+  // Named streams capture plan income independently of employer deposits.
+  if (row.incomeBreakdown) return row.incomeBreakdown.reduce((sum, item) => sum + item.amount, gis);
+  return NaN;
+}
 
-  const rows = runs.map<ComparisonRow>((run) => {
-    const scenario = run.scenario;
-    const summary = run.result.summary;
+function withdrawals({ withdrawals: { tfsa, rrsp, nonreg, cash } }: YearResult): number {
+  return tfsa + rrsp + nonreg + (cash ?? 0);
+}
+
+function sum(rows: YearResult[], value: (row: YearResult) => number): number | null {
+  const total = rows.reduce((result, row) => result + value(row), 0);
+  return rows.length && Number.isFinite(total) ? total : null;
+}
+
+function average(rows: YearResult[], value: (row: YearResult) => number): number | null {
+  const total = sum(rows, value);
+  return total === null ? null : total / rows.length;
+}
+
+export function computeComparison(records: RunRecord[], birthYear: number, labels = new Map<string, string>()) {
+  const series = records.map(
+    (run) => new Map(run.result.years.map((row) => [yearForAge(run.birthYear ?? birthYear, row.age), row])),
+  );
+  const years = [...(series[0]?.keys() ?? [])]
+    .filter((year) => series.every((path) => path.has(year)))
+    .sort((a, b) => a - b);
+  const start = years[0];
+  const end = years.at(-1);
+  const retirementStart = Math.max(
+    ...records.map((run) => yearForAge(run.birthYear ?? birthYear, run.scenario.retirementAge)),
+  );
+  const retirementYears = years.filter((year) => year >= retirementStart);
+
+  const columns = records.map<ComparisonColumn>((run, index) => {
+    const path = series[index]!;
+    const common = years.map((year) => path.get(year)!);
+    const retired = retirementYears.map((year) => path.get(year)!);
+    const retirement = common.filter((row) => row.age >= run.scenario.retirementAge);
     return {
-      runId: run.id,
-      scenarioId: run.scenarioId,
-      label: run.scenario.name || run.scenarioId || "Base scenario",
-      success: summary.success,
-      failureAge: summary.failureAge ?? null,
-      worstShortfallAge: summary.worstShortfallAge ?? null,
-      finalNetWorth: Number.isFinite(summary.finalNetWorth) ? summary.finalNetWorth : null,
-      retirementAge: Number.isFinite(scenario.retirementAge) ? scenario.retirementAge : null,
-      returnAssumptions: {
-        equity: scenario.returnAssumptions.equity,
-        bond: scenario.returnAssumptions.bond,
-        cash: scenario.returnAssumptions.cash,
-      },
-      withdrawalOrder: [...scenario.withdrawalOrder],
-      withdrawalStrategy: scenario.withdrawalStrategy ?? "manual",
-      benefits: (() => {
-        const benefits = scenario.benefits ?? { cpp: true, oas: true, gis: true };
-        return (
-          [benefits.cpp && "CPP", benefits.oas && "OAS", benefits.oas && benefits.gis && "GIS"]
-            .filter(Boolean)
-            .join(", ") || "None"
-        );
-      })(),
-      netWorthAtAges: netWorthSeries(run.result.years),
-      monteCarlo: run.analysis,
-      absDelta: null,
-      pctDelta: null,
+      run,
+      label: labels.get(run.scenarioId ?? "") ?? run.scenario.name,
+      points: years.map((year) => ({ x: year, y: path.get(year)!.netWorth })),
+      retirementIncome: average(retired, cashIncome),
+      retirementWithdrawals: average(retired, withdrawals),
+      lifetimeTax: sum(common, (row) => row.tax.total),
+      finalNetWorth: common.at(-1)?.netWorth ?? null,
+      actualEnd: [...path.keys()].at(-1),
+      hasRetirementYear: retirement.length > 0,
+      depletion: retirement.find(
+        ({ balances }) => balances.cash + balances.tfsa + balances.rrsp + balances.nonreg <= 0,
+      ),
+      shortfall: common.find((row) => row.shortfall > 0),
     };
   });
 
-  if (!baseline) return rows;
-
-  const baseRow = rows.find((row) => row.runId === baseline.id);
-  const baseNet = baseRow?.finalNetWorth;
-  for (const row of rows) {
-    if (row === baseRow) continue;
-    if (baseNet === null || baseNet === undefined || row.finalNetWorth === null) continue;
-    row.absDelta = row.finalNetWorth - baseNet;
-    row.pctDelta = baseNet !== 0 ? (row.absDelta / Math.abs(baseNet)) * 100 : null;
-  }
-  return rows;
+  return {
+    columns,
+    years,
+    start,
+    end,
+    retirementStart: retirementYears[0],
+    differentHorizons: series.some((path) => path.size !== years.length),
+  };
 }
+
+export type Comparison = ReturnType<typeof computeComparison>;

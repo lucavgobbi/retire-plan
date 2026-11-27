@@ -9,11 +9,13 @@ import { FailBanner } from "./FailBanner";
 import { RunAnalysisSummary } from "./RunAnalysisSummary";
 import { CashflowSankey } from "./cashflow/CashflowSankey";
 import { resolveSankeyRange, runYearRange } from "./sankeyRange";
+import { CompareView } from "../compare/CompareView";
 import "./projection.css";
 
 const PROJECTION_TABS: { id: ProjectionActiveTab; label: string }[] = [
   { id: "charts", label: "Charts" },
   { id: "cashflow", label: "Cashflow" },
+  { id: "compare", label: "Compare" },
 ];
 
 function SettingsGear({ label }: { label: string }) {
@@ -32,28 +34,6 @@ function SettingsGear({ label }: { label: string }) {
   );
 }
 
-/**
- * Projection run controls and shared results, with dashboard charts and cashflow
- * on separate tabs.
- * Runs dispatch through the store hook — never `simulate` directly.
- *
- * A dropdown chooses WHAT to run: the baseline (the working plan with the base
- * scenario) or any saved scenario. The selection is passed into
- * `useProjectionRun(planId, scenarioId)`, which keys the active run, staleness,
- * busy and cancel state on exactly that scenario id — the displayed result always
- * belongs to the selected scenario, and `runProjection` re-runs the resolved
- * delta (user item 7). While a run is busy the dropdown is disabled (the store
- * has a single run slot) — cancel means cancelling the running projection. The
- * selection is PERSISTED as workspace.projectionScenarioId (the Provider also
- * records each run's intent there at request time); the UI derives from it.
- *
- * The results are split into two subtabs (Charts | Cashflow) whose active tab is
- * PERSISTED as workspace.projectionActiveTab (absent = Charts). Both panels stay
- * mounted while a run exists, hidden via the native `hidden` attribute, so the
- * table's expansion/scroll state and each chart's interaction state survive tab
- * switches. The shared run selector, run status and analysis summary sit ABOVE
- * the tablist; each panel owns only its contextual settings.
- */
 export function ProjectionView() {
   const [jumpAge, setJumpAge] = useState<number | null>(null);
   const [jumpKey, setJumpKey] = useState(0);
@@ -174,7 +154,13 @@ export function ProjectionView() {
     : null;
 
   return (
-    <section id="projection-results" tabIndex={-1} aria-label="Projection" className="projection-view">
+    <section
+      id="projection-results"
+      tabIndex={-1}
+      aria-label="Projection"
+      className="projection-view"
+      data-active-tab={activeTab}
+    >
       <header className="projection-controls no-print">
         <h2>Projection</h2>
         {validationErrors.length > 0 && (
@@ -183,124 +169,129 @@ export function ProjectionView() {
             Plan tab before running.
           </p>
         )}
-        <label className="field">
-          Run{" "}
-          <select
-            aria-label="Scenario to run"
-            value={effectiveScenarioId ?? ""}
-            disabled={isRunning}
-            onChange={(event) => {
-              // Persist the RAW option value: "" is the explicit base choice,
-              // a non-empty value the saved scenario's own id.
-              workspace.dispatch({ type: "projection/setScenarioId", scenarioId: event.currentTarget.value });
-            }}
-          >
-            <option value="">Baseline — working plan with base scenario</option>
-            {workspace.workspace.scenarios.map((scenario) => (
-              <option key={scenario.id} value={scenario.id}>
-                {scenario.name || scenario.id}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          onClick={() => {
-            void runProjection();
-          }}
-          disabled={validationErrors.length > 0 || isRunning}
-        >
-          Run projection
-        </button>
-        {(runs.length > 0 || isRunning) && (
-          <div className="reset-runs">
-            <button type="button" onClick={resetRuns} aria-describedby="reset-runs-hint">
-              Reset runs
-            </button>
-            <p id="reset-runs-hint" className="hint">
-              Clears generated runs and results only; your plan, scenarios, base settings and preferences are kept.
-            </p>
-          </div>
-        )}
-        {isRunning && (
+        {activeTab !== "compare" && (
           <>
-            <p role="status" aria-live="polite">
-              Projection running in the background…
-            </p>
-            <button type="button" onClick={cancelRun}>
-              Cancel projection
+            <label className="field">
+              Run{" "}
+              <select
+                aria-label="Scenario to run"
+                value={effectiveScenarioId ?? ""}
+                disabled={isRunning}
+                onChange={(event) => {
+                  // Persist the RAW option value: "" is the explicit base choice,
+                  // a non-empty value the saved scenario's own id.
+                  workspace.dispatch({ type: "projection/setScenarioId", scenarioId: event.currentTarget.value });
+                }}
+              >
+                <option value="">Baseline — working plan with base scenario</option>
+                {workspace.workspace.scenarios.map((scenario) => (
+                  <option key={scenario.id} value={scenario.id}>
+                    {scenario.name || scenario.id}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                void runProjection();
+              }}
+              disabled={validationErrors.length > 0 || isRunning}
+            >
+              Run projection
             </button>
+            {(runs.length > 0 || isRunning) && (
+              <div className="reset-runs">
+                <button type="button" onClick={resetRuns} aria-describedby="reset-runs-hint">
+                  Reset runs
+                </button>
+                <p id="reset-runs-hint" className="hint">
+                  Clears generated runs and results only; your plan, scenarios, base settings and preferences are kept.
+                </p>
+              </div>
+            )}
+            {isRunning && (
+              <>
+                <p role="status" aria-live="polite">
+                  Projection running in the background…
+                </p>
+                <button type="button" onClick={cancelRun}>
+                  Cancel projection
+                </button>
+              </>
+            )}
+            {runCancelled && <p role="status">Projection cancelled.</p>}
+            {runError && (
+              <p role="alert" className="run-error">
+                The projection could not run: {runError}
+              </p>
+            )}
           </>
-        )}
-        {runCancelled && <p role="status">Projection cancelled.</p>}
-        {runError && (
-          <p role="alert" className="run-error">
-            The projection could not run: {runError}
-          </p>
         )}
       </header>
 
-      {!run ? (
-        <p className="hint empty-state">
-          Run the projection to see charts, the year-by-year table and the cashflow diagram.
-        </p>
-      ) : (
-        <>
-          {/* Shared run context stays ABOVE the tablist so both subtabs describe
-              the same run: stamp, stale notice, fail banner and analysis summary. */}
-          <p className="hint run-stamp">
-            Results for <strong>{run.scenario.name}</strong>
-            {effectiveScenarioId === null
-              ? " (baseline)"
-              : selectedScenario?.name === run.scenario.name
-                ? ""
-                : " (saved scenario)"}{" "}
-            · {new Date(run.createdAt).toLocaleString()}.
-            {stale && (
-              <>
-                {" "}
-                <strong>Plan or scenario changed since this run —</strong> re-run to refresh.
-              </>
-            )}
+      {activeTab !== "compare" &&
+        (!run ? (
+          <p className="hint empty-state">
+            Run the projection to see charts, the year-by-year table and the cashflow diagram.
           </p>
-          {failureAge !== null && (
-            <FailBanner
-              summary={run.result.summary}
-              onJump={(age) => {
-                setActiveTab("cashflow");
-                setJumpAge(age);
-                setJumpKey((key) => key + 1);
-              }}
-            />
-          )}
-          {/* Run summary region (ALL modes that have one): RunAnalysisSummary —
+        ) : (
+          <>
+            {/* Shared run context stays ABOVE the tablist so both subtabs describe
+              the same run: stamp, stale notice, fail banner and analysis summary. */}
+            <p className="hint run-stamp">
+              Results for <strong>{run.scenario.name}</strong>
+              {effectiveScenarioId === null
+                ? " (baseline)"
+                : selectedScenario?.name === run.scenario.name
+                  ? ""
+                  : " (saved scenario)"}{" "}
+              · {new Date(run.createdAt).toLocaleString()}.
+              {stale && (
+                <>
+                  {" "}
+                  <strong>Plan or scenario changed since this run —</strong> re-run to refresh.
+                </>
+              )}
+            </p>
+            {failureAge !== null && (
+              <FailBanner
+                summary={run.result.summary}
+                onJump={(age) => {
+                  setActiveTab("cashflow");
+                  setJumpAge(age);
+                  setJumpKey((key) => key + 1);
+                }}
+              />
+            )}
+            {/* Run summary region (ALL modes that have one): RunAnalysisSummary —
               deterministic = "Tax strategy planning comparison", MC = "Monte Carlo
               ensemble", historical = "Historical rolling-window results" — in ONE
               native collapsible, PERSISTED (projectionRunSummaryCollapsed: true =
               collapsed, false = expanded; the field's absence is also expanded).
               onToggle writes the actual state only when it differs — the toggle
               never fires on mount, so nothing clobbers the stored preference. */}
-          {(run.analysis !== undefined || run.result.withdrawalPlan !== undefined) && (
-            <details
-              className="run-summary-collapse"
-              open={!summaryCollapsed}
-              onToggle={(event) => {
-                const collapsed = !event.currentTarget.open;
-                if (collapsed === summaryCollapsed) return;
-                workspace.dispatch({ type: "projection/setRunSummaryCollapsed", collapsed });
-              }}
-            >
-              <summary>Run analysis</summary>
-              <RunAnalysisSummary run={run} />
-              {run.analysis && (
-                <p className="hint">
-                  Year table audit counts and failures describe the representative path shown below.
-                </p>
-              )}
-            </details>
-          )}
-        </>
-      )}
+            {(run.analysis !== undefined || run.result.withdrawalPlan !== undefined) && (
+              <details
+                className="run-summary-collapse"
+                open={!summaryCollapsed}
+                onToggle={(event) => {
+                  const collapsed = !event.currentTarget.open;
+                  if (collapsed === summaryCollapsed) return;
+                  workspace.dispatch({ type: "projection/setRunSummaryCollapsed", collapsed });
+                }}
+              >
+                <summary>Run analysis</summary>
+                <RunAnalysisSummary run={run} />
+                {run.analysis && (
+                  <p className="hint">
+                    Year table audit counts and failures describe the representative path shown below.
+                  </p>
+                )}
+              </details>
+            )}
+          </>
+        ))}
 
       <div className="projection-tablist no-print" role="tablist" aria-label="Projection view">
         {PROJECTION_TABS.map((tab) => {
@@ -435,6 +426,15 @@ export function ProjectionView() {
           ) : (
             <p className="hint">No projection years are available for the cashflow diagram.</p>
           ))}
+      </div>
+      <div
+        role="tabpanel"
+        id="projection-panel-compare"
+        aria-labelledby="projection-tab-compare"
+        className="projection-panel"
+        hidden={activeTab !== "compare"}
+      >
+        {activeTab === "compare" && <CompareView />}
       </div>
     </section>
   );
