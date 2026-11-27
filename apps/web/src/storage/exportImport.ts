@@ -45,6 +45,9 @@ export function buildPlanFile(w: Workspace, options: BuildPlanFileOptions = {}):
       ? { projectionRunSummaryCollapsed: w.projectionRunSummaryCollapsed }
       : {}),
     ...(w.projectionActiveTab !== undefined ? { projectionActiveTab: w.projectionActiveTab } : {}),
+    ...(w.projectionComparisonActiveTab !== undefined
+      ? { projectionComparisonActiveTab: w.projectionComparisonActiveTab }
+      : {}),
     ...(w.projectionSankeyRange !== undefined ? { projectionSankeyRange: { ...w.projectionSankeyRange } } : {}),
     ...(w.projectionSankeyShowAccounts !== undefined
       ? { projectionSankeyShowAccounts: w.projectionSankeyShowAccounts }
@@ -130,6 +133,9 @@ export function parsePlanFile(json: unknown): ParseOk | ParseFailure {
       ? { projectionRunSummaryCollapsed: planFile.projectionRunSummaryCollapsed }
       : {}),
     ...(planFile.projectionActiveTab !== undefined ? { projectionActiveTab: planFile.projectionActiveTab } : {}),
+    ...(planFile.projectionComparisonActiveTab !== undefined
+      ? { projectionComparisonActiveTab: planFile.projectionComparisonActiveTab }
+      : {}),
     ...(planFile.projectionSankeyRange !== undefined
       ? { projectionSankeyRange: { ...planFile.projectionSankeyRange } }
       : {}),

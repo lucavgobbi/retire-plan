@@ -1,29 +1,38 @@
 /** Spending breakdown: one stacked band per expense item, stable colour per item. */
-import { stackedBandPaths, ticks, domainOf, fmtTick, H, PAD, W, xScale, yScale } from "./svg";
+import { chartAgeDomain, stackedBandPaths, ticks, domainOf, fmtTick, H, PAD, W, xScale, yScale } from "./svg";
 import { STACK_COLORS } from "./palette";
 import { ChartCrosshair, ChartMarkers, ChartTooltip, stackTops, useChartInteraction } from "./chartInteraction";
 import type { ExpenseBreakdownSeries } from "./adapters";
 
 const seriesColor = (index: number) => STACK_COLORS[index % STACK_COLORS.length]!;
 
-export function SpendingBreakdownChart({ series }: { series: ExpenseBreakdownSeries }) {
+export function SpendingBreakdownChart({
+  series,
+  scalePoints = series.points,
+}: {
+  series: ExpenseBreakdownSeries;
+  scalePoints?: ExpenseBreakdownSeries["points"];
+}) {
   const points = series.points;
   const xs = points.map((p) => p.x);
   const firstX = xs[0];
   const lastX = xs[xs.length - 1];
-  const it = useChartInteraction(xs, firstX !== undefined && lastX !== undefined ? [firstX, lastX] : [0, 0]);
+  const xDomain = chartAgeDomain(xs, scalePoints, (p) => p.x);
+  const it = useChartInteraction(xs, xDomain);
   if (xs.length === 0 || firstX === undefined || lastX === undefined || series.items.length === 0) {
     return <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="No data" role="img" />;
   }
-  const xDomain: [number, number] = [firstX, lastX];
   // The band stack tops at the sum of the shown item amounts (non-finite amounts are gaps).
-  const itemTotals = points.map((p) => p.amounts.reduce((acc, value) => acc + (Number.isFinite(value) ? value : 0), 0));
+  const itemTotals = scalePoints.map((p) =>
+    p.amounts.reduce((acc, value) => acc + (Number.isFinite(value) ? value : 0), 0),
+  );
   const yDomain = domainOf(itemTotals);
   const yTicks = ticks(yDomain[0], yDomain[1]);
   const bands = stackedBandPaths(
     xs,
     series.items.map((_, i) => points.map((p) => p.amounts[i] ?? NaN)),
     yDomain,
+    xDomain,
   );
 
   return (

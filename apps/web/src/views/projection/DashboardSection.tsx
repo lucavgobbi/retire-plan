@@ -1,5 +1,6 @@
 import type { SimulationResult } from "@retire-plan/engine";
 import type { RunAnalysis } from "../../domain/run";
+import type { RunRecord } from "../../domain/types";
 import { useProjectionRun, useWorkspace } from "../../store/api";
 import {
   accountFlowsSeries,
@@ -97,22 +98,46 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
     analysis = run.analysis;
   }
 
-  // Chart visibility: the workspace persists HIDDEN chart ids (absent or empty =
-  // all charts visible, so charts added later default visible; stale ids dropped).
-  const hiddenCharts = sanitizeHiddenIds(
-    workspace.hiddenProjectionCharts,
-    PROJECTION_CHARTS.map((chart) => chart.id),
+  const charts = dashboardCharts(dashboardData(result, analysis));
+  return (
+    <section aria-label="Dashboard" className="dashboard">
+      <div className="chart-grid">
+        {charts
+          .filter((chart) => !workspace.hiddenProjectionCharts?.includes(chart.id))
+          .map((chart) => (
+            <ChartCard key={chart.id} {...chart}>
+              {chart.body}
+            </ChartCard>
+          ))}
+      </div>
+    </section>
   );
+}
 
-  // Non-finite values anywhere already degrade to null points inside the adapters.
-  // Per-chart applicability: breakdown/RRIF charts degrade to honest rerun notes for
-  // legacy runs; the two ensemble charts only exist for Monte Carlo runs with
-  // per-age annual stats (deterministic/historical runs never show empty MC charts).
-  const breakdown = expenseBreakdownSeries(result.years);
-  const rrifPoints = rrifWithdrawalSeries(result.years);
-  const oasPoints = oasKeptSeries(result.years);
+function dashboardData(result: SimulationResult, analysis?: RunAnalysis) {
+  const { years } = result;
   const mcAnalysis = analysis?.mode === "montecarlo" ? analysis : undefined;
-  const mcStats = ensembleStatPoints(mcAnalysis);
+  return {
+    netWorth: netWorthBarSeries(years),
+    incomeSpend: incomeSpendSeries(years),
+    incomeSources: incomeSourcesSeries(years),
+    tax: taxStackSeries(years),
+    accountFlows: accountFlowsSeries(years),
+    drawdown: drawdownSeries(years),
+    contributionRoom: contributionRoomSeries(years),
+    breakdown: expenseBreakdownSeries(years),
+    rrifPoints: rrifWithdrawalSeries(years),
+    capturesRrifMinimum: runCapturesRrifMinimum(years),
+    oasPoints: oasKeptSeries(years),
+    mcAnalysis,
+    mcStats: ensembleStatPoints(mcAnalysis),
+  };
+}
+
+type DashboardData = ReturnType<typeof dashboardData>;
+
+function dashboardCharts(data: DashboardData, peers?: DashboardData[]) {
+  const { breakdown, rrifPoints, oasPoints, mcAnalysis, mcStats } = data;
   const rerun = (message: string) => (
     <p className="hint" data-chart-state="rerun">
       {message}
@@ -133,7 +158,7 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
             ],
             help: MC_FAN_HELP,
             body: mcStats ? (
-              <EnsembleFanChart points={mcStats} />
+              <EnsembleFanChart points={mcStats} scalePoints={peers?.flatMap((peer) => peer.mcStats ?? [])} />
             ) : (
               rerun(
                 "This Monte Carlo run predates per-age statistics. Run the projection again to see the range across simulated paths.",
@@ -148,7 +173,7 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
             legend: [{ label: "Cumulative shortfall risk", color: PALETTE.color3 }],
             help: SHORTFALL_RISK_HELP,
             body: mcStats ? (
-              <ShortfallRiskChart points={mcStats} />
+              <ShortfallRiskChart points={mcStats} scalePoints={peers?.flatMap((peer) => peer.mcStats ?? [])} />
             ) : (
               rerun(
                 "This Monte Carlo run predates per-age statistics. Run the projection again to see the cumulative shortfall risk.",
@@ -156,7 +181,7 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
             ),
           },
         ];
-  const charts = [
+  return [
     {
       id: "net-worth",
       title: "Net worth",
@@ -171,7 +196,7 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
         { label: "Net worth marker", color: PALETTE.ink },
       ],
       help: NET_WORTH_HELP,
-      body: <NetWorthChart points={netWorthBarSeries(result.years)} />,
+      body: <NetWorthChart points={data.netWorth} scalePoints={peers?.flatMap((peer) => peer.netWorth)} />,
     },
     {
       id: "income-spend",
@@ -183,7 +208,7 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
         { label: "Spending", color: PALETTE.color3 },
       ],
       help: INCOME_SPEND_HELP,
-      body: <IncomeSpendChart points={incomeSpendSeries(result.years)} />,
+      body: <IncomeSpendChart points={data.incomeSpend} scalePoints={peers?.flatMap((peer) => peer.incomeSpend)} />,
     },
     {
       id: "income-sources",
@@ -195,7 +220,9 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
         color: STACK_COLORS[i % STACK_COLORS.length]!,
       })),
       help: INCOME_SOURCES_HELP,
-      body: <IncomeSourcesChart points={incomeSourcesSeries(result.years)} />,
+      body: (
+        <IncomeSourcesChart points={data.incomeSources} scalePoints={peers?.flatMap((peer) => peer.incomeSources)} />
+      ),
     },
     {
       id: "tax",
@@ -207,7 +234,7 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
         color: STACK_COLORS[i]!,
       })),
       help: TAX_HELP,
-      body: <TaxStackChart points={taxStackSeries(result.years)} />,
+      body: <TaxStackChart points={data.tax} scalePoints={peers?.flatMap((peer) => peer.tax)} />,
     },
     {
       id: "account-flows",
@@ -226,7 +253,7 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
         })),
       ],
       help: ACCOUNT_FLOWS_HELP,
-      body: <AccountFlowsChart points={accountFlowsSeries(result.years)} />,
+      body: <AccountFlowsChart points={data.accountFlows} scalePoints={peers?.flatMap((peer) => peer.accountFlows)} />,
     },
     {
       id: "drawdown",
@@ -238,7 +265,7 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
         color: STACK_COLORS[i]!,
       })),
       help: DRAWDOWN_HELP,
-      body: <DrawDownChart points={drawdownSeries(result.years)} />,
+      body: <DrawDownChart points={data.drawdown} scalePoints={peers?.flatMap((peer) => peer.drawdown)} />,
     },
     {
       id: "contribution-room",
@@ -250,7 +277,12 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
         { label: "RRSP room", color: PALETTE.color2 },
       ],
       help: CONTRIBUTION_ROOM_HELP,
-      body: <ContributionRoomChart points={contributionRoomSeries(result.years)} />,
+      body: (
+        <ContributionRoomChart
+          points={data.contributionRoom}
+          scalePoints={peers?.flatMap((peer) => peer.contributionRoom)}
+        />
+      ),
     },
     {
       id: "spending-breakdown",
@@ -267,7 +299,10 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
             This plan records no expense items, so there is nothing to break down.
           </p>
         ) : (
-          <SpendingBreakdownChart series={breakdown} />
+          <SpendingBreakdownChart
+            series={breakdown}
+            scalePoints={peers?.flatMap((peer) => peer.breakdown?.points ?? [])}
+          />
         )
       ) : (
         rerun(
@@ -285,8 +320,8 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
         { label: "RRIF minimum", color: PALETTE.color1 },
       ],
       help: RRIF_RRSP_HELP,
-      body: runCapturesRrifMinimum(result.years) ? (
-        <RrifWithdrawalsChart points={rrifPoints} />
+      body: data.capturesRrifMinimum ? (
+        <RrifWithdrawalsChart points={rrifPoints} scalePoints={peers?.flatMap((peer) => peer.rrifPoints)} />
       ) : (
         rerun(
           "This run predates RRIF minimum capture. Run the projection again to compare the required minimum with actual withdrawals.",
@@ -303,27 +338,51 @@ export function DashboardSection({ result, analysis }: { result?: SimulationResu
         { label: "OAS clawback", color: PALETTE.color4 },
       ],
       help: OAS_KEPT_HELP,
-      body: <OasClawbackChart points={oasPoints} />,
+      body: <OasClawbackChart points={oasPoints} scalePoints={peers?.flatMap((peer) => peer.oasPoints)} />,
     },
     ...mcCharts,
-  ].filter((chart) => !hiddenCharts?.includes(chart.id));
+  ];
+}
 
+type ComparisonChartScenario = { run: RunRecord; label: string; color: string; birthYear: number; path: string };
+
+export function ComparisonDashboard({ scenarios }: { scenarios: ComparisonChartScenario[] }) {
+  const { workspace } = useWorkspace();
+  const hidden = sanitizeHiddenIds(
+    workspace.hiddenProjectionCharts,
+    PROJECTION_CHARTS.map(({ id }) => id),
+  );
+  const datasets = scenarios.map(({ run }) => dashboardData(run.result, run.analysis));
+  const charts = datasets.map((dataset) => dashboardCharts(dataset, datasets));
   return (
-    <section aria-label="Dashboard" className="dashboard">
-      <div className="chart-grid">
-        {charts.map((chart) => (
-          <ChartCard
-            key={chart.id}
-            title={chart.title}
-            subtitle={chart.subtitle}
-            ariaLabel={chart.ariaLabel}
-            legend={chart.legend}
-            help={chart.help}
-          >
-            {chart.body}
-          </ChartCard>
-        ))}
-      </div>
+    <section aria-label="Scenario charts" className="compare-chart-groups">
+      {PROJECTION_CHARTS.filter(
+        ({ id }) => !hidden?.includes(id) && charts.some((items) => items.some((chart) => chart.id === id)),
+      ).map(({ id, title }) => (
+        <div
+          key={id}
+          className="compare-scenario-grid"
+          data-scenario-count={scenarios.length}
+          role="group"
+          aria-label={title}
+        >
+          {scenarios.map(({ run, label, color, birthYear, path }, index) => {
+            const chart = charts[index]?.find((item) => item.id === id);
+            const ensemble = id === "mc-fan" || id === "shortfall-risk";
+            const scenario = { label, color, birthYear, path: ensemble ? "Monte Carlo ensemble" : path };
+            return chart ? (
+              <ChartCard key={run.id} {...chart} scenario={scenario}>
+                {chart.body}
+              </ChartCard>
+            ) : (
+              <div className="compare-scenario-card" key={run.id} style={{ borderTopColor: color }}>
+                <strong>{label}</strong>
+                <p className="hint">Available for Monte Carlo runs.</p>
+              </div>
+            );
+          })}
+        </div>
+      ))}
     </section>
   );
 }

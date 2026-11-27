@@ -4,7 +4,7 @@
  * the below-zero placement is the chart's presentation of the outflow — it is
  * not negative wealth and must not be read as balances.
  */
-import { domainOf, fmtTick, H, PAD, W, ticks, xScale, yScale } from "./svg";
+import { chartAgeDomain, domainOf, fmtTick, H, PAD, W, ticks, xScale, yScale } from "./svg";
 import { STACK_COLORS } from "./palette";
 import type { AccountFlowPoint } from "./adapters";
 import { ChartCrosshair, ChartMarkers, ChartTooltip, stackTops, useChartInteraction } from "./chartInteraction";
@@ -17,19 +17,25 @@ const FLOWS: { key: "tfsa" | "rrsp" | "nonreg" | "cash"; label: string }[] = [
   { key: "cash", label: "Cash" },
 ];
 
-export function AccountFlowsChart({ points }: { points: AccountFlowPoint[] }) {
+export function AccountFlowsChart({
+  points,
+  scalePoints = points,
+}: {
+  points: AccountFlowPoint[];
+  scalePoints?: AccountFlowPoint[];
+}) {
   const xs = points.map((p) => p.x);
   const firstX = xs[0];
   const lastX = xs[xs.length - 1];
-  const it = useChartInteraction(xs, firstX !== undefined && lastX !== undefined ? [firstX, lastX] : [0, 0]);
+  const xDomain = chartAgeDomain(xs, scalePoints, (p) => p.x);
+  const it = useChartInteraction(xs, xDomain);
   if (xs.length === 0 || firstX === undefined || lastX === undefined)
     return <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="No data" role="img" />;
-  const xDomain: [number, number] = [firstX, lastX];
   const parts = (p: AccountFlowPoint) => [
     ...FLOWS.map((f) => p.contributions[f.key]),
     ...FLOWS.map((f) => p.withdrawals[f.key]),
   ];
-  const totals = points.map((p) => {
+  const totals = scalePoints.map((p) => {
     const values = parts(p);
     return values.every(Number.isFinite)
       ? {
@@ -84,10 +90,10 @@ export function AccountFlowsChart({ points }: { points: AccountFlowPoint[] }) {
             {Math.round(t)}
           </text>
         ))}
-        {points.map((p, pointIndex) => {
+        {points.map((p) => {
+          if (!parts(p).every(Number.isFinite)) return null;
           const cx = xScale(p.x, xDomain);
           const left = cx - barWidth / 2;
-          if (!totals[pointIndex]) return null;
           // Contributions stack upward from zero: segment s spans (cum − v) → cum.
           const up: number[] = [];
           let acc = 0;

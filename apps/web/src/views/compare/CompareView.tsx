@@ -1,10 +1,20 @@
 import { useLayoutEffect } from "react";
 import { comparisonScenarios, comparisonSelection } from "../../domain/comparisonSelection";
 import { useStore } from "../../store/api";
-import { CompareChart } from "./CompareChart";
-import { CompareAssumptions, CompareTable } from "./CompareTable";
-import { computeComparison } from "./compare";
+import { CompareAssumptions, CompareTable, displayedPath } from "./CompareTable";
+import { COMPARISON_COLORS, computeComparison } from "./compare";
+import { ComparisonDashboard } from "../projection/DashboardSection";
+import { ProjectionChartSettings, ProjectionTableSection } from "../projection/ProjectionSettings";
+import { RunAnalysisSummary } from "../projection/RunAnalysisSummary";
+import { ProjectionTabs } from "../projection/ProjectionTabs";
+import { ComparisonCashflow } from "./ComparisonCashflow";
+import { ComparisonProjectionTable } from "./ComparisonProjectionTable";
 import "./compare.css";
+
+const COMPARE_TABS = [
+  { id: "charts", label: "Charts" },
+  { id: "cashflow", label: "Cashflow" },
+] as const;
 
 const OPTION_PREFIX = "scenario:";
 
@@ -63,6 +73,14 @@ export function CompareView() {
     comparisonRun?.status === "ready"
       ? computeComparison(comparisonRun.records, birthYear, new Map(choices.map(({ id, label }) => [id, label])))
       : null;
+  const activeTab = workspace.projectionComparisonActiveTab ?? "charts";
+  const panels = comparison?.columns.map(({ run, label }, index) => ({
+    run,
+    label,
+    color: COMPARISON_COLORS[index]!,
+    birthYear: run.birthYear ?? birthYear,
+    path: displayedPath(run),
+  }));
   return (
     <div className="compare-view">
       <div className="compare-controls no-print">
@@ -147,12 +165,82 @@ export function CompareView() {
           <p role="status">Inputs or selections changed. Run the comparison to update the results.</p>
         )}
       </div>
-      {comparison && (
-        <div className="compare-results">
-          <CompareTable comparison={comparison} birthYear={birthYear} />
-          <CompareChart comparison={comparison} birthYear={birthYear} />
-          <CompareAssumptions columns={comparison.columns} plan={workspace.plan} />
-        </div>
+      <ProjectionTabs
+        prefix="compare"
+        label="Comparison view"
+        tabs={COMPARE_TABS}
+        active={activeTab}
+        onSelect={(tab) => {
+          if (tab !== activeTab) dispatch({ type: "projection/setComparisonActiveTab", tab });
+        }}
+      />
+      {panels?.some(({ run }) => run.analysis) && (
+        <p className="hint">
+          Path charts, year-by-year results and cashflow show one representative path for each ensemble. Charts labeled
+          Monte Carlo ensemble and the ensemble outcomes below summarize multiple paths.
+        </p>
+      )}
+      <div
+        role="tabpanel"
+        id="compare-panel-charts"
+        aria-labelledby="compare-tab-charts"
+        className="projection-panel"
+        hidden={activeTab !== "charts"}
+      >
+        <ProjectionChartSettings />
+        {panels && <ComparisonDashboard scenarios={panels} />}
+      </div>
+      <div
+        role="tabpanel"
+        id="compare-panel-cashflow"
+        aria-labelledby="compare-tab-cashflow"
+        className="projection-panel"
+        hidden={activeTab !== "cashflow"}
+      >
+        <ProjectionTableSection>
+          {(hiddenColumnIds) =>
+            panels && (
+              <ComparisonProjectionTable
+                runs={panels.map(({ run }) => run)}
+                labels={panels.map(({ label }) => label)}
+                colors={panels.map(({ color }) => color)}
+                birthYear={birthYear}
+                hiddenColumnIds={hiddenColumnIds}
+              />
+            )
+          }
+        </ProjectionTableSection>
+        {comparison && panels && <ComparisonCashflow scenarios={panels} years={comparison.years} />}
+      </div>
+      {comparison && panels && (
+        <details className="run-summary-collapse">
+          <summary>Outcomes and assumptions</summary>
+          <div className="compare-results">
+            <CompareTable comparison={comparison} birthYear={birthYear} />
+            <CompareAssumptions columns={comparison.columns} plan={workspace.plan} />
+            {panels.some(({ run }) => run.analysis || run.result.withdrawalPlan || !run.result.summary.success) && (
+              <div className="compare-scenario-grid" data-scenario-count={panels.length}>
+                {panels.map(({ run, label, color }) => (
+                  <section
+                    className="compare-scenario-card"
+                    aria-label={`${label} run analysis`}
+                    key={run.id}
+                    style={{ borderTopColor: color }}
+                  >
+                    <h3>{label}</h3>
+                    {!run.result.summary.success && (
+                      <p className="hint">First shortfall at age {run.result.summary.failureAge ?? "unknown"}.</p>
+                    )}
+                    <RunAnalysisSummary run={run} />
+                    {run.result.summary.success && !run.analysis && !run.result.withdrawalPlan && (
+                      <p className="hint">Completed without a shortfall.</p>
+                    )}
+                  </section>
+                ))}
+              </div>
+            )}
+          </div>
+        </details>
       )}
     </div>
   );

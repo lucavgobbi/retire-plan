@@ -17,6 +17,7 @@ interface CashflowSankeyProps {
   years: YearResult[];
   birthYear: number;
   range: CashflowRange;
+  rangeOptions?: number[];
   onRangeChange: (range: CashflowRange) => void;
   showAccounts: boolean;
   onShowAccountsChange: (showAccounts: boolean) => void;
@@ -244,12 +245,14 @@ export function CashflowSankey({
   years,
   birthYear,
   range,
+  rangeOptions,
   onRangeChange,
   showAccounts,
   onShowAccountsChange,
 }: CashflowSankeyProps) {
   const id = useId();
-  const options = useMemo(() => cashflowYears(years, birthYear), [years, birthYear]);
+  const availableYears = useMemo(() => cashflowYears(years, birthYear), [years, birthYear]);
+  const options = rangeOptions ?? availableYears;
   const startYear = options.includes(range.startYear) ? range.startYear : options[0];
   const endYear =
     options.includes(range.endYear) && (startYear === undefined || range.endYear >= startYear)

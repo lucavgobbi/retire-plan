@@ -182,7 +182,7 @@ export function sanitizeHiddenColumns(value: unknown, selectableIds: readonly st
   return sanitizeHiddenIds(value, selectableIds);
 }
 
-function summarize(col: Column, years: YearResult[]): number {
+export function summarize(col: Column, years: YearResult[]): number {
   if (col.summary === "stock") return col.value(years[years.length - 1]!);
   if (col.summary === "rate") {
     const taxable = years.reduce((sum, year) => sum + Math.max(0, year.taxableIncome), 0);
@@ -191,6 +191,12 @@ function summarize(col: Column, years: YearResult[]): number {
       : years.reduce((sum, year) => sum + col.value(year), 0) / years.length;
   }
   return years.reduce((sum, year) => sum + col.value(year), 0);
+}
+
+export function groupProjectionYears<T>(years: T[]): T[][] {
+  const groups: T[][] = [];
+  for (let index = 0; index < years.length; index += 10) groups.push(years.slice(index, index + 10));
+  return groups;
 }
 
 /** Ten consecutive result years per collapsed row; each can reveal its yearly audit trail. */
@@ -220,8 +226,7 @@ export function ProjectionTable({
   const [expandedYears, setExpandedYears] = useState<Set<number>>(() => new Set());
   const tableRef = useRef<HTMLTableElement>(null);
   const groupHeaderRef = useRef<HTMLTableRowElement>(null);
-  const groups: YearResult[][] = [];
-  for (let index = 0; index < result.years.length; index += 10) groups.push(result.years.slice(index, index + 10));
+  const groups = groupProjectionYears(result.years);
   const firstAge = result.years[0]?.age;
   const returnSourceYear = (age: number) =>
     historicalSourceStartYear === undefined || firstAge === undefined

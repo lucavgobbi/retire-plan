@@ -62,6 +62,12 @@ function validateProjectionPreferences(value: Record<string, unknown>, label: st
   if (value.projectionActiveTab !== undefined && !isEnum(value.projectionActiveTab, PROJECTION_TABS)) {
     errors.push(`${label} projectionActiveTab must be "charts", "cashflow", or "compare" when present.`);
   }
+  if (
+    value.projectionComparisonActiveTab !== undefined &&
+    !isEnum(value.projectionComparisonActiveTab, ["charts", "cashflow"])
+  ) {
+    errors.push(`${label} projectionComparisonActiveTab must be "charts" or "cashflow" when present.`);
+  }
   const selection = value.projectionComparison;
   if (
     selection !== undefined &&

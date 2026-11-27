@@ -215,12 +215,14 @@ describe("comparison preferences", () => {
       { ...first, id: "foreign", basePlanId: "somewhere-else" },
     );
     workspace.projectionActiveTab = "compare";
+    workspace.projectionComparisonActiveTab = "cashflow";
     workspace.projectionComparison = {
       baselineId: first.id,
       alternativeIds: [first.id, "", "", "dangling", "foreign", "another-scenario", "third-scenario"],
     };
     const expected = {
       projectionActiveTab: "compare",
+      projectionComparisonActiveTab: "cashflow",
       projectionComparison: { baselineId: first.id, alternativeIds: ["", "another-scenario"] },
     };
     const { provider } = buildHarness();

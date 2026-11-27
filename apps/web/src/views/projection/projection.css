@@ -767,7 +767,7 @@ table.projection-table thead th[data-group-parity="odd"] {
 }
 
 @media print {
-  .projection-view[data-active-tab="compare"] .projection-panel[hidden],
+  .projection-view[data-active-tab="compare"] > .projection-panel[hidden],
   #projection-panel-compare[hidden] {
     display: none;
   }

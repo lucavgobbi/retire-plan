@@ -1,10 +1,11 @@
 import type { RunRecord, YearResult } from "../../domain/types";
 import { yearForAge } from "../projection/fmt";
 
+export const COMPARISON_COLORS = ["#2563eb", "#0f766e", "#b45309"];
+
 export interface ComparisonColumn {
   run: RunRecord;
   label: string;
-  points: { x: number; y: number }[];
   retirementIncome: number | null;
   retirementWithdrawals: number | null;
   lifetimeTax: number | null;
@@ -69,7 +70,6 @@ export function computeComparison(records: RunRecord[], birthYear: number, label
     return {
       run,
       label: labels.get(run.scenarioId ?? "") ?? run.scenario.name,
-      points: years.map((year) => ({ x: year, y: path.get(year)!.netWorth })),
       retirementIncome: average(retired, cashIncome),
       retirementWithdrawals: average(retired, withdrawals),
       lifetimeTax: sum(common, (row) => row.tax.total),

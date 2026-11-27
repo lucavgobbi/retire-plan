@@ -1,5 +1,5 @@
 /** Contribution room remaining: TFSA and RRSP room lines; 0 means the room is used up. */
-import { domainOf, fmtTick, H, PAD, polylinePoints, ticks, W, xScale, yScale } from "./svg";
+import { chartAgeDomain, domainOf, fmtTick, H, PAD, polylinePoints, ticks, W, xScale, yScale } from "./svg";
 import { PALETTE } from "./palette";
 import { ChartCrosshair, ChartMarkers, ChartTooltip, useChartInteraction } from "./chartInteraction";
 
@@ -9,15 +9,15 @@ interface Point {
   rrspRoom: number;
 }
 
-export function ContributionRoomChart({ points }: { points: Point[] }) {
+export function ContributionRoomChart({ points, scalePoints = points }: { points: Point[]; scalePoints?: Point[] }) {
   const xs = points.map((p) => p.x);
   const firstX = xs[0];
   const lastX = xs[xs.length - 1];
-  const it = useChartInteraction(xs, firstX !== undefined && lastX !== undefined ? [firstX, lastX] : [0, 0]);
+  const xDomain = chartAgeDomain(xs, scalePoints, (p) => p.x);
+  const it = useChartInteraction(xs, xDomain);
   if (xs.length === 0 || firstX === undefined || lastX === undefined)
     return <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="No data" role="img" />;
-  const xDomain: [number, number] = [firstX, lastX];
-  const yDomain = domainOf([...points.flatMap((p) => [p.tfsaRoom, p.rrspRoom]), 0]);
+  const yDomain = domainOf([...scalePoints.flatMap((p) => [p.tfsaRoom, p.rrspRoom]), 0]);
   const yTicks = ticks(yDomain[0], yDomain[1]);
   const tfsaLine = polylinePoints(
     points.map((p) => ({ x: p.x, y: Number.isFinite(p.tfsaRoom) ? p.tfsaRoom : null })),

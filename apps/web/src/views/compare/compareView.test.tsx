@@ -46,7 +46,13 @@ function mount(workspace = fixture(), runner?: SimulationRunner, edit?: Action) 
 }
 
 const run = () => fireEvent.click(screen.getByRole("button", { name: "Run comparison" }));
-const outcomes = () => screen.findByRole("region", { name: "Side-by-side scenario outcomes" });
+async function outcomes() {
+  const summary = await screen.findByText("Outcomes and assumptions");
+  if (!summary.closest("details")?.open) fireEvent.click(summary);
+  return screen.getByRole("region", { name: "Side-by-side scenario outcomes" });
+}
+const projectionTabs = () => within(screen.getByRole("tablist", { name: "Projection view" }));
+const comparisonTabs = () => within(screen.getByRole("tablist", { name: "Comparison view" }));
 const cells = (region: HTMLElement, row: RegExp) =>
   within(within(region).getByRole("rowheader", { name: row }).closest("tr")!)
     .getAllByRole("cell")
@@ -54,7 +60,11 @@ const cells = (region: HTMLElement, row: RegExp) =>
 
 describe("Compare tab", () => {
   it("runs real scenario changes explicitly, shows aligned metrics and keyboard chart points, and preserves single-run controls", async () => {
-    mount();
+    const workspace = fixture();
+    workspace.plan.savingsPolicy = [
+      { id: "match", target: "rrsp-match", priority: 1, perYearCap: 500, matchRate: 0.5 },
+    ];
+    mount(workspace);
     expect(screen.queryByRole("button", { name: "Run projection" })).toBeNull();
     expect(screen.queryByRole("table")).toBeNull();
     expect(screen.queryByRole("option", { name: "Foreign scenario" })).toBeNull();
@@ -67,14 +77,65 @@ describe("Compare tab", () => {
     const assumptions = screen.getByRole("region", { name: "Resolved scenario assumptions" });
     expect(cells(assumptions, /retirement age/i)).toEqual(["Age 65", "Age 62Changed"]);
     expect(cells(assumptions, /benefits enabled/i)).toEqual(["CPP, OAS, GIS", "OAS, GISChanged"]);
-    const chart = screen.getByRole("img", { name: /net worth by household/i });
-    fireEvent.keyDown(chart, { key: "End" });
-    expect(screen.getByRole("status").textContent).toMatch(/2048 \(age 67\).*Base scenario.*Earlier retirement/);
-    fireEvent.click(screen.getByRole("tab", { name: "Charts" }));
+    const charts = within(screen.getByRole("group", { name: "Income sources" }));
+    const baselineChart = within(charts.getByRole("figure", { name: /Base scenario/ }));
+    const alternativeChart = within(charts.getByRole("figure", { name: /Earlier retirement/ }));
+    fireEvent.keyDown(baselineChart.getByRole("img"), { key: "End" });
+    fireEvent.keyDown(alternativeChart.getByRole("img"), { key: "End" });
+    expect(baselineChart.getByRole("status").textContent).toMatch(/Base scenario · 2048 \(age 67\).*CPP \$8,000/);
+    expect(alternativeChart.getByRole("status").textContent).toMatch(/Earlier retirement · 2048 \(age 67\).*CPP \$0/);
+    const yTicks = (chart: ReturnType<typeof within>) =>
+      [...chart.getByRole("img").querySelectorAll('text[text-anchor="end"]')].map((row) => row.textContent);
+    expect(yTicks(baselineChart)).toEqual(yTicks(alternativeChart));
+
+    const chartSettings = within(screen.getByRole("tabpanel", { name: "Charts" })).getByLabelText("Chart settings");
+    fireEvent.click(chartSettings);
+    const chartToggle = within(chartSettings.parentElement!).getByRole("checkbox", { name: "Income sources" });
+    fireEvent.click(chartToggle);
+    expect(screen.queryByRole("group", { name: "Income sources" })).toBeNull();
+    fireEvent.click(chartToggle);
+
+    const chartsTab = comparisonTabs().getByRole("tab", { name: "Charts", selected: true });
+    fireEvent.keyDown(chartsTab, { key: "ArrowRight" });
+    const cashflowTab = comparisonTabs().getByRole("tab", { name: "Cashflow", selected: true });
+    expect(document.activeElement).toBe(cashflowTab);
+    expect(screen.queryByRole("group", { name: "Income sources" })).toBeNull();
+    const cashflowPanel = within(screen.getByRole("tabpanel", { name: "Cashflow" }));
+    expect(cashflowPanel.getByRole("region", { name: "Cashflow projection comparison" })).toBeTruthy();
+    const baseline = within(cashflowPanel.getByRole("region", { name: "Base scenario" }));
+    const alternative = within(cashflowPanel.getByRole("region", { name: "Earlier retirement" }));
+    expect(baseline.getByRole("group", { name: "Cashflow Sankey diagram" })).toBeTruthy();
+    expect(alternative.getByRole("group", { name: "Cashflow Sankey diagram" })).toBeTruthy();
+    fireEvent.change(baseline.getByLabelText("Start year"), { target: { value: "2044" } });
+    expect(alternative.getByLabelText<HTMLSelectElement>("Start year").value).toBe("2044");
+    expect(baseline.getByText(/Employer match → RRSP/, { selector: "strong" })).toBeTruthy();
+    expect(alternative.queryByText(/Employer match → RRSP/)).toBeNull();
+    fireEvent.change(baseline.getByLabelText("Start year"), { target: { value: "2048" } });
+    fireEvent.click(alternative.getByRole("checkbox", { name: "Show accounts" }));
+    expect(baseline.getByRole<HTMLInputElement>("checkbox", { name: "Show accounts" }).checked).toBe(true);
+    expect(baseline.getByRole("button", { name: /CPP to Cashflow pool, \$8,000/ })).toBeTruthy();
+    const tableSettings = cashflowPanel.getByLabelText("Table settings");
+    fireEvent.click(tableSettings);
+    const tableToggle = within(tableSettings.parentElement!).getByRole("checkbox", { name: "Select all columns" });
+    const comparisonTable = within(cashflowPanel.getByRole("region", { name: "Cashflow projection comparison" }));
+    const fullColumnCount = comparisonTable.getAllByRole("columnheader").length;
+    fireEvent.click(tableToggle);
+    expect(comparisonTable.getAllByRole("columnheader").length).toBeLessThan(fullColumnCount);
+    expect(baseline.getByLabelText<HTMLSelectElement>("Start year").value).toBe("2048");
+    fireEvent.click(tableToggle);
+    expect(alternative.queryByRole("button", { name: /CPP to Cashflow pool/ })).toBeNull();
+    const ids = [...document.querySelectorAll("[id]")].map(({ id }) => id);
+    expect(new Set(ids).size).toBe(ids.length);
+    fireEvent.keyDown(cashflowTab, { key: "Home" });
+    expect(comparisonTabs().getByRole("tab", { name: "Charts", selected: true })).toBe(document.activeElement);
+    expect(await screen.findByRole("group", { name: "Income sources" })).toBeTruthy();
+    fireEvent.click(comparisonTabs().getByRole("tab", { name: "Cashflow" }));
+    fireEvent.click(projectionTabs().getByRole("tab", { name: "Charts" }));
     expect(screen.getByRole("button", { name: "Run projection" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Reset runs" })).toBeNull();
     fireEvent.click(screen.getByRole("tab", { name: "Compare" }));
     expect(await outcomes()).toBeTruthy();
+    expect(comparisonTabs().getByRole("tab", { name: "Cashflow", selected: true })).toBeTruthy();
   });
 
   it("can select a saved baseline and two alternatives, with distinguishable duplicate names", async () => {
@@ -89,7 +150,7 @@ describe("Compare tab", () => {
     expect(within(region).getByRole("columnheader", { name: /Earlier retirement.*Baseline/ })).toBeTruthy();
     expect(within(region).getByRole("columnheader", { name: "Base scenario (2)" })).toBeTruthy();
     expect(
-      within(screen.getByRole("list", { name: "Net worth comparison series" })).getByText("Base scenario (2)"),
+      within(screen.getByRole("group", { name: "Net worth" })).getByRole("figure", { name: /Base scenario \(2\)/ }),
     ).toBeTruthy();
     fireEvent.change(base, { target: { value: "" } });
     expect(screen.queryByRole("table")).toBeNull();
@@ -129,7 +190,7 @@ describe("Compare tab", () => {
     const runner = vi.fn<SimulationRunner>(async (plan, scenario) => runScenario(plan, scenario));
     mount(fixture(), runner, { type: "plan/setProfile", patch: { endAge: 66 } });
 
-    fireEvent.click(screen.getByRole("tab", { name: "Charts" }));
+    fireEvent.click(projectionTabs().getByRole("tab", { name: "Charts" }));
     fireEvent.click(screen.getByRole("button", { name: "Run projection" }));
     await screen.findByRole("figure", { name: "Net worth chart" });
     fireEvent.click(screen.getByRole("tab", { name: "Compare" }));
@@ -145,8 +206,30 @@ describe("Compare tab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reset runs" }));
     expect(screen.queryByRole("table")).toBeNull();
     expect(screen.getByRole<HTMLSelectElement>("combobox", { name: "Alternative 1" }).value).toBe("scenario:early");
-    fireEvent.click(screen.getByRole("tab", { name: "Charts" }));
+    fireEvent.click(projectionTabs().getByRole("tab", { name: "Charts" }));
     expect(screen.queryByRole("figure", { name: "Net worth chart" })).toBeNull();
+  });
+
+  it("keeps the comparison running while switching its result tabs", async () => {
+    let finish!: () => void;
+    const runner = vi
+      .fn<SimulationRunner>()
+      .mockImplementationOnce(
+        (plan, scenario) =>
+          new Promise((resolve) => {
+            finish = () => resolve(runScenario(plan, scenario));
+          }),
+      )
+      .mockImplementation(async (plan, scenario) => runScenario(plan, scenario));
+    mount(fixture(), runner);
+    run();
+    fireEvent.click(comparisonTabs().getByRole("tab", { name: "Cashflow" }));
+    expect(runner.mock.calls[0]?.[2]?.aborted).toBe(false);
+    await act(async () => finish());
+    expect(screen.getByRole("region", { name: "Cashflow projection comparison" })).toBeTruthy();
+    fireEvent.click(comparisonTabs().getByRole("tab", { name: "Charts" }));
+    expect(screen.getByRole("group", { name: "Net worth" })).toBeTruthy();
+    expect(runner).toHaveBeenCalledTimes(2);
   });
 
   it("runs sequentially and discards partial results on failure, then can retry", async () => {
@@ -199,7 +282,7 @@ describe("Compare tab", () => {
       run();
       const signal = runner.mock.calls[0]?.[2];
       if (reason === "unmount") view.unmount();
-      else if (reason === "leave tab") fireEvent.click(screen.getByRole("tab", { name: "Charts" }));
+      else if (reason === "leave tab") fireEvent.click(projectionTabs().getByRole("tab", { name: "Charts" }));
       else
         fireEvent.click(
           screen.getByRole("button", {

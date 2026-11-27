@@ -515,6 +515,20 @@ describe("individual charts render as SVG", () => {
     expect(container.querySelector("svg")).toBeTruthy();
   });
 
+  it("uses peer points for the shared scale and validates bars against each scenario's own data", () => {
+    const valid = {
+      x: 70,
+      contributions: { tfsa: 10, rrsp: 20, nonreg: 0, cash: 0 },
+      withdrawals: { tfsa: 0, rrsp: 0, nonreg: 0, cash: 0 },
+    };
+    const invalid = { ...valid, contributions: { ...valid.contributions, tfsa: NaN } };
+    const chart = render(<AccountFlowsChart points={[valid]} scalePoints={[invalid, valid]} />);
+    expect(chart.container.querySelectorAll("[data-bar-age] rect")).toHaveLength(2);
+    chart.rerender(<AccountFlowsChart points={[invalid]} scalePoints={[valid, invalid]} />);
+    expect(chart.container.querySelectorAll("[data-bar-age] rect")).toHaveLength(0);
+    expect(chart.container.innerHTML).not.toContain('="NaN"');
+  });
+
   it("AccountFlowsChart geometry: all four accounts nonzero render 8 non-overlapping segments with proportional heights", () => {
     const { container } = render(
       <AccountFlowsChart

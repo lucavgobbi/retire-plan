@@ -131,6 +131,8 @@ export function reducer(state: StoreState, action: Action): StoreState {
       }
       return { ...state, workspace: { ...workspace, projectionRunSummaryCollapsed: action.collapsed } };
     }
+    case "projection/setComparisonActiveTab":
+      return { ...state, workspace: { ...workspace, projectionComparisonActiveTab: action.tab } };
     case "projection/setActiveTab": {
       if (action.tab === null) {
         const { projectionActiveTab: _removed, ...rest } = workspace;

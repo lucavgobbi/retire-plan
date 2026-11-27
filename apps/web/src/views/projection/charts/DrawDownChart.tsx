@@ -1,5 +1,5 @@
 /** Account drawdown: stacked area of balances.{tfsa, rrsp, nonreg} plus cash and other assets over age. */
-import { stackedBandPaths, ticks, domainOf, fmtTick, H, PAD, W, xScale, yScale } from "./svg";
+import { chartAgeDomain, stackedBandPaths, ticks, domainOf, fmtTick, H, PAD, W, xScale, yScale } from "./svg";
 import { STACK_COLORS } from "./palette";
 import { ChartCrosshair, ChartMarkers, ChartTooltip, stackTops, useChartInteraction } from "./chartInteraction";
 
@@ -15,16 +15,16 @@ interface Point {
 
 const SERIES = ["TFSA", "RRSP", "Non-registered", "Cash accounts + reserve", "Other assets"] as const;
 
-export function DrawDownChart({ points }: { points: Point[] }) {
+export function DrawDownChart({ points, scalePoints = points }: { points: Point[]; scalePoints?: Point[] }) {
   const xs = points.map((p) => p.x);
   const firstX = xs[0];
   const lastX = xs[xs.length - 1];
-  const it = useChartInteraction(xs, firstX !== undefined && lastX !== undefined ? [firstX, lastX] : [0, 0]);
+  const xDomain = chartAgeDomain(xs, scalePoints, (p) => p.x);
+  const it = useChartInteraction(xs, xDomain);
   if (xs.length === 0 || firstX === undefined || lastX === undefined)
     return <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="No data" role="img" />;
-  const xDomain: [number, number] = [firstX, lastX];
   const other = (p: Point) => p.otherAssets ?? 0;
-  const totals = points.map((p) =>
+  const totals = scalePoints.map((p) =>
     Number.isFinite(p.tfsa + p.rrsp + p.nonreg + p.cash + other(p))
       ? p.tfsa + p.rrsp + p.nonreg + p.cash + other(p)
       : NaN,
@@ -41,6 +41,7 @@ export function DrawDownChart({ points }: { points: Point[] }) {
       points.map(other),
     ],
     yDomain,
+    xDomain,
   );
 
   return (

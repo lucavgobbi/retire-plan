@@ -395,6 +395,7 @@ export function YearDetailRow({
   colSpan,
   householdCalendarYear,
   historicalReturnYear,
+  rowId = `projection-year-detail-${age}`,
 }: {
   age: number;
   year: YearResult;
@@ -403,6 +404,7 @@ export function YearDetailRow({
   colSpan: number;
   householdCalendarYear?: number;
   historicalReturnYear?: number;
+  rowId?: string;
 }) {
   const notices = yearNotices(
     year,
@@ -412,7 +414,7 @@ export function YearDetailRow({
   );
   return (
     <tr
-      id={`projection-year-detail-${age}`}
+      id={rowId}
       className="detail-row"
       data-detail-for={age}
       data-expanded={expanded ? "true" : "false"}

@@ -1,5 +1,5 @@
 /** Income by source: stacked bands for employment, other, cash interest, CPP, OAS, GIS. */
-import { domainOf, fmtTick, H, PAD, W, stackedBandPaths, ticks, xScale, yScale } from "./svg";
+import { chartAgeDomain, domainOf, fmtTick, H, PAD, W, stackedBandPaths, ticks, xScale, yScale } from "./svg";
 import { STACK_COLORS } from "./palette";
 import { ChartCrosshair, ChartMarkers, ChartTooltip, stackTops, useChartInteraction } from "./chartInteraction";
 
@@ -16,16 +16,16 @@ interface Point {
 
 const SERIES = ["Employment", "Other income", "Cash interest", "CPP", "OAS", "GIS"] as const;
 
-export function IncomeSourcesChart({ points }: { points: Point[] }) {
+export function IncomeSourcesChart({ points, scalePoints = points }: { points: Point[]; scalePoints?: Point[] }) {
   const xs = points.map((p) => p.x);
   const firstX = xs[0];
   const lastX = xs[xs.length - 1];
-  const it = useChartInteraction(xs, firstX !== undefined && lastX !== undefined ? [firstX, lastX] : [0, 0]);
+  const xDomain = chartAgeDomain(xs, scalePoints, (p) => p.x);
+  const it = useChartInteraction(xs, xDomain);
   if (xs.length === 0 || firstX === undefined || lastX === undefined)
     return <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="No data" role="img" />;
-  const xDomain: [number, number] = [firstX, lastX];
   const values = (p: Point) => [p.employment, p.other, p.cashInterest, p.cpp, p.oas, p.gis];
-  const totals = points.map((p) => {
+  const totals = scalePoints.map((p) => {
     const parts = values(p);
     return parts.every(Number.isFinite) ? parts.reduce((a, b) => a + b, 0) : NaN;
   });
@@ -35,6 +35,7 @@ export function IncomeSourcesChart({ points }: { points: Point[] }) {
     xs,
     SERIES.map((_, s) => points.map((p) => values(p)[s] ?? 0)),
     yDomain,
+    xDomain,
   );
 
   return (

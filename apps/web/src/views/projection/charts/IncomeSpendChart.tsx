@@ -2,7 +2,7 @@
  * Income vs spending: total annual income line with an expenses band (spec §6.2).
  * Non-finite values contribute no point on the polyline / band (never-NaN rule).
  */
-import { domainOf, fmtTick, H, PAD, polylinePoints, ticks, W, xScale, yScale } from "./svg";
+import { chartAgeDomain, domainOf, fmtTick, H, PAD, polylinePoints, ticks, W, xScale, yScale } from "./svg";
 import { PALETTE } from "./palette";
 import { ChartCrosshair, ChartMarkers, ChartTooltip, useChartInteraction } from "./chartInteraction";
 
@@ -13,15 +13,15 @@ interface Point {
   shortfall: number;
 }
 
-export function IncomeSpendChart({ points }: { points: Point[] }) {
+export function IncomeSpendChart({ points, scalePoints = points }: { points: Point[]; scalePoints?: Point[] }) {
   const xs = points.map((p) => p.x);
   const firstX = xs[0];
   const lastX = xs[xs.length - 1];
-  const it = useChartInteraction(xs, firstX !== undefined && lastX !== undefined ? [firstX, lastX] : [0, 0]);
+  const xDomain = chartAgeDomain(xs, scalePoints, (p) => p.x);
+  const it = useChartInteraction(xs, xDomain);
   if (xs.length === 0 || firstX === undefined || lastX === undefined)
     return <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="No data" role="img" />;
-  const xDomain: [number, number] = [firstX, lastX];
-  const yDomain = domainOf(points.flatMap((p) => [p.income, p.expenses, p.shortfall]));
+  const yDomain = domainOf(scalePoints.flatMap((p) => [p.income, p.expenses, p.shortfall]));
   const yTicks = ticks(yDomain[0], yDomain[1]);
 
   const bandPts = points

@@ -316,6 +316,9 @@ describe("structural schema checks", () => {
       }),
     ).toEqual([]);
     expect(validatePlanFile({ ...file, projectionActiveTab: "both" }).join(" ")).toMatch(/projectionActiveTab/);
+    expect(validatePlanFile({ ...file, projectionComparisonActiveTab: "compare" }).join(" ")).toMatch(
+      /projectionComparisonActiveTab/,
+    );
     expect(validatePlanFile({ ...file, projectionSankeyRange: { startYear: 2035, endYear: 2026 } }).join(" ")).toMatch(
       /projectionSankeyRange/,
     );

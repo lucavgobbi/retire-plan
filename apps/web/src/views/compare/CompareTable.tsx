@@ -1,6 +1,7 @@
 import { formatAccountOrder } from "../../domain/accountOrder";
 import type { Plan, RunRecord } from "../../domain/types";
 import { fmtMoney, fmtPercent, fmtPercentInput, yearForAge } from "../projection/fmt";
+import { COMPARISON_COLORS } from "./compare";
 import type { Comparison, ComparisonColumn } from "./compare";
 
 type Metric = {
@@ -217,7 +218,7 @@ export function CompareTable({ comparison, birthYear }: { comparison: Comparison
   );
 }
 
-function displayedPath(run: RunRecord) {
+export function displayedPath(run: RunRecord) {
   const analysis = run.analysis;
   if (analysis?.mode === "montecarlo") return `Representative Monte Carlo path (run ${analysis.representativeRun})`;
   if (analysis?.mode === "historical") {
@@ -228,7 +229,7 @@ function displayedPath(run: RunRecord) {
 
 function ComparisonHeaders({ columns }: { columns: ComparisonColumn[] }) {
   return columns.map((column, index) => (
-    <th scope="col" key={column.run.scenarioId ?? ""}>
+    <th scope="col" key={column.run.scenarioId ?? ""} style={{ borderTop: `3px solid ${COMPARISON_COLORS[index]}` }}>
       {column.label}
       {index === 0 && <span className="compare-delta">Baseline</span>}
     </th>

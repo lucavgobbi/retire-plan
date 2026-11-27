@@ -1,5 +1,6 @@
 import type { Plan } from "@retire-plan/engine";
 import type {
+  ComparisonActiveTab,
   ProjectionActiveTab,
   ProjectionComparison,
   ProjectionSankeyRange,
@@ -47,6 +48,7 @@ export type Action =
       type: "projection/setActiveTab";
       /** null clears the preference to the default Charts tab. */ tab: ProjectionActiveTab | null;
     }
+  | { type: "projection/setComparisonActiveTab"; tab: ComparisonActiveTab }
   | {
       type: "projection/setSankeyRange";
       /** null clears the preference to the full current run. */ range: ProjectionSankeyRange | null;

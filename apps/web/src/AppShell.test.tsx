@@ -179,12 +179,45 @@ describe("local workspace integration", () => {
       },
     });
     fireEvent.click(screen.getByRole("button", { name: "Run comparison" }));
-    expect((await screen.findByRole("region", { name: "Side-by-side scenario outcomes" })).textContent).toContain(
+    fireEvent.click(await screen.findByText("Outcomes and assumptions"));
+    expect(screen.getByRole("region", { name: "Side-by-side scenario outcomes" }).textContent).toContain(
       "Net worth at shared end",
     );
     expect(screen.getByRole("region", { name: "Resolved scenario assumptions" }).textContent).toContain("Age 62");
     expect(JSON.parse(screen.getByTestId("run-records").textContent ?? "[]")).toHaveLength(2);
   });
+
+  it.each(["Plan", "Scenarios", "saved Compare"] as const)(
+    "opens Charts on the first Projection shortcut from %s",
+    (from) => {
+      render(
+        <StoreProvider initialWorkspace={{ ...makeSampleWorkspace(), projectionActiveTab: "compare" }}>
+          <AppShell />
+        </StoreProvider>,
+      );
+      const nav = within(screen.getByRole("navigation", { name: "Main views" }));
+      if (from !== "saved Compare") {
+        fireEvent.click(nav.getByRole("button", { name: "Compare" }));
+        fireEvent.click(nav.getByRole("button", { name: from }));
+      }
+      fireEvent.click(nav.getByRole("button", { name: "Projection" }));
+      expect(nav.getByRole("button", { name: "Projection" }).getAttribute("aria-current")).toBe("page");
+      const tabs = within(screen.getByRole("tablist", { name: "Projection view" }));
+      const charts = tabs.getByRole("tab", { name: "Charts", selected: true });
+      expect(screen.getByRole("tabpanel", { name: "Charts" }).id).toBe("projection-panel-charts");
+      expect(document.getElementById("projection-panel-cashflow")?.hidden).toBe(true);
+      fireEvent.click(tabs.getByRole("tab", { name: "Cashflow" }));
+      expect(document.getElementById("projection-panel-charts")?.hidden).toBe(true);
+      expect(screen.getByRole("tabpanel", { name: "Cashflow" }).id).toBe("projection-panel-cashflow");
+      fireEvent.keyDown(tabs.getByRole("tab", { name: "Cashflow" }), { key: "ArrowRight" });
+      expect(document.activeElement).toBe(tabs.getByRole("tab", { name: "Compare", selected: true }));
+      expect(nav.getByRole("button", { name: "Compare" }).getAttribute("aria-current")).toBe("page");
+      expect(document.getElementById("projection-panel-cashflow")?.hidden).toBe(true);
+      fireEvent.keyDown(tabs.getByRole("tab", { name: "Compare" }), { key: "Home" });
+      expect(document.activeElement).toBe(charts);
+      expect(screen.queryByRole("tablist", { name: "Comparison view" })).toBeNull();
+    },
+  );
 
   it("opens and focuses Projection with Charts selected after running directly from Plan", async () => {
     render(

@@ -1,26 +1,45 @@
 /** Monte Carlo net-worth fan: p10–p90 band across ALL simulated paths + dashed median.
  * Ensemble chart: dashed = aggregated across paths (single-path charts use solid lines). */
-import { bandBetweenPaths, domainOf, fmtTick, H, PAD, polylinePoints, ticks, W, xScale, yScale } from "./svg";
+import {
+  chartAgeDomain,
+  bandBetweenPaths,
+  domainOf,
+  fmtTick,
+  H,
+  PAD,
+  polylinePoints,
+  ticks,
+  W,
+  xScale,
+  yScale,
+} from "./svg";
 import { PALETTE } from "./palette";
 import { ChartCrosshair, ChartMarkers, ChartTooltip, useChartInteraction } from "./chartInteraction";
 import type { EnsembleStatPoint } from "./adapters";
 
-export function EnsembleFanChart({ points }: { points: EnsembleStatPoint[] }) {
+export function EnsembleFanChart({
+  points,
+  scalePoints = points,
+}: {
+  points: EnsembleStatPoint[];
+  scalePoints?: EnsembleStatPoint[];
+}) {
   const xs = points.map((p) => p.age);
   const firstX = xs[0];
   const lastX = xs[xs.length - 1];
-  const it = useChartInteraction(xs, firstX !== undefined && lastX !== undefined ? [firstX, lastX] : [0, 0]);
+  const xDomain = chartAgeDomain(xs, scalePoints, (p) => p.age);
+  const it = useChartInteraction(xs, xDomain);
   if (xs.length === 0 || firstX === undefined || lastX === undefined) {
     return <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="No data" role="img" />;
   }
-  const xDomain: [number, number] = [firstX, lastX];
-  const yDomain = domainOf(points.flatMap((p) => [p.netWorth.p10, p.netWorth.p90]));
+  const yDomain = domainOf(scalePoints.flatMap((p) => [p.netWorth.p10, p.netWorth.p90]));
   const yTicks = ticks(yDomain[0], yDomain[1]);
   const band = bandBetweenPaths(
     xs,
     points.map((p) => p.netWorth.p90),
     points.map((p) => p.netWorth.p10),
     yDomain,
+    xDomain,
   );
   const median = polylinePoints(
     points.map((p) => ({ x: p.age, y: p.netWorth.p50 })),

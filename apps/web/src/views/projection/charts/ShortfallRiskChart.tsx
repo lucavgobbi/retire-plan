@@ -1,21 +1,27 @@
 /** Cumulative shortfall risk by age: share of simulated paths with any positive
  * shortfall year through that age (0..1). FIXED percent axis — never currency. */
-import { bandBetweenPaths, H, PAD, polylinePoints, ticks, W, xScale, yScale } from "./svg";
+import { chartAgeDomain, bandBetweenPaths, H, PAD, polylinePoints, ticks, W, xScale, yScale } from "./svg";
 import { PALETTE } from "./palette";
 import { ChartCrosshair, ChartMarkers, ChartTooltip, useChartInteraction } from "./chartInteraction";
 import type { EnsembleStatPoint } from "./adapters";
 
 const percentTick = (value: number) => `${Math.round(value * 100)}%`;
 
-export function ShortfallRiskChart({ points }: { points: EnsembleStatPoint[] }) {
+export function ShortfallRiskChart({
+  points,
+  scalePoints = points,
+}: {
+  points: EnsembleStatPoint[];
+  scalePoints?: EnsembleStatPoint[];
+}) {
   const xs = points.map((p) => p.age);
   const firstX = xs[0];
   const lastX = xs[xs.length - 1];
-  const it = useChartInteraction(xs, firstX !== undefined && lastX !== undefined ? [firstX, lastX] : [0, 0]);
+  const xDomain = chartAgeDomain(xs, scalePoints, (p) => p.age);
+  const it = useChartInteraction(xs, xDomain);
   if (xs.length === 0 || firstX === undefined || lastX === undefined) {
     return <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="No data" role="img" />;
   }
-  const xDomain: [number, number] = [firstX, lastX];
   // FIXED 0..1 fraction domain: risk is a share of paths, not an amount.
   const yDomain: [number, number] = [0, 1];
   const yTicks = ticks(0, 1);
@@ -29,6 +35,7 @@ export function ShortfallRiskChart({ points }: { points: EnsembleStatPoint[] }) 
     points.map((p) => p.shortfallRate),
     xs.map(() => 0),
     yDomain,
+    xDomain,
   );
 
   return (

@@ -29,12 +29,11 @@ describe("comparison metrics", () => {
     other.result.summary.finalNetWorth = other.result.years.at(-1)!.netWorth;
     other.scenario.retirementAge = 66;
     const result = computeComparison([base, other], 1981);
-    const [a, b] = result.columns;
+    const [a] = result.columns;
     expect([result.start, result.retirementStart, result.end]).toEqual([2031, 2047, 2047]);
     expect(a!.actualEnd).toBe(2048);
     expect(a!.finalNetWorth).toBe(other.result.summary.finalNetWorth);
-    expect(a!.points).toEqual(b!.points);
-    expect(a!.points[0]?.x).toBe(2031);
+    expect(result.years).toHaveLength(17);
     expect(a!.lifetimeTax).toBeCloseTo(other.result.years.reduce((total, year) => total + year.tax.total, 0));
     const { tfsa, rrsp, nonreg, cash = 0 } = other.result.years.at(-1)!.withdrawals;
     expect(a!.retirementWithdrawals).toBeCloseTo(tfsa + rrsp + nonreg + cash);

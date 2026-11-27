@@ -1,5 +1,5 @@
 /** Tax: stacked area of federal + provincial + surtax + oasClawback over age. */
-import { stackedBandPaths, ticks, domainOf, fmtTick, H, PAD, W, xScale, yScale } from "./svg";
+import { chartAgeDomain, stackedBandPaths, ticks, domainOf, fmtTick, H, PAD, W, xScale, yScale } from "./svg";
 import { STACK_COLORS } from "./palette";
 import { ChartCrosshair, ChartMarkers, ChartTooltip, stackTops, useChartInteraction } from "./chartInteraction";
 
@@ -14,15 +14,15 @@ interface Point {
 
 const SERIES = ["Federal", "Provincial", "Surtax", "OAS clawback"] as const;
 
-export function TaxStackChart({ points }: { points: Point[] }) {
+export function TaxStackChart({ points, scalePoints = points }: { points: Point[]; scalePoints?: Point[] }) {
   const xs = points.map((p) => p.x);
   const firstX = xs[0];
   const lastX = xs[xs.length - 1];
-  const it = useChartInteraction(xs, firstX !== undefined && lastX !== undefined ? [firstX, lastX] : [0, 0]);
+  const xDomain = chartAgeDomain(xs, scalePoints, (p) => p.x);
+  const it = useChartInteraction(xs, xDomain);
   if (xs.length === 0 || firstX === undefined || lastX === undefined)
     return <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="No data" role="img" />;
-  const xDomain: [number, number] = [firstX, lastX];
-  const yDomain = domainOf(points.map((p) => p.total));
+  const yDomain = domainOf(scalePoints.map((p) => p.total));
   const yTicks = ticks(yDomain[0], yDomain[1]);
   const bands = stackedBandPaths(
     xs,
@@ -33,6 +33,7 @@ export function TaxStackChart({ points }: { points: Point[] }) {
       points.map((p) => p.oasClawback),
     ],
     yDomain,
+    xDomain,
   );
 
   return (

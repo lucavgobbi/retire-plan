@@ -1,23 +1,29 @@
 /** RRIF minimum vs actual RRSP withdrawals: two lines; gaps before RRIF minimums begin. */
-import { domainOf, fmtTick, H, PAD, polylinePoints, ticks, W, xScale, yScale } from "./svg";
+import { chartAgeDomain, domainOf, fmtTick, H, PAD, polylinePoints, ticks, W, xScale, yScale } from "./svg";
 import { PALETTE } from "./palette";
 import { ChartCrosshair, ChartMarkers, ChartTooltip, useChartInteraction } from "./chartInteraction";
 import type { RrifPoint } from "./adapters";
 
-export function RrifWithdrawalsChart({ points }: { points: RrifPoint[] }) {
+export function RrifWithdrawalsChart({
+  points,
+  scalePoints = points,
+}: {
+  points: RrifPoint[];
+  scalePoints?: RrifPoint[];
+}) {
   const xs = points.map((p) => p.x);
   const firstX = xs[0];
   const lastX = xs[xs.length - 1];
-  const it = useChartInteraction(xs, firstX !== undefined && lastX !== undefined ? [firstX, lastX] : [0, 0]);
+  const xDomain = chartAgeDomain(xs, scalePoints, (p) => p.x);
+  const it = useChartInteraction(xs, xDomain);
   if (xs.length === 0 || firstX === undefined || lastX === undefined) {
     return <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="No data" role="img" />;
   }
-  const xDomain: [number, number] = [firstX, lastX];
   const actualPoints = points.map((p) => ({ x: p.x, y: p.actual }));
   const minimumPoints = points.map((p) => ({ x: p.x, y: p.minimum }));
   const yDomain = domainOf([
-    ...points.filter((p) => Number.isFinite(p.actual)).map((p) => p.actual),
-    ...points.filter((p): p is RrifPoint & { minimum: number } => p.minimum !== null).map((p) => p.minimum),
+    ...scalePoints.filter((p) => Number.isFinite(p.actual)).map((p) => p.actual),
+    ...scalePoints.filter((p): p is RrifPoint & { minimum: number } => p.minimum !== null).map((p) => p.minimum),
   ]);
   const yTicks = ticks(yDomain[0], yDomain[1]);
 

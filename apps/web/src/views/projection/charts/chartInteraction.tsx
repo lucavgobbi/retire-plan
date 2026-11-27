@@ -13,9 +13,9 @@
  * blocks the chart, its ⓘ help or toolbar controls. Labels say "Age N" — the
  * chart points carry age only; no calendar year is invented.
  */
-import { useLayoutEffect, useRef, useState } from "react";
+import { createContext, useContext, useLayoutEffect, useRef, useState } from "react";
 import type { ComponentPropsWithoutRef } from "react";
-import { fmtMoney, fmtPercent } from "../fmt";
+import { fmtMoney, fmtPercent, yearForAge } from "../fmt";
 import { H, PAD, W } from "./svg";
 import "./chartInteraction.css";
 
@@ -27,6 +27,8 @@ export interface TooltipRow {
   value: number;
   format?: "money" | "percent" | "count";
 }
+
+export const ChartScenarioContext = createContext<{ label: string; birthYear: number } | undefined>(undefined);
 
 const PLOT_WIDTH = W - PAD.left - PAD.right;
 
@@ -213,7 +215,10 @@ export function ChartTooltip({
   keyboard: boolean;
 }) {
   const tipRef = useRef<HTMLDivElement | null>(null);
-  const title = calendarYear === undefined ? `Age ${age}` : `${calendarYear} (age ${age})`;
+  const scenario = useContext(ChartScenarioContext);
+  const year = calendarYear ?? (scenario ? yearForAge(scenario.birthYear, age) : undefined);
+  const period = year === undefined ? `Age ${age}` : `${year} (age ${age})`;
+  const title = scenario ? `${scenario.label} · ${period}` : period;
   const text = (row: TooltipRow) =>
     row.format === "percent"
       ? fmtPercent(row.value)

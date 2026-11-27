@@ -9,7 +9,7 @@
  * recomputed differently from the engine results.
  */
 import type { NetWorthBarPoint } from "./adapters";
-import { H, PAD, W, domainOf, fmtTick, ticks, xScale, yScale } from "./svg";
+import { chartAgeDomain, H, PAD, W, domainOf, fmtTick, ticks, xScale, yScale } from "./svg";
 import { PALETTE, STACK_COLORS } from "./palette";
 import { ChartCrosshair, ChartMarkers, ChartTooltip, stackTops, useChartInteraction } from "./chartInteraction";
 
@@ -26,19 +26,27 @@ function ownedValues(p: NetWorthBarPoint): number[] {
   ];
 }
 
-export function NetWorthChart({ points }: { points: NetWorthBarPoint[] }) {
+export function NetWorthChart({
+  points,
+  scalePoints = points,
+}: {
+  points: NetWorthBarPoint[];
+  scalePoints?: NetWorthBarPoint[];
+}) {
   const xs = points.map((p) => p.x);
   const firstX = xs[0];
   const lastX = xs[xs.length - 1];
-  const it = useChartInteraction(xs, firstX !== undefined && lastX !== undefined ? [firstX, lastX] : [0, 0]);
+  const xDomain = chartAgeDomain(xs, scalePoints, (p) => p.x);
+  const it = useChartInteraction(xs, xDomain);
   if (xs.length === 0 || firstX === undefined || lastX === undefined) {
     return <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="No data" role="img" />;
   }
-  const xDomain: [number, number] = [firstX, lastX];
   const stacks = points.map(ownedValues);
-  const stackTotals = stacks.map((s) => s.reduce((a, b) => a + b, 0));
-  const debts = points.map((p) => (Number.isFinite(p.debt) ? Math.max(0, p.debt) : 0));
-  const yDomain = domainOf([...stackTotals, ...debts.map((d) => -d)]);
+  const debtOf = (p: NetWorthBarPoint) => (Number.isFinite(p.debt) ? Math.max(0, p.debt) : 0);
+  const debts = points.map(debtOf);
+  const yDomain = domainOf(
+    scalePoints.flatMap((p) => [ownedValues(p).reduce((sum, value) => sum + value, 0), -debtOf(p)]),
+  );
   const yTicks = ticks(yDomain[0], yDomain[1]);
 
   // Bar geometry: centred on each age, width = 62% of the smallest age step.

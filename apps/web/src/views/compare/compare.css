@@ -1,4 +1,6 @@
 .compare-view {
+  display: grid;
+  gap: 12px;
   min-width: 0;
 }
 .compare-selects,
@@ -81,5 +83,43 @@
 @media print {
   .compare-table-wrap {
     overflow: visible;
+  }
+}
+.compare-chart-groups {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.compare-scenario-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+.compare-scenario-grid[data-scenario-count="3"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.compare-view .compare-scenario-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  border: 1px solid #d3d9de;
+  border-top-width: 4px;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
+}
+.compare-cashflows .cashflow-sankey {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+@media screen and (max-width: 1024px) {
+  .compare-scenario-grid[data-scenario-count="3"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media screen and (max-width: 760px) {
+  .compare-scenario-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

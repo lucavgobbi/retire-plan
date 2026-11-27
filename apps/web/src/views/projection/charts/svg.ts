@@ -15,6 +15,12 @@ export function xScale(x: number, domain: [number, number]): number {
   return PAD.left + ((x - lo) / (hi - lo)) * (W - PAD.left - PAD.right);
 }
 
+export function chartAgeDomain<T>(ages: number[], scalePoints: T[], age: (point: T) => number): [number, number] {
+  const scaleAges = scalePoints.map(age);
+  if (scaleAges.length === 0) return [ages[0] ?? 0, ages.at(-1) ?? 0];
+  return [Math.min(...scaleAges), Math.max(...scaleAges)];
+}
+
 export function yScale(y: number, domain: [number, number]): number {
   const [lo, hi] = domain;
   const height = H - PAD.top - PAD.bottom;
@@ -58,7 +64,12 @@ export function polylinePoints(points: Point[], xDomain: [number, number], yDoma
  * values contribute nothing and split the band into contiguous segments. Returns one
  * closed SVG path `d` per band, bottom band first.
  */
-export function stackedBandPaths(xs: number[], bands: number[][], yDomain: [number, number]): string[] {
+export function stackedBandPaths(
+  xs: number[],
+  bands: number[][],
+  yDomain: [number, number],
+  sharedXDomain?: [number, number],
+): string[] {
   const cum: number[] = xs.map(() => 0);
   const cumulative: number[][] = bands.map((band) => {
     const next: number[] = [];
@@ -80,7 +91,7 @@ export function stackedBandPaths(xs: number[], bands: number[][], yDomain: [numb
     const firstX = xs[0];
     const lastX = xs[xs.length - 1];
     if (firstX === undefined || lastX === undefined) return "";
-    const xDomain: [number, number] = [firstX, lastX];
+    const xDomain: [number, number] = sharedXDomain ?? [firstX, lastX];
     const segments: string[] = [];
     let open: { top: string; bottom: string }[] = [];
     const flush = () => {
@@ -137,11 +148,17 @@ function bandPath(topPoints: string[], bottomPoints: string[]): string {
  * sliver spanning its own top→bottom slice (same honesty rules as
  * `stackedBandPaths`). Returns one SVG path `d` string for all segments.
  */
-export function bandBetweenPaths(xs: number[], top: number[], bottom: number[], yDomain: [number, number]): string {
+export function bandBetweenPaths(
+  xs: number[],
+  top: number[],
+  bottom: number[],
+  yDomain: [number, number],
+  sharedXDomain?: [number, number],
+): string {
   const firstX = xs[0];
   const lastX = xs[xs.length - 1];
   if (firstX === undefined || lastX === undefined) return "";
-  const xDomain: [number, number] = [firstX, lastX];
+  const xDomain: [number, number] = sharedXDomain ?? [firstX, lastX];
   const segments: string[] = [];
   let open: { top: string; bottom: string }[] = [];
   const flush = () => {

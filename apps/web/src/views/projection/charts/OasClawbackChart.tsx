@@ -1,23 +1,23 @@
 /** OAS kept vs clawback: kept + clawback stack exactly to the gross OAS received. */
-import { stackedBandPaths, ticks, domainOf, fmtTick, H, PAD, W, xScale, yScale } from "./svg";
+import { chartAgeDomain, stackedBandPaths, ticks, domainOf, fmtTick, H, PAD, W, xScale, yScale } from "./svg";
 import { PALETTE } from "./palette";
 import { ChartCrosshair, ChartMarkers, ChartTooltip, stackTops, useChartInteraction } from "./chartInteraction";
 import type { OasPoint } from "./adapters";
 
 const SERIES = ["OAS kept", "OAS clawback"] as const;
 
-export function OasClawbackChart({ points }: { points: OasPoint[] }) {
+export function OasClawbackChart({ points, scalePoints = points }: { points: OasPoint[]; scalePoints?: OasPoint[] }) {
   const xs = points.map((p) => p.x);
   const firstX = xs[0];
   const lastX = xs[xs.length - 1];
-  const it = useChartInteraction(xs, firstX !== undefined && lastX !== undefined ? [firstX, lastX] : [0, 0]);
+  const xDomain = chartAgeDomain(xs, scalePoints, (p) => p.x);
+  const it = useChartInteraction(xs, xDomain);
   if (xs.length === 0 || firstX === undefined || lastX === undefined) {
     return <svg className="financial-chart" width="100%" viewBox={`0 0 ${W} ${H}`} aria-label="No data" role="img" />;
   }
-  const xDomain: [number, number] = [firstX, lastX];
-  const yDomain = domainOf(points.map((p) => p.gross));
+  const yDomain = domainOf(scalePoints.map((p) => p.gross));
   const yTicks = ticks(yDomain[0], yDomain[1]);
-  const bands = stackedBandPaths(xs, [points.map((p) => p.kept), points.map((p) => p.clawback)], yDomain);
+  const bands = stackedBandPaths(xs, [points.map((p) => p.kept), points.map((p) => p.clawback)], yDomain, xDomain);
   // Kept below, clawback stacked above — together exactly the gross OAS received.
   const colors = [PALETTE.color2, PALETTE.color4] as const;
 

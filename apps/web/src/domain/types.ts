@@ -49,6 +49,7 @@ export interface ScenarioDelta {
   withdrawalStrategy?: WithdrawalStrategy;
   overrides: Partial<Pick<ScenarioBase, "retirementAge" | "returnAssumptions" | "withdrawalOrder">>;
 }
+export type ComparisonActiveTab = "charts" | "cashflow";
 export interface Workspace {
   meta: PlanMeta | null;
   plan: Plan;
@@ -65,6 +66,7 @@ export interface Workspace {
   /** Active Projection subtab; absent means Charts. */
   projectionActiveTab?: ProjectionActiveTab;
   projectionComparison?: ProjectionComparison;
+  projectionComparisonActiveTab?: ComparisonActiveTab;
   /** Saved Sankey calendar-year range; absent means the full current run. */
   projectionSankeyRange?: ProjectionSankeyRange;
   projectionSankeyShowAccounts?: boolean;
@@ -80,6 +82,7 @@ export interface PlanFile {
   projectionRunSummaryCollapsed?: boolean;
   projectionActiveTab?: ProjectionActiveTab;
   projectionComparison?: ProjectionComparison;
+  projectionComparisonActiveTab?: ComparisonActiveTab;
   projectionSankeyRange?: ProjectionSankeyRange;
   projectionSankeyShowAccounts?: boolean;
 }

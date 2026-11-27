@@ -178,7 +178,7 @@ export function AppShell({ provider, sample = false }: { provider?: StorageProvi
       setRoute("Projection");
       return;
     }
-    if (next === "Projection" && activeRoute === "Compare") {
+    if (next === "Projection" && workspace.projectionActiveTab === "compare") {
       dispatch({ type: "projection/setActiveTab", tab: "charts" });
     }
     setRoute(next);
